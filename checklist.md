@@ -47,7 +47,8 @@
 
 ## 7. 遗留与风险事项
 
-- 2026-10-04 · 任务「M1-1 工程骨架初始化」· 分支 `feat/m1-monorepo-skeleton` · 结论：**通过（待用户确认提交）**。
+- 2026-10-04 · 任务「M1-1 工程骨架初始化」· 分支 `feat/m1-monorepo-skeleton` · 结论：**通过（已确认，已提交并推送）**。
   - 证据：`pnpm install / lint / typecheck / test / build` 全部退出码 0；13 个单测通过（git-graph 4 · github-client 6 · ui 3）；`next build` 成功；生产服务冒烟测试 HTTP 200（137ms）。
-  - 前提/风险：本机 `corepack enable` 因 D:\node.js 权限受限失败，改用用户级 `npm i -g pnpm@12`；仓库 `.npmrc` 使用 npmmirror 镜像；CI 真实执行结果需推送后在 GitHub Actions 确认。
-  - 后续动作：M1-2 接入 Auth.js GitHub OAuth；M1-3 实现 `/repos` 仓库列表；本次改动未提交、未合并、未推送，等待用户手动确认。
+  - 提交与 CI：提交 `0000e1c` 已推送远端；GitHub Actions 全绿（lint / typecheck / test / build 均 success，run 37207642647）。
+  - 前提/风险：本机 `corepack enable` 因 D:\node.js 权限受限失败，改用用户级 `npm i -g pnpm@12`；仓库 `.npmrc` 使用 npmmirror 镜像。
+  - 后续动作：走 PR 将 `feat/m1-monorepo-skeleton` 合并到 main（main 受保护，需 PR + CI）；下一任务 M1-2 接入 Auth.js GitHub OAuth、M1-3 实现 `/repos` 仓库列表。
