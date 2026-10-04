@@ -6,7 +6,7 @@ utf8-git 是一个面向 **Git 新手 / 团队新人** 的仓库可视化与交�
 用 GitHub 账号登录后，你可以像看地图一样浏览仓库的分支、提交、合并与 Issue，
 并通过点击完成创建分支、提交 Issue、合并或删除分支等常用操作——**不需要记住任何 Git 命令**。
 
-![status](https://img.shields.io/badge/status-M0%20%E6%96%87%E6%A1%A3%E9%98%B6%E6%AE%B5-blue)
+![status](https://img.shields.io/badge/status-M1%20%E9%AA%A8%E6%9E%B6%E9%98%B6%E6%AE%B5-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -78,7 +78,29 @@ utf8-git/
 └── .github/           # CI、Issue/PR 模板
 ```
 
-> 注：M0 阶段仅落地文档；代码骨架将在 M1 开始时按上述结构初始化。
+> 注：仓库骨架已按上述结构初始化（pnpm workspace：`apps/web` + `packages/*`），本地开发说明见下文。
+
+## 本地开发
+
+环境要求：
+
+- **Node.js 22 LTS**（`>= 22.12`，版本见 `.nvmrc`）
+- **pnpm 12**（推荐 `corepack enable` 启用；无权限时可用 `npm i -g pnpm@12`）
+
+常用命令（在仓库根目录执行）：
+
+```bash
+pnpm install    # 安装 workspace 全部依赖
+pnpm dev        # 启动 apps/web 开发服务器（http://localhost:3000）
+pnpm lint       # ESLint 全量检查
+pnpm typecheck  # TypeScript 类型检查（web 会先生成 Next 路由类型）
+pnpm test       # Vitest 单元测试
+pnpm build      # 构建全部 workspace
+```
+
+提交信息遵循 Conventional Commits（`feat` / `fix` / `docs` / `chore` 等），commit-msg 钩子会自动校验。
+
+> 网络说明：仓库根目录 `.npmrc` 已配置国内镜像（registry.npmmirror.com）；若可直连 npm 官方源，可删除该文件。
 
 ## 参与贡献
 
