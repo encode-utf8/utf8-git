@@ -1,0 +1,71 @@
+// utf8-git 认证数据模型（Auth.js 约定 + 令牌密文存储约定）
+// 迁移命令：pnpm --filter @utf8-git/web exec prisma migrate dev
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户：以 GitHub 账号为唯一身份来源
+model User {
+  id            String    @id // 使用 OAuth profile 的 id（GitHub 数字 ID）作为主键
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  githubLogin   String?   @unique @map("github_login")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  accounts Account[]
+  sessions Session[]
+
+  @@map("users")
+}
+
+// OAuth 账号关联：access / refresh / id token 仅存密文，明文不落库
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  accessTokenEnc    String? @map("access_token_enc")
+  refreshTokenEnc   String? @map("refresh_token_enc")
+  idTokenEnc        String? @map("id_token_enc")
+  expiresAt         Int?    @map("expires_at")
+  tokenType         String? @map("token_type")
+  scope             String?
+  sessionState      String? @map("session_state")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+// 数据库会话：浏览器 Cookie 中只保存随机会话令牌
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// Auth.js 约定的邮箱验证令牌表（当前仅 GitHub 登录，保留以符合适配器契约）
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
