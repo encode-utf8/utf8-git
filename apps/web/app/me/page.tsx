@@ -29,6 +29,17 @@ export default async function MePage() {
           我的账号
         </h1>
 
+        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          前往{" "}
+          <Link
+            href="/repos"
+            className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
+          >
+            我的仓库
+          </Link>{" "}
+          查看仓库列表。
+        </p>
+
         <div className="mt-6 flex items-center gap-4">
           {user.image ? (
             <Image

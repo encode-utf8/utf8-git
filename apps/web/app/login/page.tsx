@@ -17,7 +17,7 @@ function normalizeCallbackUrl(value: string | undefined): string {
   if (value && value.startsWith("/") && !value.startsWith("//")) {
     return value;
   }
-  return "/me";
+  return "/repos";
 }
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
