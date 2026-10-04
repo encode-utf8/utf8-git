@@ -11,6 +11,38 @@
 
 ---
 
+## 2026-10-04 · M1-2 接入 GitHub OAuth 登录与会话（TODO-105 / 111 / 112）
+
+**目标**：打通「GitHub 登录 → 数据库会话 → 受保护页面」，并确保 OAuth 令牌密文入库，为 M1-3 仓库列表提供已授权身份。
+
+**完成内容**
+
+- 数据库：`docker-compose.dev.yml`（postgres:18-alpine，localhost:5432）+ Prisma 6.19.3 迁移基线（User / Account / Session / VerificationToken，迁移 `20261004144043_init_auth`）。
+- 认证：next-auth v5（5.0.0-beta.32）+ GitHub Provider，scope 覆盖为 `read:user repo`，显式启用 `checks: ["pkce", "state"]`；数据库会话策略；`/login`、`/me`、`/api/auth/[...nextauth]` 落地。
+- 安全：自定义 Prisma 适配器在 `linkAccount` 环节以 AES-256-GCM（格式 `v1.<iv>.<tag>.<ciphertext>`）加密 access / refresh / id token，密文列 `*_enc`；密钥 `AUTH_TOKEN_ENC_KEY` 独立于数据库。
+- 拦截：Next 16 `proxy.ts` 对 `/me/:path*` 做乐观 Cookie 检查，未登录 302 到 `/login?callbackUrl=…`；页面内 `auth()` 做真实校验（纵深防御）。
+- 验证：`pnpm lint / typecheck / test / build` 全部通过；单测共 21 例（新增 crypto 7 例 + 数据库加密用例 1 例，后者由 `RUN_DB_TESTS=1` 门控）；生产冒烟 `/` 200、未登录 `/me` 302、`/login` 200；OAuth 发起端点实测返回 `scope=read:user repo` + `state` + PKCE（S256）；伪造 Cookie 访问 `/me` 被服务端校验拦截；写入真实会话后 `/me` 正常渲染。
+
+**关键决策**
+
+| 编号 | 决策 | 理由 |
+| --- | --- | --- |
+| ADR-0014 | 采用 **next-auth v5（5.0.0-beta.32）** | v5 支持 Next 16 App Router 与数据库会话；锁版本规避 beta 漂移 |
+| ADR-0015 | **手写 Prisma 适配器**（不引入 @auth/prisma-adapter） | 需在 `linkAccount` 拦截并加密令牌、使用 `*_enc` 列；减少一个依赖，安全边界显式 |
+| ADR-0016 | Prisma 锁定 **6.19.3 稳定线** | 7.x / 8.x 引擎与配置模式变动大，MVP 不冒险；M4 再评估升级 |
+| ADR-0017 | 用 Next 16 **`proxy.ts` 做乐观鉴权** | 遵循 Next 16 更名与官方建议：proxy 只读 Cookie 不查库，真实校验留在页面 |
+
+**问题与风险**
+
+- 真实 GitHub 授权往返尚未完成：需要用户创建 OAuth App 并提供 Client ID / Secret（本地 `.env` 已留空位）；「零配置」由平台上线时注册内置 App 实现。
+- scope 不含 `user:email`：隐藏邮箱用户的 `email` 为 null，登录流程与页面已做兼容（邮箱列允许为空）。
+- CI 不配置数据库：数据层用例由 `RUN_DB_TESTS=1` 门控，本地已实测通过；PostgreSQL 18 + Prisma 6.19.3 实测兼容。
+
+**下一步**
+
+- 用户提供 OAuth App 凭据后，手动完成真实登录往返验证（登录 → 回跳 `/me` → 登出）。
+- M1-3：`/repos` 仓库列表页（创建/参与，含私有仓库与可见性标识）。
+
 ## 2026-10-04 · M1 工程骨架初始化（M1-1 / TODO-008、101-103）
 
 **目标**：初始化 pnpm monorepo 骨架，落地开发环境约定与 CI，使 M1 可以直接开始功能开发。

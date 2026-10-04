@@ -1,0 +1,22 @@
+# 本地开发数据库（仅开发环境使用）：docker compose -f docker-compose.dev.yml up -d
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: utf8-git-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: utf8git
+      POSTGRES_PASSWORD: utf8git_dev
+      POSTGRES_DB: utf8git
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U utf8git -d utf8git"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  postgres_data:

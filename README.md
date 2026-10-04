@@ -100,6 +100,21 @@ pnpm build      # 构建全部 workspace
 
 提交信息遵循 Conventional Commits（`feat` / `fix` / `docs` / `chore` 等），commit-msg 钩子会自动校验。
 
+### 本地数据库与登录（M1-2 起）
+
+登录、会话与令牌存储需要本地 PostgreSQL（Docker）与环境变量：
+
+```bash
+docker compose -f docker-compose.dev.yml up -d          # 启动开发数据库（postgres:18，localhost:5432）
+cp apps/web/.env.example apps/web/.env                  # 复制后按注释生成密钥
+pnpm --filter @utf8-git/web exec prisma migrate dev     # 应用迁移并生成 Prisma Client（首次）
+pnpm dev                                                # 启动后访问 http://localhost:3000/login
+```
+
+- 环境变量说明见 `apps/web/.env.example`；`apps/web/.env` 已被 gitignore，请勿提交。
+- GitHub OAuth App 本地联调：在 GitHub → Settings → Developer settings 创建 OAuth App，回调地址填 `http://localhost:3000/api/auth/callback/github`，将 Client ID / Secret 填入 `.env` 的 `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`。
+- access / refresh / id token 在数据库中均为 AES-256-GCM 密文，加密密钥（`AUTH_TOKEN_ENC_KEY`）只存在于环境变量中。
+
 > 网络说明：仓库根目录 `.npmrc` 已配置国内镜像（registry.npmmirror.com）；若可直连 npm 官方源，可删除该文件。
 
 ## 参与贡献

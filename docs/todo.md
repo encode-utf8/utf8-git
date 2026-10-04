@@ -31,12 +31,12 @@
 - [x] TODO-102 配置 ESLint + Prettier + commitlint（Conventional Commits）
 - [x] TODO-103 搭建 GitHub Actions CI（lint → typecheck → test → build）
 - [ ] TODO-104 配置 Vercel 预览环境与生产环境、环境变量管理
-- [ ] TODO-105 初始化 PostgreSQL（Neon/Supabase）+ Prisma 迁移基线
+- [x] TODO-105 初始化 PostgreSQL + Prisma 迁移基线（本地 Docker 开发库；Neon/Supabase 随 TODO-104 接入）
 
 ### 2.2 账号与仓库
 
-- [ ] TODO-111 接入 Auth.js GitHub Provider（平台内置 OAuth App，含 PKCE 与 state）
-- [ ] TODO-112 会话持久化 + 令牌加密存储（AES-256-GCM）
+- [x] TODO-111 接入 Auth.js GitHub Provider（含 PKCE 与 state；平台内置 OAuth App 随上线注册）
+- [x] TODO-112 会话持久化 + 令牌加密存储（AES-256-GCM）
 - [ ] TODO-113 `/repos` 仓库列表页（创建/参与，**含私有仓库与可见性标识**，排序、空状态）
 - [ ] TODO-114 仓库搜索与可见性过滤
 - [ ] TODO-115 `repo` scope 授权说明页（明确权限用途与撤销方式）
