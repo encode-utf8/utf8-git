@@ -3,7 +3,7 @@
 | 项 | 内容 |
 | --- | --- |
 | 文档版本 | v0.1 |
-| 更新日期 | 2026-10-03 |
+| 更新日期 | 2026-10-04 |
 | 标记约定 | `[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成 · `[!]` 阻塞 |
 | 关联文档 | [实现路线](roadmap.md) · [开发记录](development-log.md) |
 
@@ -20,16 +20,16 @@
 - [x] TODO-005 编写实现路线文档
 - [x] TODO-006 建立开发记录与待办日志机制
 - [x] TODO-007 确认 4 个 Open Questions：按提交聚合 / 私有仓库进 MVP / 零配置登录 / 不支持离线（2026-10-03 已确认，见需求分析 §12、ADR-0006~0009）
-- [ ] TODO-008 确定包管理器与运行时版本（pnpm + Node LTS）并写入文档
+- [x] TODO-008 确定包管理器与运行时版本（pnpm + Node LTS）并写入文档
 - [ ] TODO-009 补充 Issue / PR 模板与贡献指南（CONTRIBUTING）
 
 ## 2. 下一迭代：M1 · 只读最小闭环
 
 ### 2.1 初始化（工程）
 
-- [ ] TODO-101 初始化 monorepo（pnpm workspace：`apps/web`、`packages/*`）
-- [ ] TODO-102 配置 ESLint + Prettier + commitlint（Conventional Commits）
-- [ ] TODO-103 搭建 GitHub Actions CI（lint → typecheck → test → build）
+- [x] TODO-101 初始化 monorepo（pnpm workspace：`apps/web`、`packages/*`）
+- [x] TODO-102 配置 ESLint + Prettier + commitlint（Conventional Commits）
+- [x] TODO-103 搭建 GitHub Actions CI（lint → typecheck → test → build）
 - [ ] TODO-104 配置 Vercel 预览环境与生产环境、环境变量管理
 - [ ] TODO-105 初始化 PostgreSQL（Neon/Supabase）+ Prisma 迁移基线
 

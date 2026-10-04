@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# 明确不执行构建脚本的依赖（由 create-next-app 生成，pnpm 构建脚本审批机制）
+allowBuilds:
+  sharp: false
+  unrs-resolver: false

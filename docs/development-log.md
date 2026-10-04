@@ -6,10 +6,41 @@
 | 项 | 内容 |
 | --- | --- |
 | 文档版本 | v0.1 |
-| 更新日期 | 2026-10-03 |
+| 更新日期 | 2026-10-04 |
 | 关联文档 | [实现路线](roadmap.md) · [待办日志](todo.md) |
 
 ---
+
+## 2026-10-04 · M1 工程骨架初始化（M1-1 / TODO-008、101-103）
+
+**目标**：初始化 pnpm monorepo 骨架，落地开发环境约定与 CI，使 M1 可以直接开始功能开发。
+
+**完成内容**
+
+- pnpm workspace：`apps/web` + `packages/git-graph`、`packages/github-client`、`packages/ui`；Node 22 LTS（`.nvmrc` + `engines`）与 pnpm 12.9.1（`packageManager`）。
+- `apps/web`：Next.js 16（App Router）+ TypeScript（strict）+ Tailwind CSS 4；类型检查脚本内置 `next typegen`（生成路由类型）。
+- 工具链：ESLint 9（flat config）+ Prettier + commitlint + husky；GitHub Actions CI（lint → typecheck → test → build，`--frozen-lockfile`）。
+- 共享包内建 Vitest 单测 13 例：泳道颜色哈希（git-graph）、OAuth scope 解析（github-client）、Tailwind 类合并（ui）。
+- 验证：`pnpm install / lint / typecheck / test / build` 全部通过；生产构建产物冒烟测试返回 HTTP 200（137ms）。
+
+**关键决策**
+
+| 编号 | 决策 | 理由 |
+| --- | --- | --- |
+| ADR-0011 | 基线锁定 **Node 22 LTS + pnpm 12.9.1** | 与文档「pnpm + Node LTS」一致；为本机实测版本，Node 24 升级留待 M4 评估 |
+| ADR-0012 | 仓库根 `.npmrc` 指向 **npmmirror 镜像** | 本机无法直连 registry.npmjs.org；若网络可用可删除该文件 |
+| ADR-0013 | web 的 typecheck 脚本包含 `next typegen` | Next 16 使用生成式路由类型（`LayoutProps` 等），需先生成才可通过 tsc |
+
+**问题与风险**
+
+- 本机 `corepack enable` 因 D:\node.js 目录权限失败（EPERM），改用 `npm i -g pnpm`（用户级 PATH）解决；CI 中由 pnpm/action-setup 读取 `packageManager` 字段，不受影响。
+- GitHub Actions 的真实运行需推送后在 GitHub 查看；本次未推送，已在本地按相同命令全量验证。
+- Next 16 会生成/维护 `apps/web/AGENTS.md`、`.next/types` 等文件；生成物已由 `.gitignore` 覆盖，注意不要误提交。
+
+**下一步**
+
+- M1-2：接入 Auth.js GitHub OAuth（平台内置 App、零配置登录、`read:user` + `repo` scope）。
+- M1-3：`/repos` 仓库列表页（含私有仓库可见性标识与空状态）。
 
 ## 2026-10-03 · 需求决策确认（第二轮）
 
