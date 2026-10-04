@@ -112,6 +112,7 @@ pnpm dev                                                # 启动后访问 http:/
 ```
 
 - 环境变量说明见 `apps/web/.env.example`；`apps/web/.env` 已被 gitignore，请勿提交。
+- 登录后访问 `/repos` 查看仓库列表（含私有仓库与可见性标识；支持搜索、排序、过滤）。
 - GitHub OAuth App 本地联调：在 GitHub → Settings → Developer settings 创建 OAuth App，回调地址填 `http://localhost:3000/api/auth/callback/github`，将 Client ID / Secret 填入 `.env` 的 `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`。
 - access / refresh / id token 在数据库中均为 AES-256-GCM 密文，加密密钥（`AUTH_TOKEN_ENC_KEY`）只存在于环境变量中。
 
