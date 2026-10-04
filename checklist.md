@@ -59,3 +59,6 @@
   - 证据：`pnpm lint / typecheck / test / build` 全部退出码 0（21 个用例通过，其中数据库用例随 `RUN_DB_TESTS=1` 通过）；Prisma 迁移 `20261004144043_init_auth` 在 PostgreSQL 18 + Prisma 6.19.3 成功；生产冒烟 `/` 200、未登录 `/me` 302 → `/login?callbackUrl=%2Fme`、`/login` 200 且含登录按钮/权限用途/撤销说明；OAuth 发起端点实测 scope=`read:user repo` + `state` + PKCE(S256)；伪造 Cookie 被服务端会话校验拦截；写入真实会话后 `/me` 渲染 200（测试数据已清理）。
   - 遗留：真实 GitHub 授权往返未验证（需用户创建 OAuth App 并在 `.env` 填入 Client ID / Secret）；TODO-115 内容已由 `/login` 覆盖，待 M1-3 复核勾选。
   - 备注：`docs/roadmap.md` 任务表不跟踪单任务状态，本次无需改动。
+- 2026-10-04 · M1-2 收尾（合并）· 结论：**已合并，CI 全绿**。
+  - 提交 `f21255a`（PR #2：https://github.com/encode-utf8/utf8-git/pull/2）以 squash 方式合入 main，合并提交 `1efa708`；合并前 push / pull_request 两条 CI 均 success，合并后 main CI success（run 37212709604）。
+  - 遗留：真实 GitHub 授权往返仍待人工点击验证（本地 `.env` 已配置凭据，`pnpm dev` 后访问 `/login` 即可）。
