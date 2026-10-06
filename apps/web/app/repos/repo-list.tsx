@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import type { RepoSummary } from "@/lib/github-repos";
@@ -146,14 +147,12 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <a
-                    href={repo.htmlUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <Link
+                    href={`/repos/${repo.owner}/${repo.name}`}
                     className="break-all font-medium text-zinc-900 underline-offset-4 hover:underline dark:text-zinc-50"
                   >
                     {repo.fullName}
-                  </a>
+                  </Link>
                   {repo.description ? (
                     <p className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
                       {repo.description}
@@ -161,6 +160,15 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
                   ) : null}
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                  <a
+                    href={repo.htmlUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`在 GitHub 打开 ${repo.fullName}`}
+                    className="rounded-full border border-black/[.08] px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-400 dark:hover:bg-white/[.08]"
+                  >
+                    GitHub ↗
+                  </a>
                   <VisibilityBadge isPrivate={repo.isPrivate} />
                   {repo.isFork ? (
                     <span className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">

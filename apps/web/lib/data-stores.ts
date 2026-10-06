@@ -1,6 +1,7 @@
 // 数据层单例：缓存 / 限流快照在 dev 热重载之间保持稳定（沿用 prisma.ts 的 globalThis 模式）。
 // 说明：内存缓存仅在单实例内有效；多实例 / Serverless 部署需外部缓存（后续评估项）。
 
+import type { CommitDetail } from "./github-commits";
 import type { RepoPage } from "./github-repos";
 import type { TimelineData } from "./github-timeline";
 import { RateLimitStore } from "./rate-limit-store";
@@ -10,6 +11,8 @@ import { TtlCache } from "./server-cache";
 export const REPOS_CACHE_TTL_MS = 5 * 60 * 1000;
 export const TIMELINE_CACHE_TTL_MS = 2 * 60 * 1000;
 export const CURSOR_CHAIN_TTL_MS = 30 * 60 * 1000;
+// 技术分析 §6.2：节点详情 30 min
+export const COMMIT_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 
 // 配额低于该值时进入降级（可用 GITHUB_RATE_LIMIT_DEGRADE_THRESHOLD 调整）
 export const DEFAULT_RATE_LIMIT_THRESHOLD = 100;
@@ -28,6 +31,11 @@ export type TimelineCacheValue = {
   fetchedAt: number;
 };
 
+export type CommitCacheValue = {
+  commit: CommitDetail;
+  fetchedAt: number;
+};
+
 // 分页 cursor 链：pages[i] 为第 i+1 页的 endCursor
 export type CursorChain = {
   pages: Array<{ endCursor: string | null; fetchedAt: number }>;
@@ -37,19 +45,31 @@ type DataStores = {
   reposCache: TtlCache<ReposCacheValue>;
   timelineCache: TtlCache<TimelineCacheValue>;
   cursorCache: TtlCache<CursorChain>;
+  commitCache: TtlCache<CommitCacheValue>;
   rateLimitStore: RateLimitStore;
 };
 
 const globalForData = globalThis as unknown as { __utf8gitDataStores?: DataStores };
 
-export function getDataStores(): DataStores {
-  globalForData.__utf8gitDataStores ??= {
+function createDataStores(): DataStores {
+  return {
     reposCache: new TtlCache<ReposCacheValue>({ ttlMs: REPOS_CACHE_TTL_MS }),
     timelineCache: new TtlCache<TimelineCacheValue>({ ttlMs: TIMELINE_CACHE_TTL_MS }),
     cursorCache: new TtlCache<CursorChain>({ ttlMs: CURSOR_CHAIN_TTL_MS, maxEntries: 200 }),
+    commitCache: new TtlCache<CommitCacheValue>({ ttlMs: COMMIT_DETAIL_CACHE_TTL_MS }),
     rateLimitStore: new RateLimitStore(),
   };
-  return globalForData.__utf8gitDataStores;
+}
+
+export function getDataStores(): DataStores {
+  // dev 热重载可能残留旧版本单例（缺少本次新增的缓存字段），此时整体重建
+  const existing = globalForData.__utf8gitDataStores as Partial<DataStores> | undefined;
+  if (!existing?.commitCache) {
+    const stores = createDataStores();
+    globalForData.__utf8gitDataStores = stores;
+    return stores;
+  }
+  return existing as DataStores;
 }
 
 // 读取降级阈值（环境变量可调；无效时回退默认值）

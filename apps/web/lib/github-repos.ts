@@ -129,7 +129,7 @@ function extractSsoUrl(value: string | null | undefined): string | null {
   return readString(/url=([^;]+)/.exec(value)?.[1]?.trim());
 }
 
-function getRateLimitResetAt(response: Response): Date | null {
+export function getRateLimitResetAt(response: Response): Date | null {
   const reset = response.headers.get("x-ratelimit-reset");
   if (!reset) {
     return null;
@@ -139,7 +139,7 @@ function getRateLimitResetAt(response: Response): Date | null {
 }
 
 // 解析成功响应中的 x-ratelimit-* 头
-function readRateLimitHeaders(response: Response): RestRateLimitInfo | null {
+export function readRateLimitHeaders(response: Response): RestRateLimitInfo | null {
   const remainingRaw = response.headers.get("x-ratelimit-remaining");
   const remaining = Number(remainingRaw);
   if (remainingRaw === null || !Number.isFinite(remaining)) {

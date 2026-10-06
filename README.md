@@ -26,7 +26,7 @@ utf8-git 的目标是：**把仓库的开发过程还原成一条可交互的时
 
 | 阶段 | 能力 | 说明 |
 | --- | --- | --- |
-| M1 只读闭环 | GitHub 登录 · 仓库列表 · 提交时间线 | 登录后可浏览自己创建/参与的**公有与私有**仓库，查看**按提交聚合**的时间线与分支起点 |
+| M1 只读闭环 | GitHub 登录 · 仓库列表 · 提交时间线 | 登录后可浏览自己创建/参与的**公有与私有**仓库，查看**按提交聚合**的时间线（虚拟滚动 + 提交详情）与分支起点 |
 | M2 只读增强 | 分支图 · PR / Issue 泳道 · 过滤与搜索 | 在同一时间线上叠加分支、合并、Issue 事件，支持按人/分支/时间筛选 |
 | M3 交互操作 | 创建分支 · 提交 Issue · 合并 PR · 删除分支 | 点击式写操作，带二次确认、影响预览与审计记录 |
 | M4 体验工程 | 性能 · 缓存 · 测试 · 国际化 · 可访问性 | 面向真实大仓库打磨，形成可持续开发节奏 |
@@ -113,6 +113,7 @@ pnpm dev                                                # 启动后访问 http:/
 
 - 环境变量说明见 `apps/web/.env.example`；`apps/web/.env` 已被 gitignore，请勿提交。
 - 登录后访问 `/repos` 查看仓库列表（含私有仓库与可见性标识；支持搜索、排序、过滤）。
+- 进入 `/repos/[owner]/[name]` 浏览提交时间线（M1-5 起）：虚拟滚动（支持 1000+ 提交）、分支切换、节点详情（文件变更统计与「在 GitHub 打开」）；详情走 REST 查询并在服务端缓存 30 min。
 - 数据层（M1-4 起）：时间线走 GraphQL 聚合查询（单页 1 次请求）；服务端 TTL 缓存（仓库列表 5 min、时间线 2 min）；GitHub 配额不足时降级展示缓存并提示恢复时间。
 - GitHub OAuth App 本地联调：在 GitHub → Settings → Developer settings 创建 OAuth App，回调地址填 `http://localhost:3000/api/auth/callback/github`，将 Client ID / Secret 填入 `.env` 的 `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`。
 - access / refresh / id token 在数据库中均为 AES-256-GCM 密文，加密密钥（`AUTH_TOKEN_ENC_KEY`）只存在于环境变量中。
