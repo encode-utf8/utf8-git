@@ -16,13 +16,13 @@
 
 ## 3. 验收项
 
-- [ ] 定位根因并有源码证据（Auth.js 对已有账号跳过 `linkAccount`）
-- [ ] 重新授权（已有账号）后，`accounts.expires_at` 与 `access_token_enc` 更新为最新值
-- [ ] 令牌以 AES-256-GCM 密文入库；响应与日志无明文令牌
-- [ ] 响应未携带 refresh_token 时不会清空库中已有的 refresh token
-- [ ] 单测覆盖（`RUN_DB_TESTS=1`：新建 / 更新 / 保留旧 refresh token）；`pnpm lint / typecheck / test / build` 全绿
-- [ ] 端到端：浏览器重新授权后 `/repos` 正常加载仓库列表（人工确认）
-- [ ] 文档同步与合并记录（`checklist.md` 第 7 节）
+- [x] 定位根因并有源码证据（Auth.js 对已有账号跳过 `linkAccount`）
+- [x] 重新授权（已有账号）后，`accounts.expires_at` 与 `access_token_enc` 更新为最新值
+- [x] 令牌以 AES-256-GCM 密文入库；响应与日志无明文令牌
+- [x] 响应未携带 refresh_token 时不会清空库中已有的 refresh token
+- [x] 单测覆盖（`RUN_DB_TESTS=1`：新建 / 更新 / 保留旧 refresh token）；`pnpm lint / typecheck / test / build` 全绿
+- [x] 端到端：浏览器重新授权后 `/repos` 正常加载仓库列表（人工确认）
+- [x] 文档同步与合并记录（`checklist.md` 第 7 节）
 
 ## 4. 验证方式
 
@@ -67,3 +67,9 @@
   - 说明：验证期间发现 GitHub OAuth access token 已于 2026-10-04 过期（GitHub 侧开启令牌过期策略），端到端用本机 git 凭证令牌临时替换、验证后已还原；用户需在浏览器重新授权，建议后续实现 refresh token 自动续期。
   - 合并：提交 `245cbd9` 经 PR #5（squash，合并提交 `02e765c`）合入 main；合并前检查全绿（GitHub Actions run 37491837632 / 37491874617、GitGuardian success），合并后 main CI（run 37492163271）全绿。
 
+- 2026-10-07 · 任务「修复：重新授权后令牌未更新」· 分支 `fix/relogin-token-update` · 结论：**通过（已合并）**。
+  - 根因：Auth.js（@auth/core 0.41.3）对已存在账号在 OAuth 回调中跳过 `linkAccount`（`handle-login.js` L179–199），重新授权的新令牌被丢弃，库中一直是首次授权的旧令牌。
+  - 修复：`auth-adapter.ts` 新增 `upsertAccountTokens`（AES-256-GCM 加密 upsert，缺省 refresh_token 时保留旧值）；`auth.ts` 增加 `events.signIn` 每次登录写回最新令牌密文。
+  - 证据：`pnpm lint / typecheck / test / build` 全绿；数据库用例 1 例（新建 / 更新 / 保留旧 refresh token / 密文入库 / 不重复建行）；真实浏览器重新授权后 `accounts.expires_at` 更新为 2026-10-07 01:42:23 UTC、`access_token_enc` 密文更换、账号行仍为 1 条，`/repos` 正常加载（用户确认）。
+  - 合并：提交 `56a04fa` 经 PR #6（squash，合并提交 `fb6dbab`）合入 main；检查全绿（GitGuardian success、Actions success）。
+  - 后续：GitHub 令牌 8 小时过期 → 下一个任务实现 refresh token 自动续期（refresh token 有效期 6 个月，已入库）。
