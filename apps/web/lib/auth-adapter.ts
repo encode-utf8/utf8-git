@@ -35,6 +35,36 @@ function readNumber(value: unknown): number | null {
   return typeof value === "number" ? value : null;
 }
 
+// OAuth 账号令牌字段（Auth.js Account / AdapterAccount 的公共子集，按 unknown 防御式读取）
+export type OAuthAccountLike = {
+  type: string;
+  provider: string;
+  providerAccountId: string;
+  access_token?: unknown;
+  refresh_token?: unknown;
+  id_token?: unknown;
+  expires_at?: unknown;
+  token_type?: unknown;
+  scope?: unknown;
+  session_state?: unknown;
+};
+
+// 组装账号令牌的加密字段：令牌为空时省略该字段，避免覆盖库中已有密文
+function buildTokenData(account: OAuthAccountLike) {
+  const accessTokenEnc = encryptToken(readText(account.access_token));
+  const refreshTokenEnc = encryptToken(readText(account.refresh_token));
+  const idTokenEnc = encryptToken(readText(account.id_token));
+  return {
+    ...(accessTokenEnc ? { accessTokenEnc } : {}),
+    ...(refreshTokenEnc ? { refreshTokenEnc } : {}),
+    ...(idTokenEnc ? { idTokenEnc } : {}),
+    expiresAt: readNumber(account.expires_at),
+    tokenType: readText(account.token_type),
+    scope: readText(account.scope),
+    sessionState: readText(account.session_state),
+  };
+}
+
 // 自定义 Prisma 适配器：
 // - 令牌字段（access / refresh / id token）落库前统一用 AES-256-GCM 加密
 // - 其余方法遵循 Auth.js 数据库会话契约
@@ -93,13 +123,7 @@ export function createAuthAdapter(): Adapter {
           type: account.type,
           provider: account.provider,
           providerAccountId: account.providerAccountId,
-          accessTokenEnc: encryptToken(readText(account.access_token)),
-          refreshTokenEnc: encryptToken(readText(account.refresh_token)),
-          idTokenEnc: encryptToken(readText(account.id_token)),
-          expiresAt: readNumber(account.expires_at),
-          tokenType: readText(account.token_type),
-          scope: readText(account.scope),
-          sessionState: readText(account.session_state),
+          ...buildTokenData(account),
         },
       });
     },
@@ -147,4 +171,30 @@ export function createAuthAdapter(): Adapter {
       await getPrismaClient().session.deleteMany({ where: { sessionToken } });
     },
   };
+}
+
+// 重新授权时 Auth.js 不会再次调用 linkAccount（@auth/core 命中已有账号后直接返回用户），
+// 因此在 events.signIn 中主动 upsert，保证账号表始终保存最新令牌密文
+// （修复：重新授权后仍提示「GitHub 授权已失效」）。
+export async function upsertAccountTokens(
+  userId: string,
+  account: OAuthAccountLike,
+): Promise<void> {
+  const data = buildTokenData(account);
+  await getPrismaClient().account.upsert({
+    where: {
+      provider_providerAccountId: {
+        provider: account.provider,
+        providerAccountId: account.providerAccountId,
+      },
+    },
+    create: {
+      userId,
+      type: account.type,
+      provider: account.provider,
+      providerAccountId: account.providerAccountId,
+      ...data,
+    },
+    update: data,
+  });
 }
