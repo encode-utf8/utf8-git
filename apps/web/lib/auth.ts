@@ -1,7 +1,7 @@
 import NextAuth, { type User } from "next-auth";
 import GitHub from "next-auth/providers/github";
 
-import { createAuthAdapter } from "./auth-adapter";
+import { createAuthAdapter, upsertAccountTokens } from "./auth-adapter";
 
 // GitHub 资料会透传扩展字段（login）给适配器 createUser，这里显式声明类型
 type GitHubProfileUser = User & { login?: string | null };
@@ -15,6 +15,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: createAuthAdapter(),
   session: { strategy: "database" },
   pages: { signIn: "/login" },
+  events: {
+    // 重新授权（账号已存在）时 Auth.js 会跳过 linkAccount，令牌会停留在首次授权；
+    // 这里在每次成功登录后写回最新令牌密文（修复：重新授权后仍提示授权失效）
+    async signIn({ user, account }) {
+      if (account?.provider === "github" && account.access_token && user.id) {
+        await upsertAccountTokens(user.id, account);
+      }
+    },
+  },
   providers: [
     GitHub({
       authorization: { params: { scope: "read:user repo" } },
