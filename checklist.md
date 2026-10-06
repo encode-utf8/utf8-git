@@ -1,50 +1,52 @@
-# 验收清单 · M1-3 仓库列表页（含 TODO-113 / 114 / 116）
+# 验收清单 · M1-4 GitHub 数据层（含 TODO-121 / 122 / 123）
 
-> 任务：`/repos` 仓库列表（含私有仓库、可见性标识、搜索/排序/过滤、分页、权限与空状态引导）
-> 分支：`feat/m1-3-repos-list`
-> 开始日期：2026-10-04
+> 任务：GraphQL 客户端封装（错误 / 重试 / 限流读取）、服务端 TTL 缓存与 cursor 分页管理、限流降级（缓存展示 + 恢复时间提示）
+> 分支：`feat/m1-4-github-data-layer`
+> 开始日期：2026-10-05
 
 ## 1. 任务目标
 
-- `/repos` 展示当前用户创建/参与（含组织）的仓库，**包含私有仓库**并有可见性标识（FR-2.1 / US-02）。
-- 仓库卡片展示：名称、描述、可见性、默认分支、语言、最近更新时间（FR-2.2）。
-- 支持按名称/描述搜索、按最近更新或名称排序、按可见性过滤，且为前端即时过滤（FR-2.3，列表已加载时 < 100ms）。
-- 分页：首屏 100 条 + 「加载更多」（FR-2.1 接受分页方案）。
-- 令牌从账号表解密后仅在服务端使用，不返回前端（承接 M1-2 的安全约定）。
-- 异常与引导（FR-1.4 / TODO-116）：令牌失效（401）→ 重新授权；限流（403）→ 恢复时间提示；组织 SSO 部分结果（`X-GitHub-SSO: partial-results`）→ 授权引导；空列表 → 自助排查路径。
+- 时间线读路径统一走 GraphQL v4 聚合查询（提交 + 分支头 + 关联 PR + `rateLimit`），单页仅 1 次 GitHub 请求（对应路线图验收「单仓库时间线 ≤3 次请求」）。
+- 客户端封装：超时中止、瞬时错误重试（5xx / 网络 / 超时，指数退避）、错误分类（401 / 403 / 404 / 限流 / GraphQL 错误）。
+- 服务端 TTL 缓存（技术分析 §6.2：仓库列表 5 min、时间线首页 2 min）；仅服务端内存，按用户隔离，不进入浏览器 / CDN 缓存。
+- 分页 cursor 管理：按（用户, 仓库, 分支）维护 endCursor 链，翻页增量拉取，已加载页不重复请求。
+- 限流降级：读取 `rateLimit` 剩余量，低于阈值（默认 100，可用环境变量调整）且有陈旧缓存时降级展示并标注恢复时间；无缓存时返回明确错误 + 恢复时间（不用过期缓存冒充最新数据）。
+- 部分失败降级：GraphQL 返回 `data + errors` 时展示可得数据并标注警告（局部失败优于整体白屏）。
 
 ## 2. 范围
 
-- 包含：token 解密读取、GitHub 仓库列表 REST 客户端（错误分类）、`/repos` 页面与客户端列表组件、`/api/repos` 分页接口、proxy 保护、权限/空状态引导、单测（含 `RUN_DB_TESTS` 门控）、文档同步。
-- 不包含：公开仓库直搜（FR-2.4，P2）、时间线页（M1-5）、TTL 缓存与限流降级缓存（M1-4）、组织 SSO 自动授权（需 GitHub 侧操作，仅提供引导）。
+- 包含：共享错误抽取（`github-errors.ts`）、GraphQL 客户端（`github-graphql.ts`）、时间线查询与归一化（`github-timeline.ts`）、TTL 缓存（`server-cache.ts`）、限流快照（`rate-limit-store.ts`）、服务层（`repos-data.ts` / `timeline-data.ts`）、时间线接口 `/api/repos/[owner]/[name]/timeline`、`/repos` 与 `/api/repos` 接入缓存与降级、单测与文档同步。
+- 不包含：时间线页面 UI / 虚拟滚动（M1-5）、断网与超时体验页（M1-9）、Redis 等外部缓存（多实例部署时再评估）、Webhook 准实时更新（BLOCK-03）。
 
 ## 3. 验收项
 
-- [x] 未登录访问 `/repos` → 302 `/login?callbackUrl=/repos`；登录后回跳
-- [x] 列表展示用户仓库（含私有），私有仓库有可见性标识；卡片含名称/描述/默认分支/语言/更新时间
-- [x] 搜索（名称/描述）、排序（最近更新/名称）、可见性过滤（全部/公开/私有）均为前端即时过滤
-- [x] 「加载更多」分页可用；加载失败有重试入口
-- [x] 401 / 403 限流 / SSO 部分结果 / 空列表 均有明确文案与行动入口（重新授权 / SSO 说明 / GitHub 设置链接）
-- [x] access token 仅存在于服务端请求中，页面/接口响应/日志无明文令牌
-- [x] 单测：响应归一化、Link 分页解析、错误分类（401 / 403 / 限流 / SSO）、过滤排序纯函数；DB 门控用例验证 `getAccessToken` 解密
-- [x] `pnpm lint / typecheck / test / build` 全绿；CI 无 `.env` 场景通过
-- [x] 文档同步：README、`docs/todo.md`、`docs/development-log.md`（含 ADR）
+- [x] GraphQL 客户端：超时中止、瞬时错误重试、401/403/404/限流/GraphQL 错误分类、`rateLimit` 读取
+- [x] 时间线聚合查询：提交 + 分支头 + 关联 PR + `rateLimit` 一次取回；归一化防御性解析
+- [x] TTL 缓存生效：同页 2 min 内重复访问不再请求 GitHub（单测断言 fetch 次数）；仓库列表 5 min
+- [x] cursor 分页：第 2 页使用第 1 页 endCursor；已加载页不重复请求；cursor 链缺失时返回 `cursor_expired`
+- [x] 限流降级：低余额 + 有陈旧缓存 → 降级展示（标注 stale / degraded / resetAt）；无缓存 → 429 + 恢复时间
+- [x] 部分失败：`data + errors` 时返回可得数据并带 warnings
+- [x] `/api/repos?page=N` 与 `/repos` 接入 5 min 缓存与降级路径（页面提示缓存时间与恢复时间）
+- [x] 单测覆盖数据层关键路径（客户端 / 缓存 / 降级 / cursor）；`pnpm lint / typecheck / test / build` 全绿
+- [x] 真实端到端：真实会话请求时间线接口（真实仓库），二次请求命中缓存；页面与接口无明文令牌
+- [x] 文档同步：README、`docs/todo.md`（TODO-121/122/123）、`docs/development-log.md`（ADR）
 
 ## 4. 验证方式
 
-- 单测：Vitest（fetch mock；数据层用例需 `RUN_DB_TESTS=1`）。
-- 真实端到端：使用本地真实会话（用户已完成 M1-2 人工登录，库中 token 为密文）访问 `/repos`，确认真实仓库（含私有）渲染与标识；再验证未登录/无效令牌的引导路径。
-- 冒烟：未登录 `/repos` 302 → `/login?callbackUrl=/repos`；`/repos` 有效会话 200。
+- 单测：Vitest + fetch mock + 注入时钟 / 侧依赖（缓存、限流快照、sleep 均注入），覆盖重试、超时、TTL、淘汰、降级、cursor 链。
+- 真实端到端：本地 dev server + 临时真实会话（数据库插入临时 session 行）请求 `/api/repos` 与 `/api/repos/<owner>/<name>/timeline`，验证真实数据、二次请求 `meta.cached=true`、无明文令牌；验证后删除临时会话。
+- 冒烟：未登录 401；伪造 Cookie 由 proxy 拦截跳登录。
 
 ## 5. 通过标准
 
-- 上述命令全部通过；真实仓库列表可见且私有仓库有标识；异常路径均有可操作引导；过滤/排序无外部请求。
+- 单仓库时间线单页 1 次 GitHub 请求（≤3）；限流场景有降级展示与恢复时间；缓存 / 降级 / cursor 均有单测证明；CI 全绿。
 
 ## 6. 风险与假设
 
-- 每次进入页面实时拉取首页（不加缓存），限流风险由 M1-4 的缓存策略统一处理。
-- SSO 部分结果依赖 GitHub 返回的 `X-GitHub-SSO` 头；非 SSO 用户无感。
-- 真实端到端验证依赖本地已有会话（若会话过期，需用户重新登录一次）。
+- 内存缓存仅在单实例内有效（MVP 单实例部署）；多实例 / Serverless 需外部缓存，作为后续评估项记录。
+- 缓存只存元数据（提交 / 分支 / PR 元信息），按用户隔离，不落库、不写磁盘；令牌永不进入缓存键与日志。
+- 限流阈值默认 remaining ≤ 100（环境变量可调）；GitHub 配额模型（REST 5000 req/h、GraphQL 5000 点/h）以官方为准。
+- 分页 cursor 链为进程内状态：服务重启或缓存淘汰后，深页请求返回 `cursor_expired`，由客户端重载第 1 页（M1-5 处理）。
 
 ## 7. 遗留与风险事项
 
@@ -62,3 +64,7 @@
 - 2026-10-04 · 任务「M1-3 仓库列表页」· 分支 `feat/m1-3-repos-list` · 结论：**通过（已合并）**。
   - 证据：`pnpm lint / typecheck / test / build` 全绿；无 `.env` 的 CI 全真模拟同样通过；单测 24 例（本任务新增 16 例：客户端 11 · 过滤 4 · 令牌解密 1[门控]）；真实会话端到端：`/repos` 200 渲染 4 个真实仓库（含 1 个私有仓库及「私有」标识），首屏含搜索/过滤/排序控件，`/api/repos?page=2` 返回空页正常；未登录 `302 → /login?callbackUrl=%2Frepos`，伪造 Cookie `307 → /login`；页面与接口响应均无明文令牌。
   - 合并：提交 `2d1b8c2` 经 PR #3（squash，合并提交 `7bae254`）合入 main；PR 检查全绿（run 37214959863 / 37214983465，含 GitGuardian）。
+
+- 2026-10-05 · 任务「M1-4 GitHub 数据层」· 分支 `feat/m1-4-github-data-layer` · 结论：**开发完成，待用户确认后提交**。
+  - 证据：`pnpm lint / typecheck / test / build` 全绿；单测 80 例（本任务新增 43 例）；真实会话端到端：`/api/repos` 首访 4 个真实仓库、二次 `meta.cached=true`；`/api/repos/encode-utf8/utf8-git/timeline` 返回 7 提交 / 4 分支、二次命中缓存；`stock-analysis` 第 1/2 页各 50 提交且 cursor 正确；`page=5` → 409 `cursor_expired`、`page=0` → 400、非法分支 400、未知仓库 404、未登录 401/302；响应无明文令牌；临时验证会话已删除。
+  - 说明：限流降级（低配额 → 陈旧缓存）由 6 个单测用例覆盖；端到端触发需真实配额耗尽，待 M1-9 结合 UI 复验。

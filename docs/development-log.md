@@ -6,10 +6,40 @@
 | 项 | 内容 |
 | --- | --- |
 | 文档版本 | v0.1 |
-| 更新日期 | 2026-10-04 |
+| 更新日期 | 2026-10-05 |
 | 关联文档 | [实现路线](roadmap.md) · [待办日志](todo.md) |
 
 ---
+
+## 2026-10-05 · M1-4 GitHub 数据层（TODO-121 / 122 / 123）
+
+**目标**：时间线读路径改为 GraphQL v4 聚合查询（单页 1 次请求，满足「单仓库时间线 ≤3 次请求」），并提供服务端 TTL 缓存、cursor 分页管理与限流降级（缓存展示 + 恢复时间提示）。
+
+**完成内容**
+
+- GraphQL 客户端：`apps/web/lib/github-graphql.ts`——超时中止、瞬时错误自动重试（5xx / 网络 / 超时，指数退避）、错误分类（401 / 403 / 404 / 限流 / GraphQL）、`rateLimit` 读取、`data + errors` 部分失败容忍；共享错误统一抽取到 `github-errors.ts`（REST / GraphQL 共用，`github-repos.ts` 继续再导出保持兼容）。
+- 时间线查询：`apps/web/lib/github-timeline.ts` 一次取回仓库信息 + 分支头（前 50）+ 提交历史（50/页）+ 关联 PR + `rateLimit`，归一化防御式解析；默认分支用 `HEAD` 表达式。
+- 缓存与降级：`server-cache.ts`（TTL + LRU，过期条目保留供降级）、`rate-limit-store.ts`（按用户配额快照）、`data-stores.ts`（globalThis 单例；仓库列表 5 min / 时间线 2 min / cursor 链 30 min；降级阈值默认 100，`GITHUB_RATE_LIMIT_DEGRADE_THRESHOLD` 可调）；服务层 `repos-data.ts` / `timeline-data.ts` 统一「新鲜缓存命中 → 低配额降级陈旧缓存（stale / degraded + resetAt）→ 无缓存明确报错」。
+- 接口与页面：新增 `/api/repos/[owner]/[name]/timeline?branch=&page=N`（输入白名单校验；401 / 403 / 404 / 409 `cursor_expired` / 429 + resetAt / 504 / 502 分类）；`/api/repos` 与 `/repos` 接入 5 min 缓存，限流降级时页面显示缓存时间与恢复时间。
+- 验证：`pnpm lint / typecheck / test / build` 全绿；单测 80 例（本任务新增 43 例：GraphQL 客户端 12 · 时间线 5 · TTL 缓存 4 · 限流快照 5 · 仓库服务 8 · 时间线服务 7 · REST 配额头 2）；真实会话端到端：`/api/repos` 二次请求命中缓存；时间线接口返回真实数据（7 提交 / 4 分支），`stock-analysis` 连续两页各 50 提交且 cursor 正确，`page=5` → 409、非法参数 400、未知仓库 404、未登录 401 / 302，响应无明文令牌。
+
+**关键决策**
+
+| 编号 | 决策 | 理由 |
+| --- | --- | --- |
+| ADR-0021 | GraphQL 客户端与数据服务放在 `apps/web/lib`（与 REST 客户端同层），暂不下沉 `packages/github-client` | 当前唯一消费方是 web，避免为单一消费方引入构建顺序与 dist 耦合；出现第二个消费方时再下沉 |
+| ADR-0022 | 缓存采用**进程内内存 TTL**（globalThis 单例），不引入 Redis / DB 缓存 | MVP 单实例部署，缓存只做性能优化且 GitHub 是唯一数据源；多实例 / Serverless 时再评估外部缓存 |
+| ADR-0023 | 限流降级顺序：**新鲜缓存 → 陈旧缓存（标注 stale + resetAt）→ 无缓存明确报错** | 不用过期缓存冒充最新数据（M1-9 约定）；降级响应携带 meta 标记，前端显式提示缓存时间与恢复时间 |
+| ADR-0024 | 分页 cursor 链保存在服务端（30 min），深页缺链返回 **409 `cursor_expired`** | cursor 不暴露给客户端，避免篡改；客户端从第 1 页重载即可恢复（M1-5 处理） |
+
+**问题与风险**
+
+- 内存缓存 / cursor 链在进程重启、多实例与 Serverless 下不复用（深页会 409）；M1-6 部署形态确定后再评估外部缓存。
+- 限流降级的端到端路径依赖真实配额耗尽场景，本次由单测覆盖（6 个降级用例）；M1-9 将在 UI 层补齐断网 / 超时体验。
+
+**下一步**
+
+- M1-5：`/repos/[owner]/[name]` 时间线 v1（提交节点组件、虚拟滚动、节点详情）。
 
 ## 2026-10-04 · M1-3 仓库列表页（TODO-113 / 114 / 116）
 

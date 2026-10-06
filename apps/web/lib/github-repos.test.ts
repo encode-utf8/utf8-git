@@ -165,6 +165,31 @@ describe("fetchViewerReposPage", () => {
     expect(page.repos).toEqual([]);
     expect(page.hasMore).toBe(false);
   });
+
+  it("解析响应头中的配额快照（x-ratelimit-*）", async () => {
+    const reset = Math.floor(Date.now() / 1000) + 3600;
+    const fetchImpl = (async () =>
+      jsonResponse([sampleRepo], {
+        headers: {
+          "x-ratelimit-limit": "5000",
+          "x-ratelimit-remaining": "4999",
+          "x-ratelimit-reset": String(reset),
+        },
+      })) as typeof fetch;
+
+    const page = await fetchViewerReposPage({ token: "t", fetchImpl });
+    expect(page.rateLimit).toEqual({
+      limit: 5000,
+      remaining: 4999,
+      resetAt: new Date(reset * 1000),
+    });
+  });
+
+  it("无配额响应头时 rateLimit 为 null", async () => {
+    const fetchImpl = (async () => jsonResponse([sampleRepo])) as typeof fetch;
+    const page = await fetchViewerReposPage({ token: "t", fetchImpl });
+    expect(page.rateLimit).toBeNull();
+  });
 });
 
 describe("parseLinkHeader", () => {
