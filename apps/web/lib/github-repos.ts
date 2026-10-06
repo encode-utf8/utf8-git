@@ -1,8 +1,26 @@
 // GitHub 仓库列表客户端（仅服务端调用）
 // 选用 REST /user/repos：可通过 X-GitHub-SSO 头检测组织 SSO 的部分结果，
-// 分页直接使用 Link 头；跨资源聚合型读接口（时间线）留待 M1-4 的 GraphQL 封装。
+// 分页直接使用 Link 头；跨资源聚合型读接口（时间线）见 github-timeline.ts。
+
+import {
+  GitHubApiError,
+  GitHubForbiddenError,
+  GitHubRateLimitError,
+  GitHubUnauthorizedError,
+} from "./github-errors";
+
+// 统一从 github-errors 再导出：既有导入路径（页面 / API / 测试）保持不变
+export { GitHubApiError, GitHubForbiddenError, GitHubRateLimitError, GitHubUnauthorizedError };
+export { GitHubGraphQLError, GitHubNotFoundError, GitHubTimeoutError } from "./github-errors";
 
 const GITHUB_API_BASE = "https://api.github.com";
+
+// REST 响应头中的配额快照（x-ratelimit-*）
+export type RestRateLimitInfo = {
+  limit: number | null;
+  remaining: number;
+  resetAt: Date | null;
+};
 
 // 仓储信息（仅保留页面需要的字段）
 export type RepoSummary = {
@@ -32,47 +50,8 @@ export type RepoPage = {
   hasMore: boolean;
   nextPage: number | null;
   sso: SsoInfo | null;
+  rateLimit: RestRateLimitInfo | null;
 };
-
-export class GitHubApiError extends Error {
-  readonly status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "GitHubApiError";
-    this.status = status;
-  }
-}
-
-// 401：令牌无效 / 已撤销，需要重新授权
-export class GitHubUnauthorizedError extends GitHubApiError {
-  constructor(message = "GitHub 授权已失效，请重新授权") {
-    super(message, 401);
-    this.name = "GitHubUnauthorizedError";
-  }
-}
-
-// 403：权限不足或被组织策略拒绝（含 SSO 未授权场景）
-export class GitHubForbiddenError extends GitHubApiError {
-  readonly ssoUrl: string | null;
-
-  constructor(message = "GitHub 拒绝了本次请求（403）", ssoUrl: string | null = null) {
-    super(message, 403);
-    this.name = "GitHubForbiddenError";
-    this.ssoUrl = ssoUrl;
-  }
-}
-
-// 403（限流）/ 429：超出 API 配额或触发次级限流
-export class GitHubRateLimitError extends GitHubApiError {
-  readonly resetAt: Date | null;
-
-  constructor(message = "GitHub API 访问频率超限", resetAt: Date | null = null) {
-    super(message, 429);
-    this.name = "GitHubRateLimitError";
-    this.resetAt = resetAt;
-  }
-}
 
 type RawRepo = {
   id?: unknown;
@@ -159,6 +138,21 @@ function getRateLimitResetAt(response: Response): Date | null {
   return Number.isFinite(seconds) ? new Date(seconds * 1000) : null;
 }
 
+// 解析成功响应中的 x-ratelimit-* 头
+function readRateLimitHeaders(response: Response): RestRateLimitInfo | null {
+  const remainingRaw = response.headers.get("x-ratelimit-remaining");
+  const remaining = Number(remainingRaw);
+  if (remainingRaw === null || !Number.isFinite(remaining)) {
+    return null;
+  }
+  const limitRaw = Number(response.headers.get("x-ratelimit-limit"));
+  return {
+    limit: Number.isFinite(limitRaw) ? limitRaw : null,
+    remaining,
+    resetAt: getRateLimitResetAt(response),
+  };
+}
+
 /**
  * 拉取当前用户可见的仓库（含私有、组织）；分页 100 条/页。
  * 抛出：GitHubUnauthorizedError / GitHubRateLimitError / GitHubForbiddenError / GitHubApiError
@@ -217,5 +211,6 @@ export async function fetchViewerReposPage(params: {
     repos,
     ...parseLinkHeader(response.headers.get("link"), page),
     sso: parseSsoHeader(response.headers.get("x-github-sso")),
+    rateLimit: readRateLimitHeaders(response),
   };
 }

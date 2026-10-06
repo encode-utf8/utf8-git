@@ -5,14 +5,19 @@ import type { ReactNode } from "react";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth, signIn } from "@/lib/auth";
 import {
-  fetchViewerReposPage,
   GitHubApiError,
   GitHubForbiddenError,
   GitHubRateLimitError,
   GitHubUnauthorizedError,
 } from "@/lib/github-repos";
+import { loadReposPage } from "@/lib/repos-data";
 
 import { RepoList } from "./repo-list";
+
+// ISO 时间 → 「YYYY-MM-DD HH:mm（UTC）」文本
+function formatUtc(iso: string | null): string {
+  return iso ? `${iso.slice(0, 16).replace("T", " ")}（UTC）` : "未知时间";
+}
 
 function PageShell({ children }: { children: ReactNode }) {
   return (
@@ -112,9 +117,9 @@ export default async function ReposPage() {
     );
   }
 
-  let page;
+  let result;
   try {
-    page = await fetchViewerReposPage({ token });
+    result = await loadReposPage({ userId, token });
   } catch (error) {
     if (error instanceof GitHubUnauthorizedError) {
       return (
@@ -135,7 +140,8 @@ export default async function ReposPage() {
           <Notice title="GitHub API 访问频率超限">
             <p>
               请求次数暂时超出 GitHub 配额
-              {resetText ? `，预计于 ${resetText} 恢复` : ""}。请稍后重试；M1-4 将提供缓存降级展示。
+              {resetText ? `，预计于 ${resetText} 恢复` : ""}
+              。当前没有可展示的缓存数据，请在配额恢复后重试。
             </p>
             <Link
               href="/repos"
@@ -187,6 +193,8 @@ export default async function ReposPage() {
     throw error;
   }
 
+  const page = result.page;
+
   if (page.repos.length === 0) {
     return (
       <PageShell>
@@ -220,6 +228,15 @@ export default async function ReposPage() {
 
   return (
     <PageShell>
+      {result.meta.degraded ? (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+          <p className="font-medium">GitHub 配额不足，当前展示缓存数据</p>
+          <p className="mt-1">
+            数据获取于 {formatUtc(result.meta.fetchedAt)}
+            {result.meta.resetAt ? `，预计 ${formatUtc(result.meta.resetAt)} 恢复实时数据` : ""}。
+          </p>
+        </div>
+      ) : null}
       {page.sso ? (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
           <p className="font-medium">部分组织的仓库未显示</p>
