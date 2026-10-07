@@ -1,49 +1,49 @@
-# 验收清单 · 任务：部署自检（/api/health + 自检脚本）
+# 验收清单 · 任务：TODO-142 Playwright E2E（登录 mock → 选仓库 → 浏览时间线）
 
-> 分支：`feat/deploy-selfcheck`
+> 分支：`feat/e2e-playwright`
 > 开始日期：2026-10-07
-> 参照：`docs/deployment.md` §3.2 · `docs/reports/tech-analysis/M1-6-deployment-verification.md`
+> 参照：`docs/roadmap.md` M1 退出标准 · `docs/todo.md` TODO-142 · `apps/web/lib/github-endpoints.ts`
 
 ## 1. 任务目标
 
-- 把「部署配置是否正确」做成可脚本化核对的常设能力：覆盖外部可达性、鉴权边界、OAuth 跳转参数与运行期配置（缓存后端 / 数据库 / 密钥）。
-- 针对用户实测反馈的「翻页报 409 `cursor_expired` + 操作迟钝」给出可自查、可复现的判定方式。
+- 补齐 M1 退出标准中缺失的 E2E：项目当前 **0 条 E2E**。
+- 用真实浏览器跑通关键路径：登录（mock GitHub OAuth）→ `/repos` 选择仓库 → 时间线渲染提交。
 
-## 2. 范围
+## 2. 改动程度评估（工作流第 1 条）
 
-- 包含：新增 `GET /api/health` 与 `scripts/deploy-selfcheck.mjs`（`pnpm deploy:selfcheck`）；单元测试；部署文档新增 §3.2 与 §3.1 排查条目。
-- 不包含：修改业务逻辑本身；DNS / 代理环境；Lighthouse 实测。
+- 涉及模块：新增 `apps/web/lib/github-endpoints.ts`；改动 4 处 GitHub 客户端调用点（commits / graphql / repos / token）；`lib/auth.ts` 授权端点；新增 `e2e/` 与 `apps/web/playwright.config.ts`；CI 工作流；文档。
+- 是否改动公共接口 / 数据结构：**不改** Prisma schema、不改对外 API 契约。新增环境变量 `E2E_MODE` 等，**仅在 `E2E_MODE=1` 时生效**，生产默认行为不变（有单测佐证）。
+- 结论：**改动中等偏大**（新增测试基础设施 + 触及 5 个既有文件）→ 按工作流在独立分支 `feat/e2e-playwright` 开发，不在 main 直接改。
 
-## 3. 验收项
+## 3. 范围
 
-- [x] `/api/health` 核对项齐全：`STORE_BACKEND`（Serverless 下必须 `postgres`）、数据库连通、迁移表齐全、必填密钥、`AUTH_TOKEN_ENC_KEY` 长度
-- [x] 响应只含布尔与说明文字，不泄露密钥值；错误信息里的连接串被抹除
-- [x] 全部通过返回 200，任一失效返回 503
-- [x] 自检脚本覆盖：静态页 200 / 未登录 401 / Cookie 前缀 / OAuth 跳转与 `redirect_uri` / `/api/health` 明细
-- [x] 单元测试 `apps/web/lib/health.test.ts` 11 例通过（含「Serverless 未设 `STORE_BACKEND` 判失败」「缺表列出表名」「不泄露连接串」「跨区告警不判失败」）
-- [x] `pnpm lint` / `typecheck` / `test` 全绿（web 149 通过 / 4 跳过）
-- [x] `/api/health` 返回 `functionRegion`，数据库往返超过 150 ms 时给出「函数区与数据库区不一致」告警（不计入 `ok`）
-- [ ] 生产部署后 `pnpm deploy:selfcheck` 对 <https://utf8-git.vercel.app/> 全绿（待合并部署后执行）
-- [ ] 用户把 Vercel 函数区与 Neon 区对齐（`iad1` → `sin1`，或 Neon 重建到 `aws-us-east-1`）后复测，确认告警消失、点击延迟回落
+- 包含：Playwright + 本地 mock GitHub（授权 / 令牌 / REST / GraphQL）；1 条端到端用例；CI 接入（Postgres service）；文档。
+- 不包含：跨浏览器矩阵（先只跑 Chromium）；视觉回归；性能断言。
 
-## 4. 验证方式
+## 4. 验收项
 
-- 单元测试 + 对本地实例（`next start`）与生产域名各跑一次 `pnpm deploy:selfcheck`。
+- [x] GitHub 端点可被 `E2E_MODE=1` 覆写；未开启时一律真实地址（`github-endpoints.test.ts` 3 例）
+- [x] 既有 4 处调用点改用解析函数；`pnpm test` 152 例通过、`typecheck` 全绿
+- [ ] mock GitHub 提供 authorize / token / user/repos / graphql 四个端点
+- [ ] Playwright 用例：点「用 GitHub 登录」→ 回跳 `/repos` → 点击仓库 → 时间线出现提交节点
+- [ ] CI 增加 Postgres service 并跑通 E2E
+- [ ] 文档说明本地如何运行（含 Docker 依赖）
+- [ ] `pnpm lint / typecheck / test` 全绿
 
-实跑记录（2026-10-07）：
+## 5. 验证方式
 
-- 本地实例（`next start -p 3105`，`DATABASE_URL` 指向 Neon，`VERCEL=1`）：`STORE_BACKEND` 未设时 **2 项未通过**，唯一失败项即 `store_backend`，
-  提示语与用户现象（翻页 409 `cursor_expired` / 操作迟钝）完全对应；设 `STORE_BACKEND=postgres` 后重跑 **全部通过（退出码 0）**。
-- 生产域名（经本地代理）：除 `/api/health` 返回 404（该版本尚未包含自检端点）外全部通过——恰好说明本次自检能力上线前，无法从外部判定缓存后端。
+- 本地：`docker compose -f docker-compose.dev.yml up -d` 起 Postgres → `pnpm e2e`。
+- CI：新增 e2e job（Postgres service + `playwright install --with-deps chromium`）。
 
-## 5. 通过标准
+## 6. 通过标准
 
-- 自检能对「缓存后端未共享」这一已知故障给出明确失败项与修复指引；其余检查项在生产域名下全部通过。
+- 关键路径 E2E 在 CI 稳定通过；生产默认端点不变（有单测佐证）。
 
-## 6. 风险与假设
+## 7. 风险与假设
 
-- 本机至 `vercel.app` 的 DNS 被污染，对生产实跑需经本地代理（`NODE_USE_ENV_PROXY=1`）。
-- OAuth App 回调地址是否已登记无法由脚本判定（GitHub 仅在已登录状态校验），仍需人工比对。
+- 本地验证依赖 Docker / Postgres；本机 Docker 未运行，若无法启动只能靠 CI 验证，迭代成本高（每轮数分钟）。
+- mock 必须与真实 GitHub 的响应形状一致（GraphQL 字段、REST `Link` 头），否则用例通过但失真；以既有单测夹具为准。
+- `e2e/` 与 `playwright.config.ts` 需排除在 Next.js 构建与 ESLint 现有范围之外，避免影响 `pnpm build`。
 
 ## 7. 遗留与风险事项
 

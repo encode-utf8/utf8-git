@@ -12,8 +12,7 @@ import {
   GitHubTimeoutError,
   GitHubUnauthorizedError,
 } from "./github-errors";
-
-const GITHUB_GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
+import { resolveGithubGraphqlEndpoint } from "./github-endpoints";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_RETRIES = 2;
@@ -135,7 +134,7 @@ async function performRequest<T>(options: {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
-    response = await fetchImpl(GITHUB_GRAPHQL_ENDPOINT, {
+    response = await fetchImpl(resolveGithubGraphqlEndpoint(), {
       method: "POST",
       headers: {
         Accept: "application/vnd.github+json",

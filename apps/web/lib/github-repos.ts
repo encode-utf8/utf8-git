@@ -9,6 +9,7 @@ import {
   GitHubUnauthorizedError,
 } from "./github-errors";
 import { githubFetch } from "./github-fetch";
+import { resolveGithubApiBase } from "./github-endpoints";
 
 // 统一从 github-errors 再导出：既有导入路径（页面 / API / 测试）保持不变
 export { GitHubApiError, GitHubForbiddenError, GitHubRateLimitError, GitHubUnauthorizedError };
@@ -18,8 +19,6 @@ export {
   GitHubNotFoundError,
   GitHubTimeoutError,
 } from "./github-errors";
-
-const GITHUB_API_BASE = "https://api.github.com";
 
 // REST 响应头中的配额快照（x-ratelimit-*）
 export type RestRateLimitInfo = {
@@ -172,7 +171,7 @@ export async function fetchViewerReposPage(params: {
 }): Promise<RepoPage> {
   const { token, page = 1, perPage = 100, fetchImpl = fetch, timeoutMs } = params;
 
-  const url = new URL(`${GITHUB_API_BASE}/user/repos`);
+  const url = new URL(`${resolveGithubApiBase()}/user/repos`);
   url.searchParams.set("affiliation", "owner,collaborator,organization_member");
   url.searchParams.set("sort", "updated");
   url.searchParams.set("direction", "desc");

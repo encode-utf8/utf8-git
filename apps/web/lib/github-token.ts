@@ -8,8 +8,7 @@ import {
   GitHubTimeoutError,
   GitHubUnauthorizedError,
 } from "./github-errors";
-
-const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
+import { resolveGithubTokenEndpoint } from "./github-endpoints";
 const DEFAULT_TIMEOUT_MS = 8000;
 
 export type RefreshedGitHubToken = {
@@ -81,7 +80,7 @@ export async function refreshGitHubToken(
 
   let response: Response;
   try {
-    response = await fetchImpl(GITHUB_TOKEN_ENDPOINT, {
+    response = await fetchImpl(resolveGithubTokenEndpoint(), {
       method: "POST",
       headers: {
         Accept: "application/json",

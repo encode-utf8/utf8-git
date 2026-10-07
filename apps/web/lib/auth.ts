@@ -2,6 +2,7 @@ import NextAuth, { type User } from "next-auth";
 import GitHub from "next-auth/providers/github";
 
 import { createAuthAdapter, upsertAccountTokens } from "./auth-adapter";
+import { resolveGithubAuthorizeUrl } from "./github-endpoints";
 
 // GitHub 资料会透传扩展字段（login）给适配器 createUser，这里显式声明类型
 type GitHubProfileUser = User & { login?: string | null };
@@ -26,7 +27,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   providers: [
     GitHub({
-      authorization: { params: { scope: "read:user repo" } },
+      // 授权端点默认指向真实 GitHub；E2E 下可改道本地 mock（见 lib/github-endpoints.ts）
+      authorization: { url: resolveGithubAuthorizeUrl(), params: { scope: "read:user repo" } },
       // GitHub 为 OAuth 2.0（非 OIDC），Auth.js 默认只启用 PKCE；这里显式加入 state 防 CSRF
       checks: ["pkce", "state"],
       profile(profile) {
