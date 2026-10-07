@@ -2,7 +2,12 @@
 // 背景：GitHub 开启「令牌过期」策略后，access token 有效期 8 小时；
 // 使用入库的 refresh token（6 个月）调用令牌端点换取新令牌，refresh token 会轮换。
 
-import { GitHubApiError, GitHubTimeoutError, GitHubUnauthorizedError } from "./github-errors";
+import {
+  GitHubApiError,
+  GitHubNetworkError,
+  GitHubTimeoutError,
+  GitHubUnauthorizedError,
+} from "./github-errors";
 
 const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
 const DEFAULT_TIMEOUT_MS = 8000;
@@ -61,7 +66,7 @@ export type RefreshGitHubTokenParams = {
 
 // 用 refresh token 换取新令牌；错误分类与数据层一致：
 // - 被拒绝（error 字段 / 400 / 401 / 403）→ GitHubUnauthorizedError（需重新授权）
-// - 超时 → GitHubTimeoutError；网络 / 5xx → GitHubApiError（可重试）
+// - 超时 → GitHubTimeoutError；网络不可达 → GitHubNetworkError；5xx → GitHubApiError（均可重试）
 export async function refreshGitHubToken(
   params: RefreshGitHubTokenParams,
 ): Promise<RefreshedGitHubToken> {
@@ -96,7 +101,7 @@ export async function refreshGitHubToken(
     if (error instanceof Error && error.name === "TimeoutError") {
       throw new GitHubTimeoutError("GitHub 令牌续期超时");
     }
-    throw new GitHubApiError("无法连接 GitHub 令牌端点", 502);
+    throw new GitHubNetworkError("无法连接 GitHub 令牌端点");
   }
 
   const payload: unknown = await response.json().catch(() => null);

@@ -6,8 +6,10 @@ import { loadCommitDetail } from "@/lib/commit-data";
 import {
   GitHubApiError,
   GitHubForbiddenError,
+  GitHubNetworkError,
   GitHubNotFoundError,
   GitHubRateLimitError,
+  GitHubTimeoutError,
   GitHubUnauthorizedError,
 } from "@/lib/github-errors";
 
@@ -62,6 +64,12 @@ export async function GET(
     }
     if (error instanceof GitHubForbiddenError) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    if (error instanceof GitHubNetworkError) {
+      return NextResponse.json({ error: "github_unreachable" }, { status: 503 });
+    }
+    if (error instanceof GitHubTimeoutError) {
+      return NextResponse.json({ error: "github_timeout" }, { status: 504 });
     }
     if (error instanceof GitHubApiError) {
       return NextResponse.json({ error: "github_error" }, { status: 502 });

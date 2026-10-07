@@ -6,6 +6,7 @@ import {
   GitHubApiError,
   GitHubForbiddenError,
   GitHubGraphQLError,
+  GitHubNetworkError,
   GitHubNotFoundError,
   GitHubRateLimitError,
   GitHubTimeoutError,
@@ -98,7 +99,7 @@ export function extractRateLimit(data: unknown): GitHubRateLimitInfo | null {
   };
 }
 
-// 仅瞬时错误可重试：超时 / 5xx / 网络错误（网络错误在 performRequest 中包装为 502）
+// 仅瞬时错误可重试：超时 / 网络不可达 / 5xx
 function isRetryable(error: unknown): boolean {
   if (error instanceof GitHubTimeoutError) {
     return true;
@@ -151,7 +152,7 @@ async function performRequest<T>(options: {
     if (controller.signal.aborted) {
       throw new GitHubTimeoutError();
     }
-    throw new GitHubApiError("无法连接 GitHub（网络错误）", 502);
+    throw new GitHubNetworkError();
   } finally {
     clearTimeout(timer);
   }

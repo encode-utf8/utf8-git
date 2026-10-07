@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import { formatUtcDateTime, shortSha } from "@/lib/commit-format";
+import { fetchWithRetry } from "@/lib/client-fetch";
+import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
 import type { CommitDetail } from "@/lib/github-commits";
 import type { TimelineCommit } from "@/lib/github-timeline";
 
@@ -105,47 +107,29 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
 
     void (async () => {
       try {
-        const response = await fetch(
+        const response = await fetchWithRetry(
           `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${encodeURIComponent(sha)}`,
           { signal: controller.signal },
         );
         if (controller.signal.aborted) {
           return;
         }
-        if (!response.ok) {
-          let message = `加载详情失败（HTTP ${response.status}），请重试。`;
-          if (response.status === 429) {
-            const payload = (await response.json().catch(() => null)) as {
-              resetAt?: string | null;
-            } | null;
-            message = payload?.resetAt
-              ? `GitHub 配额受限，预计 ${formatUtcDateTime(payload.resetAt)}（UTC）恢复，请稍后重试。`
-              : "GitHub 配额受限，且暂无可用的缓存数据，请稍后重试。";
-          } else if (response.status === 401) {
-            message = "GitHub 授权已失效，请返回列表页重新授权。";
-          } else if (response.status === 403) {
-            message = "访问被 GitHub 拒绝（403），可能是授权权限不足。";
-          } else if (response.status === 404) {
-            message = "提交不存在或当前授权无权访问。";
-          }
-          if (!controller.signal.aborted) {
-            setState({ sha, loading: false, error: message, detail: null });
-          }
-          return;
-        }
         const data = (await response.json()) as CommitDetailResponse;
         if (!controller.signal.aborted) {
           setState({ sha, loading: false, error: null, detail: data });
         }
-      } catch {
-        if (!controller.signal.aborted) {
-          setState({
-            sha,
-            loading: false,
-            error: "网络异常，加载详情失败，请重试。",
-            detail: null,
-          });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
         }
+        const info =
+          error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null);
+        setState({
+          sha,
+          loading: false,
+          error: `${info.title}：${info.message}`,
+          detail: null,
+        });
       }
     })();
 

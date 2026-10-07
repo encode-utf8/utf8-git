@@ -9,6 +9,7 @@ import {
   GitHubUnauthorizedError,
 } from "./github-errors";
 import { getRateLimitResetAt, readRateLimitHeaders, type RestRateLimitInfo } from "./github-repos";
+import { githubFetch } from "./github-fetch";
 
 const GITHUB_API_BASE = "https://api.github.com";
 
@@ -124,20 +125,26 @@ export async function fetchCommitDetail(params: {
   name: string;
   sha: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<CommitDetailResult> {
-  const { token, owner, name, sha, fetchImpl = fetch } = params;
+  const { token, owner, name, sha, fetchImpl = fetch, timeoutMs } = params;
   const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${encodeURIComponent(sha)}`;
 
-  const response = await fetchImpl(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "utf8-git",
+  // 统一封装：默认 15s 超时；网络不可达 → GitHubNetworkError，超时 → GitHubTimeoutError
+  const response = await githubFetch(
+    url,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "utf8-git",
+      },
+      // 令牌相关响应绝不进入 Next.js 数据缓存，避免跨用户复用
+      cache: "no-store",
     },
-    // 令牌相关响应绝不进入 Next.js 数据缓存，避免跨用户复用
-    cache: "no-store",
-  });
+    { fetchImpl, timeoutMs },
+  );
 
   if (response.status === 401) {
     throw new GitHubUnauthorizedError();

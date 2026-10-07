@@ -118,6 +118,7 @@ pnpm dev                                                # 启动后访问 http:/
 - GitHub OAuth App 本地联调：在 GitHub → Settings → Developer settings 创建 OAuth App，回调地址填 `http://localhost:3000/api/auth/callback/github`，将 Client ID / Secret 填入 `.env` 的 `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`。
 - access / refresh / id token 在数据库中均为 AES-256-GCM 密文，加密密钥（`AUTH_TOKEN_ENC_KEY`）只存在于环境变量中。
 - 令牌自动续期：access token 临近过期（默认提前 5 min）时自动用 refresh token 换取新令牌并轮换入库，无需每 8 小时重新授权；仅在刷新令牌失效时才要求重新授权。
+- 在线状态（M1-9 起）：断网 / 请求超时 / GitHub 限流都有明确提示与「重试」入口——服务端渲染阶段给出可读错误页，客户端请求按指数退避自动重试（401 / 403 / 404 / 429 不重试），断网时页面顶部显示全局横幅，限流时提示恢复时间；降级缓存会标注获取时间，不冒充最新数据。
 
 > 网络说明：仓库根目录 `.npmrc` 已配置国内镜像（registry.npmmirror.com）；若可直连 npm 官方源，可删除该文件。
 

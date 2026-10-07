@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { formatRelativeTime, formatUtcDateTime, shortSha } from "@/lib/commit-format";
 import { mergeCommits } from "@/lib/commit-list";
+import { fetchWithRetry } from "@/lib/client-fetch";
+import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/lib/error-state";
 import type { TimelineBranch, TimelineCommit } from "@/lib/github-timeline";
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
@@ -126,7 +128,7 @@ export function TimelineView({
   const [page, setPage] = useState(1);
   const [branch, setBranch] = useState(initialBranch);
   const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<OnlineErrorInfo | null>(null);
   const [selectedCommit, setSelectedCommit] = useState<TimelineCommit | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
@@ -184,34 +186,28 @@ export function TimelineView({
       query.set("branch", branch);
     }
     try {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/timeline?${query.toString()}`,
       );
-      if (response.status === 409) {
-        setLoadError("分页数据已过期，请刷新页面重新加载");
-        setHasNextPage(false);
-        return;
-      }
-      if (response.status === 429) {
-        setLoadError("GitHub 配额受限，请稍后重试");
-        return;
-      }
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
       const data = (await response.json()) as TimelinePageResponse;
       setCommits((previous) => mergeCommits(previous, data.commits));
       setHasNextPage(data.pageInfo.hasNextPage);
       setPage(nextPage);
-    } catch {
-      setLoadError("加载更多失败，请重试");
+    } catch (error) {
+      const info = error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null);
+      setLoadError(info);
+      // 游标过期无法在同一页继续翻页，停掉自动加载并提示刷新
+      if (info.kind === "cursor_expired") {
+        setHasNextPage(false);
+      }
     } finally {
       setLoading(false);
     }
   }, [branch, hasNextPage, loading, name, owner, page]);
 
   useEffect(() => {
-    if (!hasNextPage || loading || commits.length === 0) {
+    // 存在错误时暂停自动翻页，等待用户手动重试，避免对限流 / 故障反复冲击
+    if (!hasNextPage || loading || loadError || commits.length === 0) {
       return;
     }
     if (windowRange.end < commits.length - AUTO_LOAD_THRESHOLD) {
@@ -220,7 +216,7 @@ export function TimelineView({
     // 延迟到宏任务触发，避免在 effect 内同步 setState
     const timer = window.setTimeout(() => void loadMore(), 0);
     return () => window.clearTimeout(timer);
-  }, [commits.length, hasNextPage, loadMore, loading, windowRange.end]);
+  }, [commits.length, hasNextPage, loadError, loadMore, loading, windowRange.end]);
 
   const switchBranch = useCallback(
     async (nextBranch: string) => {
@@ -234,12 +230,9 @@ export function TimelineView({
         if (nextBranch) {
           query.set("branch", nextBranch);
         }
-        const response = await fetch(
+        const response = await fetchWithRetry(
           `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/timeline?${query.toString()}`,
         );
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
         const data = (await response.json()) as TimelinePageResponse;
         setCommits(data.commits);
         setHasNextPage(data.pageInfo.hasNextPage);
@@ -247,8 +240,10 @@ export function TimelineView({
         setBranch(nextBranch);
         setSelectedCommit(null);
         containerRef.current?.scrollTo({ top: 0 });
-      } catch {
-        setLoadError("切换分支失败，请重试");
+      } catch (error) {
+        setLoadError(
+          error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null),
+        );
       } finally {
         setLoading(false);
       }
@@ -321,7 +316,18 @@ export function TimelineView({
             ) : null}
           </div>
           {loadError ? (
-            <p className="mt-2 text-xs text-red-600 dark:text-red-400">{loadError}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-200">
+              <span className="font-medium">{loadError.title}</span>
+              <span className="min-w-0 flex-1">{loadError.message}</span>
+              <button
+                type="button"
+                onClick={() => void loadMore()}
+                disabled={loading}
+                className="h-8 shrink-0 rounded-full border border-red-400 px-4 font-medium transition-colors hover:bg-red-100 disabled:opacity-60 dark:border-red-600 dark:hover:bg-red-900"
+              >
+                {loadError.action}
+              </button>
+            </div>
           ) : null}
         </>
       )}
