@@ -32,6 +32,7 @@ const EXPECTED_CALLBACK = `${BASE_URL}/api/auth/callback/github`;
 const IS_HTTPS = BASE_URL.startsWith("https://");
 
 let failures = 0;
+let warningCount = 0;
 
 function record(name, ok, detail = "") {
   if (!ok) {
@@ -135,6 +136,14 @@ async function checkHealth() {
     for (const check of report?.checks ?? []) {
       record(`  ↳ ${check.name}`, check.ok, check.detail ?? "");
     }
+    if (report?.functionRegion) {
+      console.log(`  · 函数运行区 VERCEL_REGION=${report.functionRegion}`);
+    }
+    // 告警不是故障：可用但配置不理想（例如函数与数据库跨区），单独提示
+    for (const warning of report?.warnings ?? []) {
+      warningCount += 1;
+      console.log(`  ⚠ ${warning}`);
+    }
   } catch (error) {
     record("部署自检 /api/health", false, `请求失败：${error.message}`);
   }
@@ -178,7 +187,8 @@ async function main() {
   console.log("    （GitHub 仅在已登录状态校验登记值，未登录一律 302 到登录页，故脚本无法判定）");
   console.log("  · 浏览器完整登录一次（写会话 + 令牌加密入库 + 拉取仓库列表）");
 
-  console.log(failures === 0 ? "\n结果：全部通过" : `\n结果：${failures} 项未通过`);
+  const summary = failures === 0 ? "结果：全部通过" : `结果：${failures} 项未通过`;
+  console.log(`\n${warningCount > 0 ? `${summary}（另有 ${warningCount} 条告警）` : summary}`);
   process.exit(failures === 0 ? 0 : 1);
 }
 

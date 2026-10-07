@@ -76,8 +76,11 @@ node scripts/deploy-selfcheck.mjs --base=http://127.0.0.1:3100   # 校验本地�
 - 应用侧自检端点 `GET /api/health`：无鉴权，**只返回布尔结论与说明文字（不含密钥）**，全部通过 200、任一失效 503。核对项：
   `STORE_BACKEND`（Serverless 下必须为 `postgres`，否则翻页会随机 409 `cursor_expired`）、数据库连通性、迁移表齐全性、
   必填密钥是否就位、`AUTH_TOKEN_ENC_KEY` 是否为 32 字节 base64。
+- 运行期还会返回 `functionRegion`（Vercel 注入的 `VERCEL_REGION`）与 **warnings**：数据库往返超过 150 ms 时会告警「函数区与数据库区大概率不一致」
+  （一次请求串行 4~6 次查询，跨区会放大成秒级延迟）。warnings 不影响 `ok`、不触发 503。
 - **无法自动验证**：GitHub OAuth App 的 Authorization callback URL 是否已登记（GitHub 仅在已登录状态校验）。
   脚本会在结尾打印「应登记的地址」，需人工比对。
+  | 所有操作都迟钝（每次点击 1 s+） | Vercel 函数区与数据库区不一致：一次请求串行执行 4~6 次数据库查询（数据库会话 + 令牌 + 缓存 + 限流 + 游标），每次跨区往返要 200 ms 以上 | 让两者同区：Neon 在 `ap-southeast-1` 时把函数区设为 `sin1`（Vercel 后台 Settings → Functions → Function Region，或 `vercel.json` 的 `regions`）；套餐不支持改区就把数据库建到函数的默认区（`aws-us-east-1`）。用 `pnpm deploy:selfcheck` 看函数区与数据库往返 |
 
 ## 4. 连接池
 

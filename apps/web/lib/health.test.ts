@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   REQUIRED_TABLES,
+  SLOW_DATABASE_RTT_MS,
   redactConnectionInfo,
   runHealthChecks,
   type HealthReport,
@@ -53,6 +54,28 @@ describe("runHealthChecks", () => {
     expect(report.storeBackend).toBe("memory");
     expect(report.sharedStoreRequired).toBe(false);
     expect(findCheck(report, "store_backend")?.ok).toBe(true);
+  });
+
+  it("函数与数据库跨区（数据库往返过高）时给出告警，但不判失败", async () => {
+    const report = await runHealthChecks({
+      env: makeEnv({ VERCEL_REGION: "iad1" }),
+      listTables: healthyDeps.listTables,
+      pingDatabase: async () => {
+        await new Promise((resolve) => setTimeout(resolve, SLOW_DATABASE_RTT_MS + 20));
+      },
+    });
+    expect(report.ok).toBe(true);
+    expect(report.functionRegion).toBe("iad1");
+    expect(report.warnings).toHaveLength(1);
+    expect(report.warnings[0]).toContain("iad1");
+    expect(report.warnings[0]).toContain("sin1");
+  });
+
+  it("数据库往返正常时无告警，未注入 region 时为 null", async () => {
+    const report = await runHealthChecks({ env: makeEnv(), ...healthyDeps });
+    expect(report.ok).toBe(true);
+    expect(report.functionRegion).toBeNull();
+    expect(report.warnings).toEqual([]);
   });
 
   it("缺表时列出缺失的表名", async () => {

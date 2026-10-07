@@ -20,9 +20,11 @@
 - [x] 响应只含布尔与说明文字，不泄露密钥值；错误信息里的连接串被抹除
 - [x] 全部通过返回 200，任一失效返回 503
 - [x] 自检脚本覆盖：静态页 200 / 未登录 401 / Cookie 前缀 / OAuth 跳转与 `redirect_uri` / `/api/health` 明细
-- [x] 单元测试 `apps/web/lib/health.test.ts` 9 例通过（含「Serverless 未设 `STORE_BACKEND` 判失败」「缺表列出表名」「不泄露连接串」）
-- [x] `pnpm lint` / `typecheck` / `test` 全绿（web 147 通过 / 4 跳过）
+- [x] 单元测试 `apps/web/lib/health.test.ts` 11 例通过（含「Serverless 未设 `STORE_BACKEND` 判失败」「缺表列出表名」「不泄露连接串」「跨区告警不判失败」）
+- [x] `pnpm lint` / `typecheck` / `test` 全绿（web 149 通过 / 4 跳过）
+- [x] `/api/health` 返回 `functionRegion`，数据库往返超过 150 ms 时给出「函数区与数据库区不一致」告警（不计入 `ok`）
 - [ ] 生产部署后 `pnpm deploy:selfcheck` 对 <https://utf8-git.vercel.app/> 全绿（待合并部署后执行）
+- [ ] 用户把 Vercel 函数区与 Neon 区对齐（`iad1` → `sin1`，或 Neon 重建到 `aws-us-east-1`）后复测，确认告警消失、点击延迟回落
 
 ## 4. 验证方式
 

@@ -25,6 +25,10 @@ export const REQUIRED_SECRET_ENV = [
 // AUTH_TOKEN_ENC_KEY 需为 32 字节的 base64（AES-256-GCM）
 export const TOKEN_ENC_KEY_BYTES = 32;
 
+// 函数与数据库跨区域时，每次查询都要走一趟跨洋 RTT；超过该值基本可判定未同区部署。
+// 参考：一次登录后的页面 / 接口请求会串行执行 4~6 次数据库查询（会话 + 令牌 + 缓存 + 限流 + 游标）。
+export const SLOW_DATABASE_RTT_MS = 150;
+
 export type HealthCheck = {
   name: string;
   ok: boolean;
@@ -36,7 +40,11 @@ export type HealthReport = {
   storeBackend: StoreBackend;
   /** 当前运行时是否要求共享存储（Serverless 会横向扩容，必须共享） */
   sharedStoreRequired: boolean;
+  /** Vercel 注入的函数运行区（本地运行 / 平台未注入时为 null） */
+  functionRegion: string | null;
   checks: HealthCheck[];
+  /** 可用但配置不理想的问题；不计入 ok，不触发 503 */
+  warnings: string[];
 };
 
 export type HealthDeps = {
@@ -126,13 +134,28 @@ export async function runHealthChecks(deps: HealthDeps = {}): Promise<HealthRepo
   const storeBackend = resolveStoreBackend(env.STORE_BACKEND);
   // Vercel 会注入 VERCEL=1；本地 next start 不会，此时 memory 后端是合理配置
   const sharedStoreRequired = Boolean(env.VERCEL);
+  const functionRegion = env.VERCEL_REGION?.trim() || null;
 
   const checks: HealthCheck[] = [describeStoreBackend(storeBackend, sharedStoreRequired)];
+  const warnings: string[] = [];
 
   let databaseReachable = true;
+  const pingStartedAt = Date.now();
   try {
     await pingDatabase();
-    checks.push({ name: "database_reachable", ok: true, detail: "数据库连接正常" });
+    const rtt = Date.now() - pingStartedAt;
+    checks.push({
+      name: "database_reachable",
+      ok: true,
+      detail: `数据库连接正常（往返 ${rtt} ms）`,
+    });
+    if (rtt > SLOW_DATABASE_RTT_MS) {
+      warnings.push(
+        `数据库往返 ${rtt} ms（阈值 ${SLOW_DATABASE_RTT_MS} ms）：函数区 ${functionRegion ?? "未知"} 与数据库区大概率不一致。` +
+          "登录后的每次页面 / 接口请求会串行执行 4~6 次数据库查询，跨区往返会直接放大成秒级延迟；" +
+          '建议把函数部署到数据库同区（如 Neon 在 ap-southeast-1 时用 vercel.json 的 regions: ["sin1"]），或把数据库建在函数同区。',
+      );
+    }
   } catch (error) {
     databaseReachable = false;
     const message = error instanceof Error ? error.message : String(error);
@@ -171,6 +194,8 @@ export async function runHealthChecks(deps: HealthDeps = {}): Promise<HealthRepo
     ok: checks.every((check) => check.ok),
     storeBackend,
     sharedStoreRequired,
+    functionRegion,
     checks,
+    warnings,
   };
 }
