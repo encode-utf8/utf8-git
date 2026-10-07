@@ -1,0 +1,159 @@
+{
+  "baseUrl": "http://127.0.0.1:3103",
+  "measuredAt": "2026-10-07T08:40:44.229Z",
+  "pages": 3,
+  "reposList": {
+    "miss": {
+      "status": 200,
+      "totalMs": 1795.8,
+      "cached": false,
+      "count": 4
+    },
+    "hit": {
+      "status": 200,
+      "totalMs": 37,
+      "cached": true,
+      "count": 4
+    }
+  },
+  "repos": [
+    {
+      "owner": "encode-utf8",
+      "name": "utf8-git",
+      "label": "小仓库",
+      "slug": "encode-utf8/utf8-git",
+      "pages": [
+        {
+          "page": 1,
+          "status": 200,
+          "ttfbMs": 41.8,
+          "totalMs": 43,
+          "commits": 17,
+          "cached": true,
+          "error": null
+        },
+        {
+          "page": 2,
+          "status": 200,
+          "ttfbMs": 718.8,
+          "totalMs": 719.8,
+          "commits": 0,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 3,
+          "status": 200,
+          "ttfbMs": 30.7,
+          "totalMs": 31.4,
+          "commits": 0,
+          "cached": false,
+          "error": null
+        }
+      ],
+      "html": {
+        "status": 200,
+        "ttfbMs": 1833.6,
+        "totalMs": 1843.2,
+        "bytes": 46770
+      },
+      "duplicates": 0,
+      "uniqueCommits": 17,
+      "apiRequests": 3,
+      "pageTtfbAvg": 263.8,
+      "pageTtfbP95": 718.8
+    },
+    {
+      "owner": "encode-utf8",
+      "name": "stock-analysis",
+      "label": "中仓库",
+      "slug": "encode-utf8/stock-analysis",
+      "pages": [
+        {
+          "page": 1,
+          "status": 200,
+          "ttfbMs": 25.1,
+          "totalMs": 26.7,
+          "commits": 50,
+          "cached": true,
+          "error": null
+        },
+        {
+          "page": 2,
+          "status": 200,
+          "ttfbMs": 2008.2,
+          "totalMs": 2009.7,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 3,
+          "status": 200,
+          "ttfbMs": 2020.6,
+          "totalMs": 2022.2,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        }
+      ],
+      "html": {
+        "status": 200,
+        "ttfbMs": 2173.4,
+        "totalMs": 2179.2,
+        "bytes": 73906
+      },
+      "duplicates": 0,
+      "uniqueCommits": 150,
+      "apiRequests": 3,
+      "pageTtfbAvg": 1351.3,
+      "pageTtfbP95": 2020.6
+    },
+    {
+      "owner": "torvalds",
+      "name": "linux",
+      "label": "大仓库",
+      "slug": "torvalds/linux",
+      "pages": [
+        {
+          "page": 1,
+          "status": 200,
+          "ttfbMs": 27.3,
+          "totalMs": 28.3,
+          "commits": 50,
+          "cached": true,
+          "error": null
+        },
+        {
+          "page": 2,
+          "status": 200,
+          "ttfbMs": 2180.3,
+          "totalMs": 2181.2,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 3,
+          "status": 200,
+          "ttfbMs": 3141.1,
+          "totalMs": 3141.9,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        }
+      ],
+      "html": {
+        "status": 200,
+        "ttfbMs": 2273.7,
+        "totalMs": 2277.7,
+        "bytes": 65118
+      },
+      "duplicates": 0,
+      "uniqueCommits": 150,
+      "apiRequests": 3,
+      "pageTtfbAvg": 1782.9,
+      "pageTtfbP95": 3141.1
+    }
+  ]
+}

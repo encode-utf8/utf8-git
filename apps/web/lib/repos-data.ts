@@ -8,8 +8,8 @@ import {
 } from "./data-stores";
 import { GitHubRateLimitError } from "./github-errors";
 import { fetchViewerReposPage, type RepoPage } from "./github-repos";
-import type { RateLimitStore } from "./rate-limit-store";
-import { cacheKey, type CacheLookup, type TtlCache } from "./server-cache";
+import { cacheKey, type CacheLookup } from "./server-cache";
+import type { RateLimitStoreLike, TtlCacheLike } from "./shared-store";
 
 export type ReposPageMeta = {
   cached: boolean;
@@ -26,8 +26,8 @@ export type ReposPageResult = {
 
 export type ReposDataDeps = {
   fetchPage?: typeof fetchViewerReposPage;
-  cache?: TtlCache<ReposCacheValue>;
-  rateLimitStore?: RateLimitStore;
+  cache?: TtlCacheLike<ReposCacheValue>;
+  rateLimitStore?: RateLimitStoreLike;
   threshold?: number;
   now?: () => number;
 };
@@ -62,8 +62,9 @@ export async function loadReposPage(
   const now = deps.now ?? Date.now;
   const key = cacheKey("repos", params.userId, page);
 
-  const cached = cache.get(key);
-  const gate = rateLimitStore.shouldDegrade(params.userId, threshold, now());
+  // 存储调用一律 await：内存实现同步返回，Postgres 实现返回 Promise
+  const cached = await cache.get(key);
+  const gate = await rateLimitStore.shouldDegrade(params.userId, threshold, now());
   if (gate.degrade) {
     if (cached) {
       return serveCached(cached, gate.resetAt);
@@ -91,7 +92,7 @@ export async function loadReposPage(
   try {
     const result = await fetchPage({ token: params.token, page });
     if (result.rateLimit) {
-      rateLimitStore.record(params.userId, {
+      await rateLimitStore.record(params.userId, {
         limit: result.rateLimit.limit,
         remaining: result.rateLimit.remaining,
         resetAt: result.rateLimit.resetAt,
@@ -100,7 +101,7 @@ export async function loadReposPage(
         recordedAt: now(),
       });
     }
-    cache.set(key, { page: result, fetchedAt: now() });
+    await cache.set(key, { page: result, fetchedAt: now() });
     return {
       page: result,
       meta: {
@@ -114,7 +115,7 @@ export async function loadReposPage(
   } catch (error) {
     if (error instanceof GitHubRateLimitError) {
       const resetAt = error.resetAt ?? new Date(now() + RATE_LIMIT_FALLBACK_MS);
-      rateLimitStore.record(params.userId, {
+      await rateLimitStore.record(params.userId, {
         limit: null,
         remaining: 0,
         resetAt,

@@ -10,6 +10,31 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// 共享 TTL 缓存（M1-6）：多实例 / Serverless 部署下让缓存跨实例生效。
+// 仅在 STORE_BACKEND=postgres 时启用，内存后端不写这张表。
+model SharedCacheEntry {
+  key       String   @id
+  scope     String // 缓存类别（repos / timeline / cursor / commit），便于按类排查与清理
+  value     Json
+  storedAt  BigInt   @map("stored_at") // unix 毫秒（与内存实现一致）
+  expiresAt DateTime @map("expires_at") // 绝对过期时间，用于清理过期条目
+
+  @@map("shared_cache_entries")
+}
+
+// 共享限流快照（M1-6）：每用户一行，跨实例共享 GitHub 配额状态，避免各实例判定不一致。
+model RateLimitState {
+  userId     String    @id @map("user_id")
+  limitValue Int?      @map("limit_value")
+  remaining  Int
+  resetAt    DateTime? @map("reset_at")
+  cost       Int?
+  source     String
+  recordedAt BigInt    @map("recorded_at")
+
+  @@map("rate_limit_states")
+}
+
 // 用户：以 GitHub 账号为唯一身份来源
 model User {
   id            String    @id // 使用 OAuth profile 的 id（GitHub 数字 ID）作为主键

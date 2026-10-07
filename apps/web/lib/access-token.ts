@@ -80,6 +80,7 @@ function refreshOnce(userId: string, run: () => Promise<RefreshedGitHubToken>) {
  * 令牌临近过期时用 refresh token 自动续期并轮换入库：
  * - 返回 null：无账号 / 无令牌 / 无 refresh token / 续期被拒绝（调用方应引导重新授权）
  * - 抛出 GitHubApiError：网络、超时或令牌端点异常（可重试）
+ * - 多实例（M1-6）：续期被拒时先重读库中最新令牌，其他实例已完成续期则直接复用
  */
 export async function getGitHubAccessToken(
   userId: string,
@@ -122,7 +123,14 @@ export async function getGitHubAccessToken(
     return refreshed.accessToken;
   } catch (error) {
     if (error instanceof GitHubUnauthorizedError) {
-      return null; // refresh token 失效 → 走重新授权
+      // 多实例竞态（M1-6）：refresh token 每次刷新都会轮换，其他实例可能刚用同一个旧令牌
+      // 完成续期并写库，导致本次请求被拒。先重读库中最新令牌，避免误报「授权失效」。
+      const latest = await (deps.loadAccount ?? loadGitHubAccount)(userId);
+      const latestToken = latest?.accessTokenEnc ? decryptToken(latest.accessTokenEnc) : null;
+      if (latestToken && latest && latest.expiresAt !== account.expiresAt) {
+        return latestToken;
+      }
+      return null; // refresh token 确实失效 → 走重新授权
     }
     throw error;
   }

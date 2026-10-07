@@ -9,8 +9,8 @@ import {
 } from "./data-stores";
 import { GitHubRateLimitError } from "./github-errors";
 import { fetchTimelinePage, TIMELINE_PAGE_SIZE, type TimelineData } from "./github-timeline";
-import type { RateLimitStore } from "./rate-limit-store";
-import { cacheKey, type CacheLookup, type TtlCache } from "./server-cache";
+import { cacheKey, type CacheLookup } from "./server-cache";
+import type { RateLimitStoreLike, TtlCacheLike } from "./shared-store";
 
 // 深页请求但服务端 cursor 链缺失（过期 / 重启）时抛出；接口转为 409
 export class TimelineCursorExpiredError extends Error {
@@ -38,9 +38,9 @@ export type TimelinePageResult = {
 
 export type TimelineDataDeps = {
   fetchPage?: typeof fetchTimelinePage;
-  cache?: TtlCache<TimelineCacheValue>;
-  cursorCache?: TtlCache<CursorChain>;
-  rateLimitStore?: RateLimitStore;
+  cache?: TtlCacheLike<TimelineCacheValue>;
+  cursorCache?: TtlCacheLike<CursorChain>;
+  rateLimitStore?: RateLimitStoreLike;
   threshold?: number;
   now?: () => number;
   graphql?: Parameters<typeof fetchTimelinePage>[0]["graphql"];
@@ -114,8 +114,9 @@ export async function loadTimelinePage(
   const key = cacheKey("timeline", params.userId, params.owner, params.name, branch ?? "", page);
   const cursorKey = cacheKey("cursor", params.userId, params.owner, params.name, branch ?? "");
 
-  const cached = cache.get(key);
-  const gate = rateLimitStore.shouldDegrade(params.userId, threshold, now());
+  // 存储调用一律 await：内存实现同步返回，Postgres 实现返回 Promise
+  const cached = await cache.get(key);
+  const gate = await rateLimitStore.shouldDegrade(params.userId, threshold, now());
   if (gate.degrade) {
     if (cached) {
       return serveCached(cached, page, gate.resetAt);
@@ -145,10 +146,43 @@ export async function loadTimelinePage(
   // 深页依赖上一页 endCursor；链缺失时让客户端回到第 1 页
   let cursor: string | null = null;
   if (page > 1) {
-    const pages = cursorCache.get(cursorKey)?.value.pages ?? [];
+    const pages = (await cursorCache.get(cursorKey))?.value.pages ?? [];
     const previous = pages[page - 2];
     if (!previous) {
       throw new TimelineCursorExpiredError();
+    }
+    // 上一页已无更多数据（endCursor 为 null）→ 后续页必然为空。
+    // 不能继续用 null 游标请求：GitHub 会忽略 after 并重新返回第 1 页，导致重复提交（M1-7 验证发现）。
+    if (previous.endCursor === null) {
+      const previousKey = cacheKey(
+        "timeline",
+        params.userId,
+        params.owner,
+        params.name,
+        branch ?? "",
+        page - 1,
+      );
+      const previousPage = await cache.get(previousKey);
+      if (!previousPage) {
+        // 来不及读到上一页数据（缓存已过期）→ 让客户端回到第 1 页重建游标链
+        throw new TimelineCursorExpiredError();
+      }
+      return {
+        timeline: {
+          ...previousPage.value.timeline,
+          commits: [],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+        meta: buildMeta({
+          page,
+          cached: false,
+          stale: false,
+          degraded: false,
+          fetchedAt: now(),
+          resetAt: null,
+          warnings: [],
+        }),
+      };
     }
     cursor = previous.endCursor;
   }
@@ -163,7 +197,7 @@ export async function loadTimelinePage(
       graphql: deps.graphql,
     });
     if (result.rateLimit) {
-      rateLimitStore.record(params.userId, {
+      await rateLimitStore.record(params.userId, {
         limit: result.rateLimit.limit,
         remaining: result.rateLimit.remaining,
         resetAt: result.rateLimit.resetAt,
@@ -173,11 +207,14 @@ export async function loadTimelinePage(
       });
     }
     const fetchedAt = now();
-    cache.set(key, { timeline: result.data, warnings: result.warnings, fetchedAt });
+    await cache.set(key, { timeline: result.data, warnings: result.warnings, fetchedAt });
 
-    const pages = (cursorCache.get(cursorKey)?.value.pages ?? []).slice(0, Math.max(0, page - 1));
+    const pages = ((await cursorCache.get(cursorKey))?.value.pages ?? []).slice(
+      0,
+      Math.max(0, page - 1),
+    );
     pages[page - 1] = { endCursor: result.data.pageInfo.endCursor, fetchedAt };
-    cursorCache.set(cursorKey, { pages });
+    await cursorCache.set(cursorKey, { pages });
 
     return {
       timeline: result.data,
@@ -194,7 +231,7 @@ export async function loadTimelinePage(
   } catch (error) {
     if (error instanceof GitHubRateLimitError) {
       const resetAt = error.resetAt ?? new Date(now() + RATE_LIMIT_FALLBACK_MS);
-      rateLimitStore.record(params.userId, {
+      await rateLimitStore.record(params.userId, {
         limit: null,
         remaining: 0,
         resetAt,

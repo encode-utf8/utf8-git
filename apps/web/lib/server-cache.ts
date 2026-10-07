@@ -3,6 +3,8 @@
 // - 超出容量按最近最少使用（LRU）淘汰
 // - 单例由 data-stores.ts 挂到 globalThis，避免 dev 热重载反复清空
 
+import { isFresh } from "./shared-store";
+
 export type CacheLookup<V> = {
   value: V;
   storedAt: number;
@@ -32,7 +34,7 @@ export class TtlCache<V> {
     return {
       value: entry.value,
       storedAt: entry.storedAt,
-      fresh: this.now() - entry.storedAt < this.ttlMs,
+      fresh: isFresh(entry.storedAt, this.ttlMs, this.now()),
     };
   }
 
@@ -62,8 +64,11 @@ export class TtlCache<V> {
 }
 
 // 缓存键拼接：用 NUL 分隔，避免不同字段组合产生歧义
+// 缓存键拼接：用「字段分隔符」（U+001F）分隔，避免不同字段组合产生歧义。
+// 不能用 NUL（\u0000）：Postgres text 不接受 0x00 字节，共享缓存查询会报
+// 「invalid byte sequence for encoding UTF8: 0x00」（M1-6 多实例实现踩坑）。
 export function cacheKey(...parts: Array<string | number | null | undefined>): string {
   return parts
     .map((part) => (part === null || part === undefined ? "" : String(part)))
-    .join("\u0000");
+    .join("\u001f");
 }
