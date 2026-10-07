@@ -1,0 +1,139 @@
+{
+  "baseUrl": "http://127.0.0.1:3103",
+  "measuredAt": "2026-10-07T08:41:15.369Z",
+  "pages": 11,
+  "reposList": {
+    "miss": {
+      "status": 200,
+      "totalMs": 102.8,
+      "cached": true,
+      "count": 4
+    },
+    "hit": {
+      "status": 200,
+      "totalMs": 26.9,
+      "cached": true,
+      "count": 4
+    }
+  },
+  "repos": [
+    {
+      "owner": "torvalds",
+      "name": "linux",
+      "label": "大仓库",
+      "slug": "torvalds/linux",
+      "pages": [
+        {
+          "page": 1,
+          "status": 200,
+          "ttfbMs": 23.1,
+          "totalMs": 26,
+          "commits": 50,
+          "cached": true,
+          "error": null
+        },
+        {
+          "page": 2,
+          "status": 200,
+          "ttfbMs": 24.3,
+          "totalMs": 25.1,
+          "commits": 50,
+          "cached": true,
+          "error": null
+        },
+        {
+          "page": 3,
+          "status": 200,
+          "ttfbMs": 27.2,
+          "totalMs": 28.1,
+          "commits": 50,
+          "cached": true,
+          "error": null
+        },
+        {
+          "page": 4,
+          "status": 200,
+          "ttfbMs": 2893.2,
+          "totalMs": 2894.3,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 5,
+          "status": 200,
+          "ttfbMs": 2705.4,
+          "totalMs": 2706.8,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 6,
+          "status": 200,
+          "ttfbMs": 2215.5,
+          "totalMs": 2216.9,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 7,
+          "status": 200,
+          "ttfbMs": 2490,
+          "totalMs": 2491.3,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 8,
+          "status": 200,
+          "ttfbMs": 2100.8,
+          "totalMs": 2101.7,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 9,
+          "status": 200,
+          "ttfbMs": 2251.5,
+          "totalMs": 2252.6,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 10,
+          "status": 200,
+          "ttfbMs": 2185.3,
+          "totalMs": 2186,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        },
+        {
+          "page": 11,
+          "status": 200,
+          "ttfbMs": 2690.8,
+          "totalMs": 2691.6,
+          "commits": 50,
+          "cached": false,
+          "error": null
+        }
+      ],
+      "html": {
+        "status": 200,
+        "ttfbMs": 57.5,
+        "totalMs": 67.5,
+        "bytes": 65118
+      },
+      "duplicates": 0,
+      "uniqueCommits": 550,
+      "apiRequests": 11,
+      "pageTtfbAvg": 1782.5,
+      "pageTtfbP95": 2893.2
+    }
+  ]
+}
