@@ -30,7 +30,7 @@
 - [x] TODO-101 初始化 monorepo（pnpm workspace：`apps/web`、`packages/*`）
 - [x] TODO-102 配置 ESLint + Prettier + commitlint（Conventional Commits）
 - [x] TODO-103 搭建 GitHub Actions CI（lint → typecheck → test → build）
-- [~] TODO-104 配置 Vercel 预览环境与生产环境、环境变量管理（M1-6 已产出 `docs/deployment.md` 与环境变量清单、多实例共享存储；真实 Vercel / Neon 接入待用户账号）
+- [x] TODO-104 配置 Vercel 预览环境与生产环境、环境变量管理（2026-10-07 上线：<https://utf8-git.vercel.app/>，Neon 迁移已应用，未登录路径与 OAuth 跳转验收通过，见 `docs/reports/tech-analysis/M1-6-deployment-verification.md`；预览域名 OAuth 回调和浏览器登录仍待补）
 - [x] TODO-105 初始化 PostgreSQL + Prisma 迁移基线（本地 Docker 开发库；Neon/Supabase 随 TODO-104 接入）
 
 ### 2.2 账号与仓库
