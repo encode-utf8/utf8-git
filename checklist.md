@@ -1,87 +1,40 @@
-# 验收清单 · 任务：M1-6 部署形态与多实例一致性（含追加任务 M1-7 真实仓库性能验证）
+# 验收清单 · 任务：固化 Vercel 构建配置（`apps/web/vercel.json`）
 
-> 任务：确定并落地部署形态（Vercel + 托管 Postgres），并解决多实例下的缓存 / 限流 / 续期去重问题
-> 分支：`feat/m1-6-deployment`
+> 分支：`chore/vercel-config`
 > 开始日期：2026-10-07
-> 参照：`docs/roadmap.md` M1-6 · `docs/technical-analysis.md` §2 / §6.2 / §10 · `docs/todo.md` TODO-104
+> 参照：`docs/deployment.md` §3 · 线上部署排障（构建命令被拼接、`non-standard "NODE_ENV"`）
 
 ## 1. 任务目标
 
-- 明确部署形态：Next.js 应用部署到 Vercel，数据库使用托管 PostgreSQL（Neon / Supabase 免费层），环境变量由平台注入；产出可直接照做的部署文档。
-- 解决多实例（Serverless 多实例 / 多 region）下的三处进程内状态问题：
-  1. TTL 缓存不跨实例共享，缓存命中率随实例数下降；
-  2. 限流快照各实例独立，降级判定不一致，可能多打请求；
-  3. 令牌续期在同一用户并发时可能重复刷新（refresh token 每次轮换），导致误判「授权失效」。
-- Vercel / Neon 的真实部署需要用户账号：本次完成代码与文档侧，实际部署与公网验收作为遗留项明确列出。
+- 把 Vercel 的构建 / 安装命令固化进仓库，避免后台表单手输导致命令拼接错误（已实际发生一次构建失败）。
+- 修正 `docs/deployment.md` 中过时的部署步骤（Root Directory 应为 `apps/web`），并把线上踩坑沉淀成清单。
 
 ## 2. 范围
 
-- 包含：共享存储抽象与 Postgres 实现（`shared-store.ts` / `pg-stores.ts` + 新增 Prisma 模型与迁移）；`data-stores.ts` 按 `STORE_BACKEND` 选择后端；数据服务兼容同步 / 异步存储；续期竞态的幂等恢复；`docs/deployment.md`；README / todo / development-log / checklist 同步。
-- 不包含：真实 Vercel / Neon 部署（需用户账号）、Redis 等外部缓存服务、多 region 复制拓扑。
+- 包含：新增 `apps/web/vercel.json`；`docs/deployment.md` §2 / §3 / §3.1 更新；`docs/development-log.md` 记录。
+- 不包含：Vercel 后台的实际操作（由用户执行）；真实平台冷启动与 Lighthouse 实测（待线上数据）。
 
 ## 3. 验收项
 
-- [x] 新增 `TtlCacheLike` / `RateLimitStoreLike` 抽象，现有内存实现无需改动即满足
-- [x] 新增 Postgres 实现：TTL 缓存（读 / 写 / 删除 + 过期清理）与限流快照（读写 + 降级判定）
-- [x] Prisma 新增共享缓存 / 限流快照模型与迁移
-- [x] `STORE_BACKEND` 选择后端（默认 memory，`postgres` 走数据库；非法值回退 memory）并有单测
-- [x] 数据服务（repos / timeline / commit）兼容同步与异步存储
-- [x] 续期竞态：刷新被拒时重读库中最新令牌，其他实例已完成续期则直接复用，不误报「授权失效」
-- [x] `docs/deployment.md`：部署形态、环境变量清单、Prisma 连接池、冷启动与超时注意、多实例一致性、预览环境与回滚
-- [x] `pnpm lint / typecheck / test / build` 全绿
-- [x] 端到端（本地两个实例 + 同一数据库）：实例 A 写入的缓存被实例 B 命中
+- [ ] 新增 `apps/web/vercel.json`，含 `buildCommand` / `installCommand`
+- [ ] `docs/deployment.md` 步骤与实际线上配置一致（Root Directory = `apps/web`、迁移在本地执行、后台字段留空）
+- [ ] 新增「常见坑」小节（命令拼接 / `NODE_ENV` / 依赖镜像 / 未执行迁移）
+- [ ] `pnpm lint / typecheck / test / build` 全绿
 - [ ] 文档同步与合并记录
 
 ## 4. 验证方式
 
-- 单测：后端选择与纯函数（新鲜度 / 降级判定）、Postgres 存储的数据库用例（`RUN_DB_TESTS=1` 门控）、续期竞态恢复用例。
-- 端到端：同一数据库启动两个 `next start` 实例（不同端口），验证跨实例缓存命中；`STORE_BACKEND=memory`（默认）行为与现状一致（无回归）。
-- 回归：`/repos` 与时间线页面的既有端到端路径。
-
-**本轮验证记录（2026-10-07）**
-
-- 单测：`pnpm --filter @utf8-git/web test` → 20 文件通过 / 2 跳过（138 通过 / 4 跳过）；
-  `RUN_DB_TESTS=1` 时 22 文件 / 142 例全通过（含跨实例缓存、限流快照、续期竞态恢复、越界翻页空页）。
-- 构建：`lint` / `typecheck` / `build` 全绿（`next build` 编译 5.0s）。
-- 端到端：`next start` 起两个实例（3101 / 3102）+ 同一 PostgreSQL（`STORE_BACKEND=postgres`）：
-  - 缓存：实例 A `/api/repos?page=1` → `cached=false`（回源 GitHub，写入 `shared_cache_entries`）；
-    实例 B 同请求 → `cached=true` 且 `fetchedAt` 与 A 完全一致。
-  - cursor 链：实例 A 取时间线 page=1，实例 B 取 page=2 → 200（未出现 `cursor_expired`）。
-  - 续期去重：4 轮「两实例同时请求」并发竞态，每轮 A/B 均 200，`refresh_token_enc` 每轮仅轮换一次，
-    `expires_at` 推进到 now+8h（落败实例复用获胜实例写入的令牌）。
-  - 限流快照：`rate_limit_states` 出现该用户行（`remaining` / `source` / `reset_at`），跨实例共享。
-- 修复的真实缺陷：`cacheKey` 原用 NUL（`\u0000`）分隔，Postgres `text` 不接受 `0x00`，
-  共享缓存查询报 `invalid byte sequence for encoding "UTF8": 0x00`；改为 U+001F 后通过（同步更新单测）。
-- 环境说明：本机可直连 `api.github.com`，但 `github.com`（令牌续期端点）需经本地代理，
-  双实例验证时通过启动包装脚本注入 `NODE_USE_ENV_PROXY=1` + `HTTPS_PROXY`；生产环境不需要该配置。
+- 配置合法性：`JSON.parse` + `prettier --check`。
+- 回归：全量 `lint / typecheck / test / build`（本改动不参与构建，用于确认无副作用）。
 
 ## 5. 通过标准
 
-- 部署形态有明确文档与配置清单；多实例下缓存与限流快照共享、续期不再误报授权失效；单实例默认行为不变。
+- 线上无需再手输构建命令；文档描述的部署方式与实际一致，且能解释已发生的两次告警 / 报错。
 
 ## 6. 风险与假设
 
-- 真实 Vercel / Neon 部署需用户账号：本次只完成代码与文档，公网验收留待用户提供账号或授权。
-- Postgres 作为缓存会带来额外数据库往返（每页约 1 读 + 1 写）；MVP 以一致性优先，必要时再引入 Redis。
-- 「冷启动 < 3s」需在真实平台测量；本次用本地生产模式启动耗时做近似参考。
-
-## 附：M1-7 追加任务 · 真实仓库性能验证（TODO-143）
-
-**目标**：用小 / 中 / 大三个真实仓库量测时间线与仓库列表的关键指标，验证「单页 1 次请求、翻页无重复、缓存有效」，并沉淀可复现的验证手段。
-
-**验收项**
-
-- [x] 可复现的性能验证脚本（`scripts/perf-validate.mjs`，根目录 `pnpm perf`）
-- [x] 覆盖小 `encode-utf8/utf8-git`（17 commits）/ 中 `encode-utf8/stock-analysis` / 大 `torvalds/linux`
-- [x] 量测时间线翻页耗时、每页请求数、提交去重、缓存命中（`meta.cached`）
-- [x] 大仓库深度翻页：11 页 × 50 = 550 条，跨页重复 0、顺序正确
-- [x] 报告留痕：`docs/reports/tech-analysis/M1-7-perf-validation.md` + `M1-7-raw.json` / `M1-7-raw-linux-deep.json`
-- [x] 修复验证中发现的越界翻页重复问题（`timeline-data.ts` + 2 个单测）
-- [x] `pnpm lint / typecheck / test / build` 全绿
-
-**关键数据**：仓库列表回源 1795.8 ms → 命中缓存 37.0 ms（≈48×）；时间线命中页 23–42 ms、回源页 2.1–3.1 s（本地经代理访问 GitHub 的口径）；热缓存首屏 HTML TTFB 58–64 ms；生产模式冷启动 Ready 1.5–2.3 s。
-
-**未达标 / 未验证**：冷缓存首屏 1.83–2.27 s（本地代理链路导致，需公网复测）；Lighthouse ≥ 80 与 1000+ 提交虚拟滚动流畅度需浏览器环境实测。
+- 后台字段优先级高于 `vercel.json`：若未清空后台覆盖，本配置不生效（文档已明确标注）。
+- `installCommand` 的 `--registry` 覆盖只作用于 Vercel 构建，不影响本地开发与 `.npmrc`。
 
 ## 7. 遗留与风险事项
 

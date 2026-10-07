@@ -30,16 +30,34 @@
 | `NODE_USE_ENV_PROXY` + `HTTPS_PROXY`  | 否   | 仅本地开发在受限网络下访问 `github.com` 用                | 生产不需要                                     |
 
 > `RUN_DB_TESTS` 只用于本地数据库用例开关，不是部署变量。
+> **不要手动设置 `NODE_ENV`**：Vercel 会按环境自动注入 `production`，手动设置（尤其带引号或空值）会触发
+> Next.js 的 `non-standard "NODE_ENV" value` 警告并让构建环境判断异常。
 
 ## 3. 部署步骤
 
 1. 建库（Neon / Supabase），拿到 `DATABASE_URL`；迁移用直连串、运行期用 pooled 串（§4）。
 2. 生成 `AUTH_SECRET`、`AUTH_TOKEN_ENC_KEY`（两者都不要复用本地值）。
-3. 在 GitHub 建 OAuth App，回调地址填 `https://<域名>/api/auth/callback/github`。
-4. Vercel 导入仓库（monorepo，Root Directory 保持仓库根），构建命令用根 `pnpm build`（`pnpm -r build`），
-   `apps/web` 的 `postinstall` 会自动执行 `prisma generate`。
-5. 发布前执行迁移：`pnpm --filter @utf8-git/web exec prisma migrate deploy`。
-6. 注入 §2 环境变量，部署；确认 `/`、`/login`、`/repos` 可访问。
+3. 在 GitHub 建 OAuth App（可沿用本地那个），回调地址**追加**生产域名：`https://<域名>/api/auth/callback/github`。
+4. Vercel 导入仓库，**Root Directory 设为 `apps/web`**。Vercel 会自动识别上层 `pnpm-workspace.yaml` 并从仓库根装依赖；
+   若提示「Include files outside of the Root Directory in the Build Step」，打开该开关。
+5. 构建 / 安装命令由 `apps/web/vercel.json` 固化，无需在后台手输：
+   - `buildCommand`：`prisma generate && next build`
+   - `installCommand`：`pnpm install --frozen-lockfile --registry=https://registry.npmjs.org`（绕过仓库 `.npmrc` 的国内镜像，见 §3.1）
+6. 在本地执行迁移（指向生产库**直连串**）：`pnpm --filter @utf8-git/web exec prisma migrate deploy`。
+   刻意不放进构建命令：预览环境每次构建都会跑，若与生产共用库会造成误迁移。
+7. 注入 §2 环境变量后 Redeploy；确认 `/`、`/login`、`/repos` 可访问。
+
+> 后台的 Build Command / Install Command / Output Directory 必须保持**空白**：后台设置优先级高于 `vercel.json`，
+> 两处同时设置会互相覆盖（曾出现后台预填的默认值 `next build` 与粘贴内容拼成 `next buildprisma generate && next build`，导致构建失败）。
+
+### 3.1 常见坑
+
+| 现象                                                          | 原因                                                                    | 处理                                                                                            |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 构建日志 `Invalid project directory provided ... buildprisma` | 后台 Build Command 覆盖框预填了默认 `next build`，粘贴内容接在其后      | 清空后台该字段（改用 `apps/web/vercel.json`），或全选删空后重新输入                             |
+| 警告 `non-standard "NODE_ENV" value`                          | 在 Vercel 环境变量里手动设置了 `NODE_ENV`（含带引号 / 空值）            | 删除该变量，Vercel 会按环境自动注入 `production`                                                |
+| 安装依赖慢或失败                                              | 仓库 `.npmrc` 指向 `registry.npmmirror.com`，对海外构建机不友好         | 由 `installCommand` 的 `--registry` 覆盖；要永久移除可直接删 `.npmrc`（本地改为可直连官方源时） |
+| 登录后报错 / `/repos` 500                                     | 目标库未执行迁移（缺 `users` / `accounts` / `sessions` / 共享缓存等表） | 本地执行 `prisma migrate deploy` 指向生产库直连串                                               |
 
 ## 4. 连接池
 
