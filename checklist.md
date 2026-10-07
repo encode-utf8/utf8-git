@@ -1,45 +1,47 @@
-# 验收清单 · 任务：线上部署验收（Vercel + Neon）
+# 验收清单 · 任务：部署自检（/api/health + 自检脚本）
 
-> 分支：`docs/deployment-verification`
+> 分支：`feat/deploy-selfcheck`
 > 开始日期：2026-10-07
-> 参照：`docs/deployment.md` · `docs/reports/tech-analysis/M1-6-deployment-verification.md`
+> 参照：`docs/deployment.md` §3.2 · `docs/reports/tech-analysis/M1-6-deployment-verification.md`
 
 ## 1. 任务目标
 
-- 在真实平台（Vercel + Neon）完成部署验收，给出可复现、可留痕的结论，收尾 TODO-104。
-- 覆盖：数据库迁移、静态页可达性、鉴权边界、Auth.js 生产配置、OAuth 跳转与回调地址。
+- 把「部署配置是否正确」做成可脚本化核对的常设能力：覆盖外部可达性、鉴权边界、OAuth 跳转参数与运行期配置（缓存后端 / 数据库 / 密钥）。
+- 针对用户实测反馈的「翻页报 409 `cursor_expired` + 操作迟钝」给出可自查、可复现的判定方式。
 
 ## 2. 范围
 
-- 包含：Neon 迁移执行与表结构核对；线上未登录路径与 OAuth 跳转验收；验收报告与文档同步。
-- 不包含：Lighthouse 实测；预览环境域名的 OAuth 回调。
-- 追加（用户实测反馈）：GitHub 登录报 `redirect_uri is not associated with this application` 的定位与文档修正。
+- 包含：新增 `GET /api/health` 与 `scripts/deploy-selfcheck.mjs`（`pnpm deploy:selfcheck`）；单元测试；部署文档新增 §3.2 与 §3.1 排查条目。
+- 不包含：修改业务逻辑本身；DNS / 代理环境；Lighthouse 实测。
 
 ## 3. 验收项
 
-- [x] Neon 应用两个迁移，`prisma migrate status` = `Database schema is up to date!`
-- [x] 业务表建齐（users / accounts / sessions / verification_tokens / shared_cache_entries / rate_limit_states）
-- [x] `/`、`/login` 返回 200；`/api/repos`、时间线接口未登录返回 401
-- [x] `/api/auth/providers` 回调地址指向生产域名；`/api/auth/csrf` 下发 `__Host-` / `__Secure-` Cookie
-- [x] `POST /api/auth/signin/github` 302 到 GitHub 授权页，`client_id` / `redirect_uri` / `scope` 正确
-- [x] 复现用户反馈的登录报错并定位根因：GitHub OAuth App 回调地址未登记（平台配置问题，非代码缺陷）
-- [ ] 用户在 GitHub 侧把回调地址改为 `https://utf8-git.vercel.app/api/auth/callback/github`，登录成功并浏览 `/repos` 与时间线
-- [x] 验收报告与文档同步（deployment / todo / development-log / 报告）
+- [x] `/api/health` 核对项齐全：`STORE_BACKEND`（Serverless 下必须 `postgres`）、数据库连通、迁移表齐全、必填密钥、`AUTH_TOKEN_ENC_KEY` 长度
+- [x] 响应只含布尔与说明文字，不泄露密钥值；错误信息里的连接串被抹除
+- [x] 全部通过返回 200，任一失效返回 503
+- [x] 自检脚本覆盖：静态页 200 / 未登录 401 / Cookie 前缀 / OAuth 跳转与 `redirect_uri` / `/api/health` 明细
+- [x] 单元测试 `apps/web/lib/health.test.ts` 8 例通过（含「Serverless 未设 `STORE_BACKEND` 判失败」「缺表列出表名」「不泄露连接串」）
+- [x] `pnpm lint` / `typecheck` / `test` 全绿（web 146 通过 / 4 跳过）
+- [ ] 生产部署后 `pnpm deploy:selfcheck` 对 <https://utf8-git.vercel.app/> 全绿（待合并部署后执行）
 
 ## 4. 验证方式
 
-- 命令行验收：Node 脚本经本地代理请求生产地址，覆盖未登录路径与 OAuth 跳转；Prisma 核对迁移与表结构。
-- 报告留痕：`docs/reports/tech-analysis/M1-6-deployment-verification.md`。
+- 单元测试 + 对本地实例（`next start`）与生产域名各跑一次 `pnpm deploy:selfcheck`。
+
+实跑记录（2026-10-07）：
+
+- 本地实例（`next start -p 3105`，`DATABASE_URL` 指向 Neon，`VERCEL=1`）：`STORE_BACKEND` 未设时 **2 项未通过**，唯一失败项即 `store_backend`，
+  提示语与用户现象（翻页 409 `cursor_expired` / 操作迟钝）完全对应；设 `STORE_BACKEND=postgres` 后重跑 **全部通过（退出码 0）**。
+- 生产域名（经本地代理）：除 `/api/health` 返回 404（该版本尚未包含自检端点）外全部通过——恰好说明本次自检能力上线前，无法从外部判定缓存后端。
 
 ## 5. 通过标准
 
-- 未登录路径、鉴权边界、Auth.js 生产配置、OAuth 跳转、数据库迁移全部符合预期。
+- 自检能对「缓存后端未共享」这一已知故障给出明确失败项与修复指引；其余检查项在生产域名下全部通过。
 
 ## 6. 风险与假设
 
-- 本机至 `vercel.app` 的 DNS 被污染，验收经本地代理完成，耗时读数含代理开销（报告已标注）。
-- 登录链路未覆盖：需用户账号，无法在本机代做。
-- 原勾选项「OAuth 回调地址正确」为**误判**：未登录时 GitHub 不校验 `redirect_uri`，登录后才报错；本次已更正（见 §3）。
+- 本机至 `vercel.app` 的 DNS 被污染，对生产实跑需经本地代理（`NODE_USE_ENV_PROXY=1`）。
+- OAuth App 回调地址是否已登记无法由脚本判定（GitHub 仅在已登录状态校验），仍需人工比对。
 
 ## 7. 遗留与风险事项
 
@@ -97,3 +99,7 @@
   - 证据：新增 `apps/web/vercel.json`（`buildCommand` / `installCommand`）；`docs/deployment.md` 修正 Root Directory 为 `apps/web`、明确迁移在本地对生产库执行、后台字段必须留空，并新增 §3.1「常见坑」；`development-log` 记录 ADR-0038 / ADR-0039。`vercel.json` 通过 JSON 校验；`pnpm lint / typecheck / test / build` 全绿（web 138 通过 / 4 跳过）。
   - 说明：Vercel 后台的 Build Command / Install Command / Output Directory 需保持空白，否则覆盖本配置；预览环境随机域名的 OAuth 回调仍未处理。
   - 合并：提交 `62974dc` 经 PR #10（squash，源提交 `587f7f1`）合入 main；CI 全绿（Actions Lint / Typecheck / Test / Build success ×2、Vercel Preview success）；GitGuardian 该次检查长时间停留在 in_progress（第三方挂起），未阻塞合并。
+- 2026-10-07 · 任务「线上部署验收（Vercel + Neon）」· 分支 `docs/deployment-verification` · 结论：**通过（已合并）**。
+  - 证据：新增 `docs/reports/tech-analysis/M1-6-deployment-verification.md`；Neon 以直连主机应用 `20261004144043_init_auth` / `20261007081155_m1_6_shared_stores`，7 张表建齐且业务表 0 行；线上经代理由外复测 `/` 200、`/login` 200、`/api/repos` 与 timeline 未登录 401、`/api/auth/providers` 回调指向生产域名、`/api/auth/csrf` 下发 `__Host-` / `__Secure-`、`POST /api/auth/signin/github` 302 且 `scope=read:user repo`。
+  - 说明：浏览器登录实测报 `The redirect_uri is not associated with this application`，定位为 **GitHub OAuth App 配置问题**（Authorization callback URL 只能填一个，原文档「追加生产域名」的指引不可行，生产地址实际未登记）；已修正 `docs/deployment.md` §3 / §3.1，并更正验收报告中「打开 authorize URL 得 302 即已注册」的误判。属平台配置，非代码缺陷。
+  - 合并：提交 `98fff02` 经 PR #11（squash，源提交 `48469cf` / `bd8bc63`）合入 main；CI 全绿（Actions Lint / Typecheck / Test / Build success ×2、Vercel Preview success）。
