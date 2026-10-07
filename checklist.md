@@ -1,55 +1,87 @@
-# 验收清单 · 任务：M1-9 在线状态处理（断网 / 超时 / 限流的提示与重试）
+# 验收清单 · 任务：M1-6 部署形态与多实例一致性（含追加任务 M1-7 真实仓库性能验证）
 
-> 任务：断网、请求超时、GitHub 限流三类在线状态给出明确提示、可操作的重试入口与自动重试，且不用过期缓存冒充最新数据
-> 分支：`feat/online-status-handling`
+> 任务：确定并落地部署形态（Vercel + 托管 Postgres），并解决多实例下的缓存 / 限流 / 续期去重问题
+> 分支：`feat/m1-6-deployment`
 > 开始日期：2026-10-07
-> 参照：`docs/roadmap.md` M1-9 · `docs/requirements.md` FR-5.1 / FR-5.2 / 场景表「断网」· `docs/todo.md` TODO-136
+> 参照：`docs/roadmap.md` M1-6 · `docs/technical-analysis.md` §2 / §6.2 / §10 · `docs/todo.md` TODO-104
 
 ## 1. 任务目标
 
-- 断网（网络不可达）、请求超时、GitHub 限流都要有明确文案与行动按钮（FR-5.1）。
-- 断网 / 超时不再以「未知错误」或含糊的「异常（503）」呈现，也不落到未分类的 500。
-- 命中限流时提示恢复时间；无缓存可降级时明确说明，不把过期缓存当作最新数据（FR-5.2）。
-- 在线优先（D4 不支持离线模式）：前端给出全局离线横幅，离线时避免继续发起必然失败的请求。
+- 明确部署形态：Next.js 应用部署到 Vercel，数据库使用托管 PostgreSQL（Neon / Supabase 免费层），环境变量由平台注入；产出可直接照做的部署文档。
+- 解决多实例（Serverless 多实例 / 多 region）下的三处进程内状态问题：
+  1. TTL 缓存不跨实例共享，缓存命中率随实例数下降；
+  2. 限流快照各实例独立，降级判定不一致，可能多打请求；
+  3. 令牌续期在同一用户并发时可能重复刷新（refresh token 每次轮换），导致误判「授权失效」。
+- Vercel / Neon 的真实部署需要用户账号：本次完成代码与文档侧，实际部署与公网验收作为遗留项明确列出。
 
 ## 2. 范围
 
-- 包含：
-  - 服务端：新增 `GitHubNetworkError`（503）与统一封装 `githubFetch`（超时中止 + 网络错误归一化）；REST 客户端（仓库列表 / 提交详情）此前无超时、网络异常直接冒泡 → 现在归一化；GraphQL 与令牌客户端的网络错误改用同一分类；三个 API 路由补齐 `github_unreachable`（503）/ `github_timeout`（504）；两个服务端页面新增「无法连接 GitHub / 请求超时」分支。
-  - 前端：新增共享错误呈现模块 `error-state.ts`、带指数退避重试与在线检测的 `client-fetch.ts`、`useOnlineStatus` 钩子与全局离线横幅；仓库列表「加载更多」、时间线「加载更多 / 切换分支」、提交详情改用统一呈现 + 显式重试按钮 + 限流恢复时间。
-  - 文档与测试同步。
-- 不包含：离线模式（D4 明确不做）、Service Worker / IndexedDB、多实例分布式限流共享（随 M1-6）、写操作重试编排（M3 TODO-221）。
+- 包含：共享存储抽象与 Postgres 实现（`shared-store.ts` / `pg-stores.ts` + 新增 Prisma 模型与迁移）；`data-stores.ts` 按 `STORE_BACKEND` 选择后端；数据服务兼容同步 / 异步存储；续期竞态的幂等恢复；`docs/deployment.md`；README / todo / development-log / checklist 同步。
+- 不包含：真实 Vercel / Neon 部署（需用户账号）、Redis 等外部缓存服务、多 region 复制拓扑。
 
 ## 3. 验收项
 
-- [x] 新增 `GitHubNetworkError`；`githubFetch` 把超时归类为 `GitHubTimeoutError`、把网络不可达归类为 `GitHubNetworkError`，并支持注入 `fetchImpl`
-- [x] REST 客户端（`fetchViewerReposPage` / `fetchCommitDetail`）接入 `githubFetch`（默认超时），网络 / 超时异常可被上层识别
-- [x] GraphQL 客户端网络错误由泛化的 502 改为 `GitHubNetworkError`（503），重试判定不变
-- [x] 三个 API 路由把网络错误映射为 503 `github_unreachable`、超时映射为 504 `github_timeout`，判定顺序在通用 `GitHubApiError` 之前
-- [x] `error-state.ts`：错误分类、用户文案（含限流恢复时间）、可重试判定、退避计算，纯函数，服务端与客户端共用
-- [x] `client-fetch.ts`：瞬时错误（网络 / 超时 / 5xx）指数退避重试；401 / 403 / 404 / 409 / 429 不自动重试；离线短路不发起请求；支持外部 AbortSignal
-- [x] 离线横幅：离线时全局提示「无法连接 GitHub」并提供重新加载入口；恢复在线后自动消失，SSR 快照稳定不引起 hydration 抖动
-- [x] 仓库列表 / 时间线 / 提交详情：三类状态都有明确文案与「重试」按钮；限流展示恢复时间
-- [x] 服务端页面：`/repos` 与 `/repos/{owner}/{name}` 对网络错误 / 超时给出明确提示与重试
-- [x] 降级缓存仍明确标注「获取时间 + 恢复时间」，不伪装为最新数据
+- [x] 新增 `TtlCacheLike` / `RateLimitStoreLike` 抽象，现有内存实现无需改动即满足
+- [x] 新增 Postgres 实现：TTL 缓存（读 / 写 / 删除 + 过期清理）与限流快照（读写 + 降级判定）
+- [x] Prisma 新增共享缓存 / 限流快照模型与迁移
+- [x] `STORE_BACKEND` 选择后端（默认 memory，`postgres` 走数据库；非法值回退 memory）并有单测
+- [x] 数据服务（repos / timeline / commit）兼容同步与异步存储
+- [x] 续期竞态：刷新被拒时重读库中最新令牌，其他实例已完成续期则直接复用，不误报「授权失效」
+- [x] `docs/deployment.md`：部署形态、环境变量清单、Prisma 连接池、冷启动与超时注意、多实例一致性、预览环境与回滚
 - [x] `pnpm lint / typecheck / test / build` 全绿
-- [x] 文档同步（README / `docs/todo.md` 勾选 TODO-136 / `docs/development-log.md` ADR）与合并记录
+- [x] 端到端（本地两个实例 + 同一数据库）：实例 A 写入的缓存被实例 B 命中
+- [ ] 文档同步与合并记录
 
 ## 4. 验证方式
 
-- 单测：`error-state.test.ts`（分类 / 文案 / 可重试 / 退避）、`client-fetch.test.ts`（重试次数、不可重试状态、离线短路、中止、重试耗尽）、`github-fetch.test.ts`（超时 / 网络 / 透传 / 注入实现）；并更新既有网络错误断言。
-- 端到端：真实会话访问 `/repos` 与时间线正常（不回归）；构造上游不可达 / 超时场景验证文案与重试入口。
-- 手动：浏览器 DevTools 设 Offline → 横幅出现、「加载更多」给出断网提示；恢复在线 → 横幅消失。
+- 单测：后端选择与纯函数（新鲜度 / 降级判定）、Postgres 存储的数据库用例（`RUN_DB_TESTS=1` 门控）、续期竞态恢复用例。
+- 端到端：同一数据库启动两个 `next start` 实例（不同端口），验证跨实例缓存命中；`STORE_BACKEND=memory`（默认）行为与现状一致（无回归）。
+- 回归：`/repos` 与时间线页面的既有端到端路径。
+
+**本轮验证记录（2026-10-07）**
+
+- 单测：`pnpm --filter @utf8-git/web test` → 20 文件通过 / 2 跳过（138 通过 / 4 跳过）；
+  `RUN_DB_TESTS=1` 时 22 文件 / 142 例全通过（含跨实例缓存、限流快照、续期竞态恢复、越界翻页空页）。
+- 构建：`lint` / `typecheck` / `build` 全绿（`next build` 编译 5.0s）。
+- 端到端：`next start` 起两个实例（3101 / 3102）+ 同一 PostgreSQL（`STORE_BACKEND=postgres`）：
+  - 缓存：实例 A `/api/repos?page=1` → `cached=false`（回源 GitHub，写入 `shared_cache_entries`）；
+    实例 B 同请求 → `cached=true` 且 `fetchedAt` 与 A 完全一致。
+  - cursor 链：实例 A 取时间线 page=1，实例 B 取 page=2 → 200（未出现 `cursor_expired`）。
+  - 续期去重：4 轮「两实例同时请求」并发竞态，每轮 A/B 均 200，`refresh_token_enc` 每轮仅轮换一次，
+    `expires_at` 推进到 now+8h（落败实例复用获胜实例写入的令牌）。
+  - 限流快照：`rate_limit_states` 出现该用户行（`remaining` / `source` / `reset_at`），跨实例共享。
+- 修复的真实缺陷：`cacheKey` 原用 NUL（`\u0000`）分隔，Postgres `text` 不接受 `0x00`，
+  共享缓存查询报 `invalid byte sequence for encoding "UTF8": 0x00`；改为 U+001F 后通过（同步更新单测）。
+- 环境说明：本机可直连 `api.github.com`，但 `github.com`（令牌续期端点）需经本地代理，
+  双实例验证时通过启动包装脚本注入 `NODE_USE_ENV_PROXY=1` + `HTTPS_PROXY`；生产环境不需要该配置。
 
 ## 5. 通过标准
 
-- 断网 / 超时 / 限流三类状态均有明确文案与可操作的重试入口；不出现未分类的 500 或「异常（503）」这类含糊文案；降级缓存标注完整。
+- 部署形态有明确文档与配置清单；多实例下缓存与限流快照共享、续期不再误报授权失效；单实例默认行为不变。
 
 ## 6. 风险与假设
 
-- 本机 dev 需代理访问 github.com（`NODE_USE_ENV_PROXY`）；离线模拟在浏览器侧进行。
-- 自动重试只覆盖瞬时错误，避免对限流 / 鉴权失败做无意义重试而浪费配额。
-- 限流恢复时间依赖 GitHub 响应头（`x-ratelimit-reset` / `retry-after`），缺失时给出兜底时间。
+- 真实 Vercel / Neon 部署需用户账号：本次只完成代码与文档，公网验收留待用户提供账号或授权。
+- Postgres 作为缓存会带来额外数据库往返（每页约 1 读 + 1 写）；MVP 以一致性优先，必要时再引入 Redis。
+- 「冷启动 < 3s」需在真实平台测量；本次用本地生产模式启动耗时做近似参考。
+
+## 附：M1-7 追加任务 · 真实仓库性能验证（TODO-143）
+
+**目标**：用小 / 中 / 大三个真实仓库量测时间线与仓库列表的关键指标，验证「单页 1 次请求、翻页无重复、缓存有效」，并沉淀可复现的验证手段。
+
+**验收项**
+
+- [x] 可复现的性能验证脚本（`scripts/perf-validate.mjs`，根目录 `pnpm perf`）
+- [x] 覆盖小 `encode-utf8/utf8-git`（17 commits）/ 中 `encode-utf8/stock-analysis` / 大 `torvalds/linux`
+- [x] 量测时间线翻页耗时、每页请求数、提交去重、缓存命中（`meta.cached`）
+- [x] 大仓库深度翻页：11 页 × 50 = 550 条，跨页重复 0、顺序正确
+- [x] 报告留痕：`docs/reports/tech-analysis/M1-7-perf-validation.md` + `M1-7-raw.json` / `M1-7-raw-linux-deep.json`
+- [x] 修复验证中发现的越界翻页重复问题（`timeline-data.ts` + 2 个单测）
+- [x] `pnpm lint / typecheck / test / build` 全绿
+
+**关键数据**：仓库列表回源 1795.8 ms → 命中缓存 37.0 ms（≈48×）；时间线命中页 23–42 ms、回源页 2.1–3.1 s（本地经代理访问 GitHub 的口径）；热缓存首屏 HTML TTFB 58–64 ms；生产模式冷启动 Ready 1.5–2.3 s。
+
+**未达标 / 未验证**：冷缓存首屏 1.83–2.27 s（本地代理链路导致，需公网复测）；Lighthouse ≥ 80 与 1000+ 提交虚拟滚动流畅度需浏览器环境实测。
 
 ## 7. 遗留与风险事项
 
