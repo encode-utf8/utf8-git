@@ -22,22 +22,25 @@
 
 ## 3. 接口验收（未登录路径）
 
-| 检查                                            | 结果                                                                                                                            |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /`                                         | 200，冷 897 ms / 热 201 ms，12.3 KB                                                                                             |
-| `GET /login`                                    | 200，458–496 ms，12.0 KB                                                                                                        |
-| `GET /api/repos`                                | 401（符合预期）                                                                                                                 |
-| `GET /api/repos/{owner}/{name}/timeline?page=1` | 401（符合预期）                                                                                                                 |
-| `GET /api/auth/session`                         | 200                                                                                                                             |
-| `GET /api/auth/providers`                       | 200，返回 github provider，`callbackUrl = https://utf8-git.vercel.app/api/auth/callback/github`                                 |
-| `GET /api/auth/csrf`                            | 200，下发 `__Host-authjs.csrf-token` / `__Secure-authjs.callback-url`（生产 HTTPS 前缀正确 → `AUTH_SECRET` 与信任主机配置正常） |
-| `POST /api/auth/signin/github`                  | 302 → `github.com/login/oauth/authorize`，`client_id` / `redirect_uri` / `scope=read:user repo` 均正确                          |
-| 打开该 authorize URL                            | 302（GitHub 要求先登录），未出现 `redirect_uri` 相关错误 → OAuth App 回调地址已注册                                             |
+| 检查                                            | 结果                                                                                                                                           |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /`                                         | 200，冷 897 ms / 热 201 ms，12.3 KB                                                                                                            |
+| `GET /login`                                    | 200，458–496 ms，12.0 KB                                                                                                                       |
+| `GET /api/repos`                                | 401（符合预期）                                                                                                                                |
+| `GET /api/repos/{owner}/{name}/timeline?page=1` | 401（符合预期）                                                                                                                                |
+| `GET /api/auth/session`                         | 200                                                                                                                                            |
+| `GET /api/auth/providers`                       | 200，返回 github provider，`callbackUrl = https://utf8-git.vercel.app/api/auth/callback/github`                                                |
+| `GET /api/auth/csrf`                            | 200，下发 `__Host-authjs.csrf-token` / `__Secure-authjs.callback-url`（生产 HTTPS 前缀正确 → `AUTH_SECRET` 与信任主机配置正常）                |
+| `POST /api/auth/signin/github`                  | 302 → `github.com/login/oauth/authorize`，`client_id` / `redirect_uri` / `scope=read:user repo` 均正确                                         |
+| 打开该 authorize URL                            | 302 跳 GitHub 登录页（GitHub 要求先登录）——**该结果不能证明回调地址已注册**（未登录时 GitHub 不校验 `redirect_uri`，登录后才校验），见 §4 更正 |
 
 ## 4. 结论
 
-- **通过**：静态页与登录页可达、鉴权边界正确（未登录一律 401）、Auth.js 生产配置生效、OAuth 跳转与回调地址正确、Neon 迁移完整。
-- **待用户完成**：在浏览器完整登录一次。这是唯一能覆盖「写入会话 + 令牌加密入库 + 按令牌拉取仓库列表」的路径，本机没有该 GitHub 账号的授权，无法代做。
+- **通过**：静态页与登录页可达、鉴权边界正确（未登录一律 401）、Auth.js 生产配置生效、OAuth 跳转参数正确、Neon 迁移完整。
+- **更正（用户实测反馈）**：浏览器登录时 GitHub 返回 `The redirect_uri is not associated with this application`，即 **OAuth App 回调地址未登记**；上文「打开 authorize URL 得 302 ⇒ 回调地址已注册」的推断不成立。
+  - 根因：`docs/deployment.md` §3 步骤 3 原写「回调地址**追加**生产域名」，但 **GitHub OAuth App 的 Authorization callback URL 只能填一个**，无法与本地 `localhost` 共存，导致生产地址实际未登记。属**平台配置问题，非代码缺陷**。
+  - 处置：文档已修正，操作步骤见 `docs/deployment.md` §3 步骤 3 与 §3.1 新增条目。
+- **待用户完成**：按修正后的配置登记回调地址，再重新在浏览器完整登录一次。这是唯一能覆盖「写入会话 + 令牌加密入库 + 按令牌拉取仓库列表」的路径。
 - **未验证**：Lighthouse ≥ 80（需浏览器）；纯净冷启动耗时（当前读数含代理开销）；预览部署随机域名的 OAuth 回调。
 
 ## 5. 复现方式

@@ -37,7 +37,9 @@
 
 1. 建库（Neon / Supabase），拿到 `DATABASE_URL`；迁移用直连串、运行期用 pooled 串（§4）。
 2. 生成 `AUTH_SECRET`、`AUTH_TOKEN_ENC_KEY`（两者都不要复用本地值）。
-3. 在 GitHub 建 OAuth App（可沿用本地那个），回调地址**追加**生产域名：`https://<域名>/api/auth/callback/github`。
+3. 在 GitHub 建 OAuth App，把 **Authorization callback URL** 设为 `https://<域名>/api/auth/callback/github`。
+   ⚠️ 该字段**只能填一个地址**（不像 GitHub App 可填多条，也无法与本地地址共存）：本地、生产都要能登录就建**两个** App，
+   再把生产 App 的 Client ID / Secret 填进 Vercel 的 `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`。
 4. Vercel 导入仓库，**Root Directory 设为 `apps/web`**。Vercel 会自动识别上层 `pnpm-workspace.yaml` 并从仓库根装依赖；
    若提示「Include files outside of the Root Directory in the Build Step」，打开该开关。
 5. 构建 / 安装命令由 `apps/web/vercel.json` 固化，无需在后台手输：
@@ -52,12 +54,13 @@
 
 ### 3.1 常见坑
 
-| 现象                                                          | 原因                                                                    | 处理                                                                                            |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 构建日志 `Invalid project directory provided ... buildprisma` | 后台 Build Command 覆盖框预填了默认 `next build`，粘贴内容接在其后      | 清空后台该字段（改用 `apps/web/vercel.json`），或全选删空后重新输入                             |
-| 警告 `non-standard "NODE_ENV" value`                          | 在 Vercel 环境变量里手动设置了 `NODE_ENV`（含带引号 / 空值）            | 删除该变量，Vercel 会按环境自动注入 `production`                                                |
-| 安装依赖慢或失败                                              | 仓库 `.npmrc` 指向 `registry.npmmirror.com`，对海外构建机不友好         | 由 `installCommand` 的 `--registry` 覆盖；要永久移除可直接删 `.npmrc`（本地改为可直连官方源时） |
-| 登录后报错 / `/repos` 500                                     | 目标库未执行迁移（缺 `users` / `accounts` / `sessions` / 共享缓存等表） | 本地执行 `prisma migrate deploy` 指向生产库直连串                                               |
+| 现象                                                                        | 原因                                                                                                                      | 处理                                                                                                                                                                          |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 构建日志 `Invalid project directory provided ... buildprisma`               | 后台 Build Command 覆盖框预填了默认 `next build`，粘贴内容接在其后                                                        | 清空后台该字段（改用 `apps/web/vercel.json`），或全选删空后重新输入                                                                                                           |
+| 警告 `non-standard "NODE_ENV" value`                                        | 在 Vercel 环境变量里手动设置了 `NODE_ENV`（含带引号 / 空值）                                                              | 删除该变量，Vercel 会按环境自动注入 `production`                                                                                                                              |
+| 安装依赖慢或失败                                                            | 仓库 `.npmrc` 指向 `registry.npmmirror.com`，对海外构建机不友好                                                           | 由 `installCommand` 的 `--registry` 覆盖；要永久移除可直接删 `.npmrc`（本地改为可直连官方源时）                                                                               |
+| 登录后报错 / `/repos` 500                                                   | 目标库未执行迁移（缺 `users` / `accounts` / `sessions` / 共享缓存等表）                                                   | 本地执行 `prisma migrate deploy` 指向生产库直连串                                                                                                                             |
+| 登录后 GitHub 报 `The redirect_uri is not associated with this application` | OAuth App 的 Authorization callback URL 与实际请求地址不一致（常见是仍留着 `localhost`，或线上域名拼写 / 结尾斜杠不一致） | GitHub → Settings → Developer settings → OAuth Apps，打开 `AUTH_GITHUB_ID` 对应的那个 App，把回调地址改为 `https://<域名>/api/auth/callback/github`（无结尾斜杠、逐字符一致） |
 
 ## 4. 连接池
 

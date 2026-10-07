@@ -12,7 +12,8 @@
 ## 2. 范围
 
 - 包含：Neon 迁移执行与表结构核对；线上未登录路径与 OAuth 跳转验收；验收报告与文档同步。
-- 不包含：浏览器完整登录（需用户账号）；Lighthouse 实测；预览环境域名与回调。
+- 不包含：Lighthouse 实测；预览环境域名的 OAuth 回调。
+- 追加（用户实测反馈）：GitHub 登录报 `redirect_uri is not associated with this application` 的定位与文档修正。
 
 ## 3. 验收项
 
@@ -21,7 +22,8 @@
 - [x] `/`、`/login` 返回 200；`/api/repos`、时间线接口未登录返回 401
 - [x] `/api/auth/providers` 回调地址指向生产域名；`/api/auth/csrf` 下发 `__Host-` / `__Secure-` Cookie
 - [x] `POST /api/auth/signin/github` 302 到 GitHub 授权页，`client_id` / `redirect_uri` / `scope` 正确
-- [ ] 浏览器完整登录并浏览 `/repos` 与时间线（待用户执行）
+- [x] 复现用户反馈的登录报错并定位根因：GitHub OAuth App 回调地址未登记（平台配置问题，非代码缺陷）
+- [ ] 用户在 GitHub 侧把回调地址改为 `https://utf8-git.vercel.app/api/auth/callback/github`，登录成功并浏览 `/repos` 与时间线
 - [x] 验收报告与文档同步（deployment / todo / development-log / 报告）
 
 ## 4. 验证方式
@@ -37,6 +39,7 @@
 
 - 本机至 `vercel.app` 的 DNS 被污染，验收经本地代理完成，耗时读数含代理开销（报告已标注）。
 - 登录链路未覆盖：需用户账号，无法在本机代做。
+- 原勾选项「OAuth 回调地址正确」为**误判**：未登录时 GitHub 不校验 `redirect_uri`，登录后才报错；本次已更正（见 §3）。
 
 ## 7. 遗留与风险事项
 
