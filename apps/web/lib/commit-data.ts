@@ -8,8 +8,8 @@ import {
 } from "./data-stores";
 import { fetchCommitDetail, type CommitDetail } from "./github-commits";
 import { GitHubRateLimitError } from "./github-errors";
-import type { RateLimitStore } from "./rate-limit-store";
-import { cacheKey, type CacheLookup, type TtlCache } from "./server-cache";
+import { cacheKey, type CacheLookup } from "./server-cache";
+import type { RateLimitStoreLike, TtlCacheLike } from "./shared-store";
 
 export type CommitDetailMeta = {
   cached: boolean;
@@ -26,8 +26,8 @@ export type CommitDetailPageResult = {
 
 export type CommitDataDeps = {
   fetchDetail?: typeof fetchCommitDetail;
-  cache?: TtlCache<CommitCacheValue>;
-  rateLimitStore?: RateLimitStore;
+  cache?: TtlCacheLike<CommitCacheValue>;
+  rateLimitStore?: RateLimitStoreLike;
   threshold?: number;
   now?: () => number;
 };
@@ -86,8 +86,9 @@ export async function loadCommitDetail(
     params.sha.toLowerCase(),
   );
 
-  const cached = cache.get(key);
-  const gate = rateLimitStore.shouldDegrade(params.userId, threshold, now());
+  // 存储调用一律 await：内存实现同步返回，Postgres 实现返回 Promise
+  const cached = await cache.get(key);
+  const gate = await rateLimitStore.shouldDegrade(params.userId, threshold, now());
   if (gate.degrade) {
     if (cached) {
       return serveCached(cached, gate.resetAt);
@@ -120,7 +121,7 @@ export async function loadCommitDetail(
       sha: params.sha,
     });
     if (result.rateLimit) {
-      rateLimitStore.record(params.userId, {
+      await rateLimitStore.record(params.userId, {
         limit: result.rateLimit.limit,
         remaining: result.rateLimit.remaining,
         resetAt: result.rateLimit.resetAt,
@@ -130,7 +131,7 @@ export async function loadCommitDetail(
       });
     }
     const fetchedAt = now();
-    cache.set(key, { commit: result.commit, fetchedAt });
+    await cache.set(key, { commit: result.commit, fetchedAt });
     return {
       commit: result.commit,
       meta: buildMeta({
@@ -144,7 +145,7 @@ export async function loadCommitDetail(
   } catch (error) {
     if (error instanceof GitHubRateLimitError) {
       const resetAt = error.resetAt ?? new Date(now() + RATE_LIMIT_FALLBACK_MS);
-      rateLimitStore.record(params.userId, {
+      await rateLimitStore.record(params.userId, {
         limit: null,
         remaining: 0,
         resetAt,

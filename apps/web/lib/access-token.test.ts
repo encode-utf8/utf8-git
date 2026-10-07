@@ -201,4 +201,39 @@ describe("getGitHubAccessToken（令牌续期，注入依赖）", () => {
     expect(await first).toBe("gho_refreshed");
     expect(await second).toBe("gho_refreshed");
   });
+
+  it("续期被拒但其他实例已写入新令牌 → 复用新令牌（不误报授权失效）", async () => {
+    const { encryptToken } = await import("./crypto");
+    const { GitHubUnauthorizedError } = await import("./github-errors");
+    const { getGitHubAccessToken } = await import("./access-token");
+
+    let loads = 0;
+    const token = await getGitHubAccessToken("user-race", {
+      loadAccount: async () => {
+        loads += 1;
+        if (loads === 1) {
+          // 本实例读到的是过期令牌（其 refresh token 即将被其他实例消费）
+          return buildAccount({ expiresAt: Math.floor(nowMs / 1000) - 60 });
+        }
+        // 第二次读取：其他实例已完成续期并写库（令牌与过期时间都已更新）
+        return {
+          type: "oauth",
+          provider: "github",
+          providerAccountId: "308028751",
+          accessTokenEnc: encryptToken("gho_peer_refreshed", process.env.AUTH_TOKEN_ENC_KEY),
+          refreshTokenEnc: encryptToken("ghr_peer_rotated", process.env.AUTH_TOKEN_ENC_KEY),
+          expiresAt: Math.floor(nowMs / 1000) + 28800,
+        };
+      },
+      refresh: async () => {
+        throw new GitHubUnauthorizedError("旧 refresh token 已被其他实例消费");
+      },
+      now: () => nowMs,
+      clientId: "cid",
+      clientSecret: "secret",
+    });
+
+    expect(token).toBe("gho_peer_refreshed");
+    expect(loads).toBe(2);
+  });
 });

@@ -44,8 +44,8 @@ describe("TtlCache", () => {
 
 describe("cacheKey", () => {
   it("拼接稳定且不同组合不产生歧义", () => {
-    expect(cacheKey("repos", "u1", 1)).toBe("repos\u0000u1\u00001");
-    expect(cacheKey("a", null, "b")).toBe("a\u0000\u0000b");
+    expect(cacheKey("repos", "u1", 1)).toBe("repos\u001fu1\u001f1");
+    expect(cacheKey("a", null, "b")).toBe("a\u001f\u001fb");
     expect(cacheKey("a", "b")).not.toBe(cacheKey("a", null, "b"));
   });
 });

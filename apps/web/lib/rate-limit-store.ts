@@ -1,5 +1,8 @@
 // 限流快照存储（按用户隔离）：记录最近一次 GitHub 响应的配额剩余量与恢复时间。
 // 用途：M1-4 限流降级——低于阈值时只读缓存并提示恢复时间，不再发新请求。
+// M1-6：降级判定抽到 shared-store.ts，与 Postgres 共享实现共用同一套逻辑。
+
+import { decideDegrade } from "./shared-store";
 
 export type RateLimitSnapshot = {
   limit: number | null;
@@ -33,18 +36,6 @@ export class RateLimitStore {
 
   // 配额低于阈值且尚未到恢复时间 → 需要降级；已过恢复时间视为可尝试新请求
   shouldDegrade(userId: string, threshold: number, now: number = Date.now()): DegradeDecision {
-    const snapshot = this.snapshots.get(userId) ?? null;
-    if (!snapshot) {
-      return { degrade: false, resetAt: null, snapshot: null };
-    }
-    const resetAtMs = snapshot.resetAt?.getTime() ?? null;
-    if (resetAtMs !== null && resetAtMs <= now) {
-      return { degrade: false, resetAt: snapshot.resetAt, snapshot };
-    }
-    return {
-      degrade: snapshot.remaining <= threshold,
-      resetAt: snapshot.resetAt,
-      snapshot,
-    };
+    return decideDegrade(this.snapshots.get(userId) ?? null, threshold, now);
   }
 }
