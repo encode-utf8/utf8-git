@@ -87,3 +87,8 @@
   - 证据：新增 `scripts/perf-validate.mjs`（根目录 `pnpm perf`）与报告 `docs/reports/tech-analysis/M1-7-perf-validation.md` + 原始数据 `M1-7-raw.json` / `M1-7-raw-linux-deep.json`。仓库列表回源 1795.8 ms → 命中缓存 37.0 ms（≈48×）；时间线命中页 23–42 ms、回源页 2.1–3.1 s（本地经代理访问 GitHub 口径）；热缓存首屏 HTML TTFB 58–64 ms；生产模式冷启动 Ready 1.5–2.3 s；`torvalds/linux` 连续 11 页 550 条 0 重复、无乱序。修复越界翻页重复返回第 1 页数据（`timeline-data.ts` + 2 个单测）。
   - 说明：Lighthouse ≥ 80 与 1000+ 提交虚拟滚动流畅度需浏览器与公网环境实测；冷缓存首屏 1.83–2.27 s 为本地代理链路口径，需公网复测。
   - 合并：提交 `450af8e` 经 PR #9（squash，源提交 `56dd2f9` / `a080444`）合入 main；检查全绿（GitGuardian success、Actions Lint / Typecheck / Test / Build success）。
+- 2026-10-07 · 任务「固化 Vercel 构建配置」· 分支 `chore/vercel-config` · 结论：**通过（已合并）**。
+  - 背景：首次 Vercel 部署时后台 Build Command 预填的 `next build` 与粘贴内容拼成 `next buildprisma generate && next build` → `Invalid project directory provided ... buildprisma`；环境变量里手动设置 `NODE_ENV` → `non-standard "NODE_ENV" value` 警告。
+  - 证据：新增 `apps/web/vercel.json`（`buildCommand` / `installCommand`）；`docs/deployment.md` 修正 Root Directory 为 `apps/web`、明确迁移在本地对生产库执行、后台字段必须留空，并新增 §3.1「常见坑」；`development-log` 记录 ADR-0038 / ADR-0039。`vercel.json` 通过 JSON 校验；`pnpm lint / typecheck / test / build` 全绿（web 138 通过 / 4 跳过）。
+  - 说明：Vercel 后台的 Build Command / Install Command / Output Directory 需保持空白，否则覆盖本配置；预览环境随机域名的 OAuth 回调仍未处理。
+  - 合并：提交 `62974dc` 经 PR #10（squash，源提交 `587f7f1`）合入 main；CI 全绿（Actions Lint / Typecheck / Test / Build success ×2、Vercel Preview success）；GitGuardian 该次检查长时间停留在 in_progress（第三方挂起），未阻塞合并。
