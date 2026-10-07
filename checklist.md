@@ -126,3 +126,11 @@
   - 证据：`pnpm lint / typecheck / test / build` 全绿；单测 131 例（本任务新增 26 例：错误分类 / 文案 / 退避 11、客户端重试 8、请求封装 6，含真实 socket 连接失败用例）。端到端（真实会话，临时会话 / 用户已删除）：正常路径 `/repos` 200、`/api/repos` 200；上游临时指向 `http://127.0.0.1:9` → `/api/repos` 503 `github_unreachable`、`/repos` 页显示「无法连接 GitHub」+ 重试；指向黑洞监听 `127.0.0.1:9931` → 15.25 s 后 504 `github_timeout`、`/repos` 页显示「请求超时」；验证后上游配置按字节还原。
   - 说明：客户端自动重试只覆盖瞬时错误（ADR-0031），限流 / 鉴权失败改为明文提示 + 手动重试；离线横幅依赖 `navigator.onLine`（ADR-0032 区分网络不可达与超时）；多实例下的缓存 / 限流 / 续期去重随 M1-6。
   - 合并：提交 `dcd926f` 经 PR #8（squash，合并提交 `0a4a2e5`）合入 main；检查全绿（GitGuardian success、Actions Lint / Typecheck / Test / Build success ×2）。
+- 2026-10-07 · 任务「M1-6 部署形态与多实例一致性」· 分支 `feat/m1-6-deployment` · 结论：**通过（已合并）**。
+  - 证据：新增共享存储抽象与 Postgres 实现（`shared-store.ts` / `pg-stores.ts`）、Prisma `SharedCacheEntry` / `RateLimitState` 与迁移 `20261007081155_m1_6_shared_stores`；`STORE_BACKEND` 切换后端；数据服务兼容同步 / 异步存储；续期竞态恢复。`pnpm lint / typecheck / test / build` 全绿（web 138 通过 / 4 跳过；`RUN_DB_TESTS=1` 时 142 例全通过）。双实例 E2E（`next start` 3101 / 3102 + 同一 PostgreSQL + `STORE_BACKEND=postgres`）：实例 A 回源 `cached=false` → 实例 B `cached=true` 且 `fetchedAt` 一致；实例 B 复用实例 A 写入的 cursor 链翻第 2 页 200；4 轮并发续期竞态 A / B 均 200 且每轮仅轮换一次 refresh token；限流快照跨实例可读。过程中修复 `cacheKey` 以 NUL 分隔导致 Postgres 报 `invalid byte sequence for encoding "UTF8": 0x00` 的缺陷（改为 U+001F）。新增 `docs/deployment.md`。
+  - 说明：真实 Vercel / Neon 部署与公网冷启动实测需用户账号（TODO-104）；续期去重仍有「两实例同时刷新且都失败」的极小窗口，后续可用数据库租约消除。
+  - 合并：提交 `450af8e` 经 PR #9（squash，源提交 `6937503` / `0cd8922`）合入 main；检查全绿（GitGuardian success、Actions Lint / Typecheck / Test / Build success）。
+- 2026-10-07 · 任务「M1-7 真实仓库性能验证」· 分支 `feat/m1-6-deployment`（与 M1-6 合并为同一 PR） · 结论：**通过（已合并）**。
+  - 证据：新增 `scripts/perf-validate.mjs`（根目录 `pnpm perf`）与报告 `docs/reports/tech-analysis/M1-7-perf-validation.md` + 原始数据 `M1-7-raw.json` / `M1-7-raw-linux-deep.json`。仓库列表回源 1795.8 ms → 命中缓存 37.0 ms（≈48×）；时间线命中页 23–42 ms、回源页 2.1–3.1 s（本地经代理访问 GitHub 口径）；热缓存首屏 HTML TTFB 58–64 ms；生产模式冷启动 Ready 1.5–2.3 s；`torvalds/linux` 连续 11 页 550 条 0 重复、无乱序。修复越界翻页重复返回第 1 页数据（`timeline-data.ts` + 2 个单测）。
+  - 说明：Lighthouse ≥ 80 与 1000+ 提交虚拟滚动流畅度需浏览器与公网环境实测；冷缓存首屏 1.83–2.27 s 为本地代理链路口径，需公网复测。
+  - 合并：提交 `450af8e` 经 PR #9（squash，源提交 `56dd2f9` / `a080444`）合入 main；检查全绿（GitGuardian success、Actions Lint / Typecheck / Test / Build success）。
