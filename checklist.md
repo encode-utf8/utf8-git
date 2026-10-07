@@ -1,43 +1,47 @@
-# 验收清单 · 修复：重新授权后令牌未更新（Re-login token update）
+# 验收清单 · 任务：GitHub 令牌自动续期（Refresh Token Rotation）
 
-> 任务：修复 GitHub 重新授权后账号表令牌未更新、导致「GitHub 授权已失效」持续出现的问题
-> 分支：`fix/relogin-token-update`
+> 任务：access token 过期前用 refresh token 自动换新，避免每 8 小时重新授权
+> 分支：`feat/token-auto-refresh`
 > 开始日期：2026-10-07
 
 ## 1. 任务目标
 
-- 复现并定位「重新授权后仍提示授权失效」的根因。
-- 让每次成功的 GitHub 授权都把最新令牌（密文）写入账号表，使重新授权立即生效。
+- GitHub 开启「令牌过期」后 access token 有效期 8 小时；实现服务端自动续期，用户无需重复授权。
+- 续期使用入库的 refresh token（6 个月）调用 GitHub 令牌端点，并**轮换保存**新 access / refresh token 与过期时间。
+- 刷新令牌失效时返回未授权（引导重新授权）；网络 / 服务端异常时抛出可重试错误。
 
 ## 2. 范围
 
-- 包含：`auth-adapter.ts` 新增 `upsertAccountTokens`（AES-256-GCM 加密 upsert，响应缺省 refresh_token 时保留旧值）；`auth.ts` 增加 `events.signIn`（每次 GitHub 登录后写入最新令牌）；数据库用例覆盖。
-- 不包含：access token 过期前的自动 refresh（后续任务，单独评估）、`/login` 页展示 `?error=` 提示（后续建议）。
+- 包含：新增 `github-token.ts`（令牌端点客户端：表单请求、超时、响应归一化、错误分类）；改造 `access-token.ts`（临近过期自动续期、并发去重、密文轮换入库）；单测覆盖。
+- 不包含：401 触发的即时重试（时间维度续期已覆盖 TODO 场景）、多实例下的分布式锁（MVP 单实例，后续随 M1-6 评估）。
 
 ## 3. 验收项
 
-- [x] 定位根因并有源码证据（Auth.js 对已有账号跳过 `linkAccount`）
-- [x] 重新授权（已有账号）后，`accounts.expires_at` 与 `access_token_enc` 更新为最新值
-- [x] 令牌以 AES-256-GCM 密文入库；响应与日志无明文令牌
-- [x] 响应未携带 refresh_token 时不会清空库中已有的 refresh token
-- [x] 单测覆盖（`RUN_DB_TESTS=1`：新建 / 更新 / 保留旧 refresh token）；`pnpm lint / typecheck / test / build` 全绿
-- [x] 端到端：浏览器重新授权后 `/repos` 正常加载仓库列表（人工确认）
-- [x] 文档同步与合并记录（`checklist.md` 第 7 节）
+- [x] 令牌未临近过期时不发起续期（无额外请求）
+- [x] 临近过期（默认提前 5 分钟）且有 refresh token 时自动续期，返回新令牌
+- [x] 新 access / refresh token 与 `expires_at` 以密文轮换入库
+- [x] 无 refresh token → 返回 null（上层引导重新授权），不发起请求
+- [x] 刷新被 GitHub 拒绝（`error` 字段或 400/401/403）→ 返回 null（重新授权）
+- [x] 网络 / 超时 / 5xx → 抛 GitHubApiError（可重试），不误判为未授权
+- [x] 并发：同一用户并发请求只发起一次续期（refresh token 单次有效）
+- [x] `pnpm lint / typecheck / test / build` 全绿
+- [x] 端到端：把库中 `expires_at` 改为过去时间，真实访问 `/repos` 自动续期成功（新密文 + 新过期时间）
+- [x] 文档同步（README / `docs/todo.md` / `docs/development-log.md` ADR）与合并记录
 
 ## 4. 验证方式
 
-- 单测：数据库用例注入真实 Prisma（本地 Docker），验证 upsert 三种场景与密文存储。
-- 端到端：真实浏览器重新授权 → 对比数据库 `expires_at` / 密文变化 → `/repos` 200 且渲染真实仓库；响应无明文令牌。
+- 单测：注入 `fetch` / 账号读取 / 存储依赖，覆盖正常、未过期、无 refresh token、被拒、网络异常与并发去重。
+- 端到端：临时会话 + 真实 GitHub；将 `accounts.expires_at` 置为过去 → 访问 `/repos` 应自动续期并正常渲染仓库；验证后删除临时会话。
 
 ## 5. 通过标准
 
-- 重新授权后应用立即可用；令牌更新路径有单测与端到端证据；无明文令牌。
+- 令牌过期不再需要人工重新授权；续期路径有单测与端到端证据；失败路径不会误报「未授权」。
 
 ## 6. 风险与假设
 
-- `events.signIn` 抛错会让本次登录失败：这是期望行为（避免「登录成功但应用不可用」的静默失败）。
-- 首次登录路径不变（仍由 `linkAccount` 建行，之后由 `upsertAccountTokens` 更新）。
-- GitHub OAuth 令牌 8 小时过期（GitHub 侧开启令牌过期策略），本次修复只解决「重新授权不生效」，自动续期仍需后续 refresh 实现。
+- 续期请求访问 `github.com`（本机需代理，dev server 已带 `NODE_USE_ENV_PROXY`）；生产环境直连。
+- 并发去重为进程内（单实例）；多实例部署时可能重复续期（refresh token 轮换竞争），随 M1-6 部署形态一并处理。
+- 续期失败（网络类）会让本次请求报错并提示重试；下次请求会再次尝试续期。
 
 ## 7. 遗留与风险事项
 
@@ -73,3 +77,8 @@
   - 证据：`pnpm lint / typecheck / test / build` 全绿；数据库用例 1 例（新建 / 更新 / 保留旧 refresh token / 密文入库 / 不重复建行）；真实浏览器重新授权后 `accounts.expires_at` 更新为 2026-10-07 01:42:23 UTC、`access_token_enc` 密文更换、账号行仍为 1 条，`/repos` 正常加载（用户确认）。
   - 合并：提交 `56a04fa` 经 PR #6（squash，合并提交 `fb6dbab`）合入 main；检查全绿（GitGuardian success、Actions success）。
   - 后续：GitHub 令牌 8 小时过期 → 下一个任务实现 refresh token 自动续期（refresh token 有效期 6 个月，已入库）。
+
+- 2026-10-07 · 任务「令牌自动续期（refresh token 轮换）」· 分支 `feat/token-auto-refresh` · 结论：**开发完成，待用户确认**。
+  - 证据：`pnpm lint / typecheck / test / build` 全绿；单测 104 例（本任务新增 13 例：令牌端点 6 · 续期编排 7，含并发去重）；端到端把库中 `expires_at` 置为过去 → 访问 `/repos` 200 并渲染 4 个真实仓库（含私有），库中密文更换、`expires_at` 更新为 2026-10-07 01:52:17 UTC（now + 8 h），二次请求不再续期；响应无明文令牌；临时验证会话已删除。
+  - 说明：并发去重为进程内实现（单实例）；多实例场景随 M1-6 部署形态评估（ADR-0029）。
+  - 待办：等待用户确认后提交 / 推送 / PR / 合并；合并结论将在完成后补记。
