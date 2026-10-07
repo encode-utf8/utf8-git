@@ -57,6 +57,15 @@ export class GitHubTimeoutError extends GitHubApiError {
   }
 }
 
+// 网络不可达（断网 / DNS 解析失败 / 连接被拒绝 / fetch 抛出 TypeError）：瞬时错误，可重试。
+// 与 GitHubTimeoutError 区分：超时是「请求已发出但无响应」，本类是「请求未能到达」。
+export class GitHubNetworkError extends GitHubApiError {
+  constructor(message = "无法连接 GitHub（网络错误）") {
+    super(message, 503);
+    this.name = "GitHubNetworkError";
+  }
+}
+
 // GraphQL 层返回的语义错误（非限流 / 非未找到）
 export class GitHubGraphQLError extends GitHubApiError {
   readonly details: string[];

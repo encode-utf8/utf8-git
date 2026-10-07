@@ -8,10 +8,16 @@ import {
   GitHubRateLimitError,
   GitHubUnauthorizedError,
 } from "./github-errors";
+import { githubFetch } from "./github-fetch";
 
 // 统一从 github-errors 再导出：既有导入路径（页面 / API / 测试）保持不变
 export { GitHubApiError, GitHubForbiddenError, GitHubRateLimitError, GitHubUnauthorizedError };
-export { GitHubGraphQLError, GitHubNotFoundError, GitHubTimeoutError } from "./github-errors";
+export {
+  GitHubGraphQLError,
+  GitHubNetworkError,
+  GitHubNotFoundError,
+  GitHubTimeoutError,
+} from "./github-errors";
 
 const GITHUB_API_BASE = "https://api.github.com";
 
@@ -162,8 +168,9 @@ export async function fetchViewerReposPage(params: {
   page?: number;
   perPage?: number;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<RepoPage> {
-  const { token, page = 1, perPage = 100, fetchImpl = fetch } = params;
+  const { token, page = 1, perPage = 100, fetchImpl = fetch, timeoutMs } = params;
 
   const url = new URL(`${GITHUB_API_BASE}/user/repos`);
   url.searchParams.set("affiliation", "owner,collaborator,organization_member");
@@ -172,16 +179,21 @@ export async function fetchViewerReposPage(params: {
   url.searchParams.set("per_page", String(perPage));
   url.searchParams.set("page", String(page));
 
-  const response = await fetchImpl(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "utf8-git",
+  // 统一封装：默认 15s 超时；网络不可达 → GitHubNetworkError，超时 → GitHubTimeoutError
+  const response = await githubFetch(
+    url,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "utf8-git",
+      },
+      // 令牌相关响应绝不进入 Next.js 数据缓存，避免跨用户复用
+      cache: "no-store",
     },
-    // 令牌相关响应绝不进入 Next.js 数据缓存，避免跨用户复用
-    cache: "no-store",
-  });
+    { fetchImpl, timeoutMs },
+  );
 
   if (response.status === 401) {
     throw new GitHubUnauthorizedError();

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { fetchWithRetry } from "@/lib/client-fetch";
+import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/lib/error-state";
 import type { RepoSummary } from "@/lib/github-repos";
 import { filterRepos, type RepoSort, type VisibilityFilter } from "@/lib/repo-filters";
 
@@ -44,7 +46,7 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [nextPage, setNextPage] = useState(initialNextPage);
   const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<OnlineErrorInfo | null>(null);
   const [query, setQuery] = useState("");
   const [visibility, setVisibility] = useState<VisibilityFilter>("all");
   const [sort, setSort] = useState<RepoSort>("updated");
@@ -61,10 +63,7 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
     setLoading(true);
     setLoadError(null);
     try {
-      const response = await fetch(`/api/repos?page=${nextPage}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      const response = await fetchWithRetry(`/api/repos?page=${nextPage}`);
       const data = (await response.json()) as {
         repos: RepoSummary[];
         hasMore: boolean;
@@ -73,8 +72,10 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
       setRepos((prev) => [...prev, ...data.repos]);
       setHasMore(data.hasMore);
       setNextPage(data.nextPage);
-    } catch {
-      setLoadError("加载更多失败，请稍后重试");
+    } catch (error) {
+      setLoadError(
+        error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null),
+      );
     } finally {
       setLoading(false);
     }
@@ -201,10 +202,12 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
             disabled={loading}
             className="h-10 rounded-full border border-black/[.08] px-5 text-sm font-medium text-zinc-900 transition-colors hover:bg-black/[.04] disabled:opacity-60 dark:border-white/[.145] dark:text-zinc-50 dark:hover:bg-white/[.08]"
           >
-            {loading ? "加载中…" : "加载更多"}
+            {loading ? "加载中…" : loadError ? loadError.action : "加载更多"}
           </button>
           {loadError ? (
-            <p className="mt-2 text-xs text-red-600 dark:text-red-400">{loadError}</p>
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+              <span className="font-medium">{loadError.title}</span>：{loadError.message}
+            </p>
           ) : null}
         </div>
       ) : null}

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   GitHubApiError,
   GitHubGraphQLError,
+  GitHubNetworkError,
   GitHubNotFoundError,
   GitHubRateLimitError,
   GitHubTimeoutError,
@@ -207,7 +208,7 @@ describe("githubGraphQL", () => {
     expect((error as GitHubApiError).status).toBe(500);
   });
 
-  it("网络错误重试后包装为 502", async () => {
+  it("网络错误重试后包装为 GitHubNetworkError（503）", async () => {
     let calls = 0;
     const fetchImpl = (async () => {
       calls += 1;
@@ -223,8 +224,8 @@ describe("githubGraphQL", () => {
     }).catch((value: unknown) => value);
 
     expect(calls).toBe(2);
-    expect(error).toBeInstanceOf(GitHubApiError);
-    expect((error as GitHubApiError).status).toBe(502);
+    expect(error).toBeInstanceOf(GitHubNetworkError);
+    expect((error as GitHubApiError).status).toBe(503);
   });
 
   it("超时中止 → GitHubTimeoutError", async () => {

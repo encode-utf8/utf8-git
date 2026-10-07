@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import {
   GitHubApiError,
   GitHubForbiddenError,
+  GitHubNetworkError,
   GitHubNotFoundError,
   GitHubRateLimitError,
   GitHubTimeoutError,
@@ -79,6 +80,9 @@ export async function GET(
     }
     if (error instanceof GitHubTimeoutError) {
       return NextResponse.json({ error: "github_timeout" }, { status: 504 });
+    }
+    if (error instanceof GitHubNetworkError) {
+      return NextResponse.json({ error: "github_unreachable" }, { status: 503 });
     }
     if (error instanceof GitHubApiError) {
       return NextResponse.json({ error: "github_error" }, { status: 502 });

@@ -1,47 +1,55 @@
-# 验收清单 · 任务：GitHub 令牌自动续期（Refresh Token Rotation）
+# 验收清单 · 任务：M1-9 在线状态处理（断网 / 超时 / 限流的提示与重试）
 
-> 任务：access token 过期前用 refresh token 自动换新，避免每 8 小时重新授权
-> 分支：`feat/token-auto-refresh`
+> 任务：断网、请求超时、GitHub 限流三类在线状态给出明确提示、可操作的重试入口与自动重试，且不用过期缓存冒充最新数据
+> 分支：`feat/online-status-handling`
 > 开始日期：2026-10-07
+> 参照：`docs/roadmap.md` M1-9 · `docs/requirements.md` FR-5.1 / FR-5.2 / 场景表「断网」· `docs/todo.md` TODO-136
 
 ## 1. 任务目标
 
-- GitHub 开启「令牌过期」后 access token 有效期 8 小时；实现服务端自动续期，用户无需重复授权。
-- 续期使用入库的 refresh token（6 个月）调用 GitHub 令牌端点，并**轮换保存**新 access / refresh token 与过期时间。
-- 刷新令牌失效时返回未授权（引导重新授权）；网络 / 服务端异常时抛出可重试错误。
+- 断网（网络不可达）、请求超时、GitHub 限流都要有明确文案与行动按钮（FR-5.1）。
+- 断网 / 超时不再以「未知错误」或含糊的「异常（503）」呈现，也不落到未分类的 500。
+- 命中限流时提示恢复时间；无缓存可降级时明确说明，不把过期缓存当作最新数据（FR-5.2）。
+- 在线优先（D4 不支持离线模式）：前端给出全局离线横幅，离线时避免继续发起必然失败的请求。
 
 ## 2. 范围
 
-- 包含：新增 `github-token.ts`（令牌端点客户端：表单请求、超时、响应归一化、错误分类）；改造 `access-token.ts`（临近过期自动续期、并发去重、密文轮换入库）；单测覆盖。
-- 不包含：401 触发的即时重试（时间维度续期已覆盖 TODO 场景）、多实例下的分布式锁（MVP 单实例，后续随 M1-6 评估）。
+- 包含：
+  - 服务端：新增 `GitHubNetworkError`（503）与统一封装 `githubFetch`（超时中止 + 网络错误归一化）；REST 客户端（仓库列表 / 提交详情）此前无超时、网络异常直接冒泡 → 现在归一化；GraphQL 与令牌客户端的网络错误改用同一分类；三个 API 路由补齐 `github_unreachable`（503）/ `github_timeout`（504）；两个服务端页面新增「无法连接 GitHub / 请求超时」分支。
+  - 前端：新增共享错误呈现模块 `error-state.ts`、带指数退避重试与在线检测的 `client-fetch.ts`、`useOnlineStatus` 钩子与全局离线横幅；仓库列表「加载更多」、时间线「加载更多 / 切换分支」、提交详情改用统一呈现 + 显式重试按钮 + 限流恢复时间。
+  - 文档与测试同步。
+- 不包含：离线模式（D4 明确不做）、Service Worker / IndexedDB、多实例分布式限流共享（随 M1-6）、写操作重试编排（M3 TODO-221）。
 
 ## 3. 验收项
 
-- [x] 令牌未临近过期时不发起续期（无额外请求）
-- [x] 临近过期（默认提前 5 分钟）且有 refresh token 时自动续期，返回新令牌
-- [x] 新 access / refresh token 与 `expires_at` 以密文轮换入库
-- [x] 无 refresh token → 返回 null（上层引导重新授权），不发起请求
-- [x] 刷新被 GitHub 拒绝（`error` 字段或 400/401/403）→ 返回 null（重新授权）
-- [x] 网络 / 超时 / 5xx → 抛 GitHubApiError（可重试），不误判为未授权
-- [x] 并发：同一用户并发请求只发起一次续期（refresh token 单次有效）
+- [x] 新增 `GitHubNetworkError`；`githubFetch` 把超时归类为 `GitHubTimeoutError`、把网络不可达归类为 `GitHubNetworkError`，并支持注入 `fetchImpl`
+- [x] REST 客户端（`fetchViewerReposPage` / `fetchCommitDetail`）接入 `githubFetch`（默认超时），网络 / 超时异常可被上层识别
+- [x] GraphQL 客户端网络错误由泛化的 502 改为 `GitHubNetworkError`（503），重试判定不变
+- [x] 三个 API 路由把网络错误映射为 503 `github_unreachable`、超时映射为 504 `github_timeout`，判定顺序在通用 `GitHubApiError` 之前
+- [x] `error-state.ts`：错误分类、用户文案（含限流恢复时间）、可重试判定、退避计算，纯函数，服务端与客户端共用
+- [x] `client-fetch.ts`：瞬时错误（网络 / 超时 / 5xx）指数退避重试；401 / 403 / 404 / 409 / 429 不自动重试；离线短路不发起请求；支持外部 AbortSignal
+- [x] 离线横幅：离线时全局提示「无法连接 GitHub」并提供重新加载入口；恢复在线后自动消失，SSR 快照稳定不引起 hydration 抖动
+- [x] 仓库列表 / 时间线 / 提交详情：三类状态都有明确文案与「重试」按钮；限流展示恢复时间
+- [x] 服务端页面：`/repos` 与 `/repos/{owner}/{name}` 对网络错误 / 超时给出明确提示与重试
+- [x] 降级缓存仍明确标注「获取时间 + 恢复时间」，不伪装为最新数据
 - [x] `pnpm lint / typecheck / test / build` 全绿
-- [x] 端到端：把库中 `expires_at` 改为过去时间，真实访问 `/repos` 自动续期成功（新密文 + 新过期时间）
-- [x] 文档同步（README / `docs/todo.md` / `docs/development-log.md` ADR）与合并记录
+- [x] 文档同步（README / `docs/todo.md` 勾选 TODO-136 / `docs/development-log.md` ADR）与合并记录
 
 ## 4. 验证方式
 
-- 单测：注入 `fetch` / 账号读取 / 存储依赖，覆盖正常、未过期、无 refresh token、被拒、网络异常与并发去重。
-- 端到端：临时会话 + 真实 GitHub；将 `accounts.expires_at` 置为过去 → 访问 `/repos` 应自动续期并正常渲染仓库；验证后删除临时会话。
+- 单测：`error-state.test.ts`（分类 / 文案 / 可重试 / 退避）、`client-fetch.test.ts`（重试次数、不可重试状态、离线短路、中止、重试耗尽）、`github-fetch.test.ts`（超时 / 网络 / 透传 / 注入实现）；并更新既有网络错误断言。
+- 端到端：真实会话访问 `/repos` 与时间线正常（不回归）；构造上游不可达 / 超时场景验证文案与重试入口。
+- 手动：浏览器 DevTools 设 Offline → 横幅出现、「加载更多」给出断网提示；恢复在线 → 横幅消失。
 
 ## 5. 通过标准
 
-- 令牌过期不再需要人工重新授权；续期路径有单测与端到端证据；失败路径不会误报「未授权」。
+- 断网 / 超时 / 限流三类状态均有明确文案与可操作的重试入口；不出现未分类的 500 或「异常（503）」这类含糊文案；降级缓存标注完整。
 
 ## 6. 风险与假设
 
-- 续期请求访问 `github.com`（本机需代理，dev server 已带 `NODE_USE_ENV_PROXY`）；生产环境直连。
-- 并发去重为进程内（单实例）；多实例部署时可能重复续期（refresh token 轮换竞争），随 M1-6 部署形态一并处理。
-- 续期失败（网络类）会让本次请求报错并提示重试；下次请求会再次尝试续期。
+- 本机 dev 需代理访问 github.com（`NODE_USE_ENV_PROXY`）；离线模拟在浏览器侧进行。
+- 自动重试只覆盖瞬时错误，避免对限流 / 鉴权失败做无意义重试而浪费配额。
+- 限流恢复时间依赖 GitHub 响应头（`x-ratelimit-reset` / `retry-after`），缺失时给出兜底时间。
 
 ## 7. 遗留与风险事项
 
@@ -82,3 +90,7 @@
   - 证据：`pnpm lint / typecheck / test / build` 全绿；单测 104 例（本任务新增 13 例：令牌端点 6 · 续期编排 7，含并发去重）；端到端把库中 `expires_at` 置为过去 → 访问 `/repos` 200 并渲染 4 个真实仓库（含私有），库中密文更换、`expires_at` 更新为 2026-10-07 01:52:17 UTC（now + 8 h），二次请求不再续期；响应无明文令牌；临时验证会话已删除。
   - 说明：并发去重为进程内实现（单实例）；多实例场景随 M1-6 部署形态评估（ADR-0029）。
   - 合并：提交 `1f138e5` 经 PR #7（squash，合并提交 `a08a070`）合入 main；检查全绿（GitGuardian success、Actions Lint/Typecheck/Test/Build success ×2）。
+- 2026-10-07 · 任务「M1-9 在线状态处理（断网 / 超时 / 限流）」· 分支 `feat/online-status-handling` · 结论：**开发完成，待用户确认**。
+  - 证据：`pnpm lint / typecheck / test / build` 全绿；单测 131 例（本任务新增 26 例：错误分类 / 文案 / 退避 11、客户端重试 8、请求封装 6，含真实 socket 连接失败用例）。端到端（真实会话，临时会话 / 用户已删除）：正常路径 `/repos` 200、`/api/repos` 200；上游临时指向 `http://127.0.0.1:9` → `/api/repos` 503 `github_unreachable`、`/repos` 页显示「无法连接 GitHub」+ 重试；指向黑洞监听 `127.0.0.1:9931` → 15.25 s 后 504 `github_timeout`、`/repos` 页显示「请求超时」；验证后上游配置按字节还原。
+  - 说明：客户端自动重试只覆盖瞬时错误（ADR-0031），限流 / 鉴权失败改为明文提示 + 手动重试；离线横幅依赖 `navigator.onLine`（ADR-0032 区分网络不可达与超时）；多实例下的缓存 / 限流 / 续期去重随 M1-6。
+  - 待办：等待用户确认后提交 / 推送 / PR / 合并；合并结论将在完成后补记。

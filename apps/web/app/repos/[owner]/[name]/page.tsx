@@ -7,10 +7,13 @@ import { auth, signIn } from "@/lib/auth";
 import {
   GitHubApiError,
   GitHubForbiddenError,
+  GitHubNetworkError,
   GitHubNotFoundError,
   GitHubRateLimitError,
+  GitHubTimeoutError,
   GitHubUnauthorizedError,
 } from "@/lib/github-errors";
+import { describeGithubError } from "@/lib/error-state";
 import { loadTimelinePage } from "@/lib/timeline-data";
 
 import { TimelineView } from "./timeline-view";
@@ -165,11 +168,27 @@ export default async function RepoTimelinePage({
         </PageShell>
       );
     }
+    if (error instanceof GitHubNetworkError || error instanceof GitHubTimeoutError) {
+      const info = describeGithubError(error);
+      return (
+        <PageShell>
+          <Notice title={info.title}>
+            <p>{info.message}</p>
+            <Link
+              href={`/repos/${owner}/${name}`}
+              className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
+            >
+              重试
+            </Link>
+          </Notice>
+        </PageShell>
+      );
+    }
     if (error instanceof GitHubApiError) {
       return (
         <PageShell>
-          <Notice title="无法连接 GitHub">
-            <p>GitHub 服务返回异常（{error.status}）。请稍后重试。</p>
+          <Notice title="GitHub 服务暂时不可用">
+            <p>GitHub 返回了服务端错误（{error.status}）。请稍后重试。</p>
             <Link
               href={`/repos/${owner}/${name}`}
               className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
