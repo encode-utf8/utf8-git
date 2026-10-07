@@ -11,6 +11,35 @@
 
 ---
 
+## 2026-10-07 · 线上部署与验收（Vercel + Neon）
+
+**目标**：把应用部署到公网并给出可验证的验收结论，收尾 TODO-104。
+
+**完成内容**
+
+- 部署形态落地：Vercel Production（`main` 自动部署）+ Neon（ap-southeast-1）；构建 / 安装命令由 `apps/web/vercel.json` 固化（见下一节记录）。
+- 数据库：以 Neon **直连主机**执行 `prisma migrate deploy`，`20261004144043_init_auth` 与 `20261007081155_m1_6_shared_stores` 全部应用；`users` / `accounts` / `sessions` / `verification_tokens` / `shared_cache_entries` / `rate_limit_states` 表建齐。
+- 线上验收（经本地代理访问，因本机到 `vercel.app` 的 DNS 被污染）：`/` 200（冷 897 ms / 热 201 ms）、`/login` 200（约 0.5 s）、`/api/repos` 与 `/(owner)/(name)/timeline` 未登录均 401、`/api/auth/providers` 返回 github provider 且回调地址指向生产域名、`/api/auth/csrf` 下发 `__Host-` / `__Secure-` 前缀 Cookie、`POST /api/auth/signin/github` 302 跳 GitHub 授权页且 `client_id` / `redirect_uri` / `scope=read:user repo` 正确，打开授权页未出现 `redirect_uri` 错误。
+- 报告：`docs/reports/tech-analysis/M1-6-deployment-verification.md`。
+
+**关键决策**
+
+| 编号     | 决策                                                 | 理由                                                                     | 备选与否决原因                         |
+| -------- | ---------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------- |
+| ADR-0040 | 迁移用 Neon **直连主机**执行，运行期再用 pooled 串   | 迁移需要会话级特性（advisory lock 等），PgBouncer transaction 模式不可靠 | 直接用 pooled 跑迁移：存在偶发失败风险 |
+| ADR-0041 | 线上验收经本地代理执行，并在报告中标注耗时含代理开销 | 本机直连 `vercel.app` 不可达；不标注会把代理开销误读为应用性能           | 放弃线上验收：无法交付可验证结论       |
+
+**问题与风险**
+
+- 浏览器完整登录（会话写入 + 令牌加密入库 + 拉取仓库列表）待用户完成，这是唯一尚未覆盖的链路。
+- 本机对 `vercel.app` 的 DNS 被污染，后续线上检查都需经代理，耗时读数偏保守。
+- 预览部署的随机域名无法完成 OAuth 回调，尚未处理。
+
+**下一步**
+
+- 用户完成一次浏览器登录后，确认线上 `/repos` 与时间线正常。
+- 采集真实冷启动与 Lighthouse 分数，回填验收报告。
+
 ## 2026-10-07 · 固化 Vercel 构建配置（线上部署排障）
 
 **目标**：用户在 Vercel 首次部署时遇到两类问题——后台 Build Command 覆盖框预填的 `next build` 与粘贴内容拼成 `next buildprisma generate && next build`（构建失败），以及环境变量里手动设置的 `NODE_ENV` 触发 Next.js 非标准值警告。把构建 / 安装命令固化进仓库，避免再次依赖后台手输。

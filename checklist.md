@@ -1,40 +1,42 @@
-# 验收清单 · 任务：固化 Vercel 构建配置（`apps/web/vercel.json`）
+# 验收清单 · 任务：线上部署验收（Vercel + Neon）
 
-> 分支：`chore/vercel-config`
+> 分支：`docs/deployment-verification`
 > 开始日期：2026-10-07
-> 参照：`docs/deployment.md` §3 · 线上部署排障（构建命令被拼接、`non-standard "NODE_ENV"`）
+> 参照：`docs/deployment.md` · `docs/reports/tech-analysis/M1-6-deployment-verification.md`
 
 ## 1. 任务目标
 
-- 把 Vercel 的构建 / 安装命令固化进仓库，避免后台表单手输导致命令拼接错误（已实际发生一次构建失败）。
-- 修正 `docs/deployment.md` 中过时的部署步骤（Root Directory 应为 `apps/web`），并把线上踩坑沉淀成清单。
+- 在真实平台（Vercel + Neon）完成部署验收，给出可复现、可留痕的结论，收尾 TODO-104。
+- 覆盖：数据库迁移、静态页可达性、鉴权边界、Auth.js 生产配置、OAuth 跳转与回调地址。
 
 ## 2. 范围
 
-- 包含：新增 `apps/web/vercel.json`；`docs/deployment.md` §2 / §3 / §3.1 更新；`docs/development-log.md` 记录。
-- 不包含：Vercel 后台的实际操作（由用户执行）；真实平台冷启动与 Lighthouse 实测（待线上数据）。
+- 包含：Neon 迁移执行与表结构核对；线上未登录路径与 OAuth 跳转验收；验收报告与文档同步。
+- 不包含：浏览器完整登录（需用户账号）；Lighthouse 实测；预览环境域名与回调。
 
 ## 3. 验收项
 
-- [ ] 新增 `apps/web/vercel.json`，含 `buildCommand` / `installCommand`
-- [ ] `docs/deployment.md` 步骤与实际线上配置一致（Root Directory = `apps/web`、迁移在本地执行、后台字段留空）
-- [ ] 新增「常见坑」小节（命令拼接 / `NODE_ENV` / 依赖镜像 / 未执行迁移）
-- [ ] `pnpm lint / typecheck / test / build` 全绿
-- [ ] 文档同步与合并记录
+- [x] Neon 应用两个迁移，`prisma migrate status` = `Database schema is up to date!`
+- [x] 业务表建齐（users / accounts / sessions / verification_tokens / shared_cache_entries / rate_limit_states）
+- [x] `/`、`/login` 返回 200；`/api/repos`、时间线接口未登录返回 401
+- [x] `/api/auth/providers` 回调地址指向生产域名；`/api/auth/csrf` 下发 `__Host-` / `__Secure-` Cookie
+- [x] `POST /api/auth/signin/github` 302 到 GitHub 授权页，`client_id` / `redirect_uri` / `scope` 正确
+- [ ] 浏览器完整登录并浏览 `/repos` 与时间线（待用户执行）
+- [x] 验收报告与文档同步（deployment / todo / development-log / 报告）
 
 ## 4. 验证方式
 
-- 配置合法性：`JSON.parse` + `prettier --check`。
-- 回归：全量 `lint / typecheck / test / build`（本改动不参与构建，用于确认无副作用）。
+- 命令行验收：Node 脚本经本地代理请求生产地址，覆盖未登录路径与 OAuth 跳转；Prisma 核对迁移与表结构。
+- 报告留痕：`docs/reports/tech-analysis/M1-6-deployment-verification.md`。
 
 ## 5. 通过标准
 
-- 线上无需再手输构建命令；文档描述的部署方式与实际一致，且能解释已发生的两次告警 / 报错。
+- 未登录路径、鉴权边界、Auth.js 生产配置、OAuth 跳转、数据库迁移全部符合预期。
 
 ## 6. 风险与假设
 
-- 后台字段优先级高于 `vercel.json`：若未清空后台覆盖，本配置不生效（文档已明确标注）。
-- `installCommand` 的 `--registry` 覆盖只作用于 Vercel 构建，不影响本地开发与 `.npmrc`。
+- 本机至 `vercel.app` 的 DNS 被污染，验收经本地代理完成，耗时读数含代理开销（报告已标注）。
+- 登录链路未覆盖：需用户账号，无法在本机代做。
 
 ## 7. 遗留与风险事项
 

@@ -107,7 +107,11 @@
 
 ## 8. 遗留事项
 
-- **TODO-104**：真实 Vercel / Neon 部署需用户账号与生产 OAuth 回调，本地无法代办。
-- 「冷启动 < 3s」「Lighthouse ≥ 80」需在真实平台实测；本地仅有生产模式启动耗时参考（≈1.5s，见 M1-7 报告）。
+- ~~真实 Vercel / Neon 部署~~ **已完成（2026-10-07）**：生产地址 <https://utf8-git.vercel.app/>，
+  Neon 已应用全部迁移，未登录路径与 OAuth 跳转验收通过，详见 `docs/reports/tech-analysis/M1-6-deployment-verification.md`。
+- 浏览器完整登录一次（写入会话 + 令牌加密入库 + 拉取仓库列表）待用户确认；本机无该账号授权，无法代做。
+- 「Lighthouse ≥ 80」需浏览器实测；「冷启动 < 3s」需在无代理环境复测（本次线上读数含代理开销）。
+- 预览部署的随机域名无法完成 OAuth 回调：需要稳定的分支别名并注册到 OAuth App，或为预览单独建 App。
+- 若平台函数超时上限先于我们的 15s GitHub 超时触发（Hobby 默认 10s），可为路由声明 `maxDuration`。
 - 续期去重的双刷新窗口可用「数据库租约」彻底消除（后续任务）。
 - 多 region 复制、Redis 等外部缓存：MVP 明确不做。
