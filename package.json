@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "perf": "node scripts/perf-validate.mjs",
+    "deploy:selfcheck": "node scripts/deploy-selfcheck.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
