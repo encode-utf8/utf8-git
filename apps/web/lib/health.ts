@@ -140,18 +140,25 @@ export async function runHealthChecks(deps: HealthDeps = {}): Promise<HealthRepo
   const warnings: string[] = [];
 
   let databaseReachable = true;
-  const pingStartedAt = Date.now();
+  const coldStartedAt = Date.now();
   try {
     await pingDatabase();
-    const rtt = Date.now() - pingStartedAt;
+    // 首次查询通常包含建连（TCP + TLS + 认证），Neon 还可能要先唤醒计算节点，
+    // 因此它不能代表稳态往返；跨区判断只看第二次的「热」往返，避免同区误报。
+    const coldMs = Date.now() - coldStartedAt;
+    const warmStartedAt = Date.now();
+    await pingDatabase();
+    const warmMs = Date.now() - warmStartedAt;
+
     checks.push({
       name: "database_reachable",
       ok: true,
-      detail: `数据库连接正常（往返 ${rtt} ms）`,
+      detail: `数据库连接正常（首次 ${coldMs} ms / 热往返 ${warmMs} ms）`,
     });
-    if (rtt > SLOW_DATABASE_RTT_MS) {
+
+    if (warmMs > SLOW_DATABASE_RTT_MS) {
       warnings.push(
-        `数据库往返 ${rtt} ms（阈值 ${SLOW_DATABASE_RTT_MS} ms）：函数区 ${functionRegion ?? "未知"} 与数据库区大概率不一致。` +
+        `数据库热往返 ${warmMs} ms（阈值 ${SLOW_DATABASE_RTT_MS} ms）：函数区 ${functionRegion ?? "未知"} 与数据库区大概率不一致。` +
           "登录后的每次页面 / 接口请求会串行执行 4~6 次数据库查询，跨区往返会直接放大成秒级延迟；" +
           '建议把函数部署到数据库同区（如 Neon 在 ap-southeast-1 时用 vercel.json 的 regions: ["sin1"]），或把数据库建在函数同区。',
       );

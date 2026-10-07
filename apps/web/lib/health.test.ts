@@ -71,6 +71,35 @@ describe("runHealthChecks", () => {
     expect(report.warnings[0]).toContain("sin1");
   });
 
+  it("首次往返慢但热往返快时（仅建连开销）不告警", async () => {
+    let calls = 0;
+    const report = await runHealthChecks({
+      env: makeEnv({ VERCEL_REGION: "sin1" }),
+      listTables: healthyDeps.listTables,
+      pingDatabase: async () => {
+        calls += 1;
+        // 第 1 次模拟建连耗时，第 2 次为稳态往返
+        if (calls === 1) {
+          await new Promise((resolve) => setTimeout(resolve, SLOW_DATABASE_RTT_MS + 60));
+        }
+      },
+    });
+    expect(calls).toBe(2);
+    expect(report.ok).toBe(true);
+    expect(report.warnings).toEqual([]);
+    expect(findCheck(report, "database_reachable")?.detail).toContain("热往返");
+  });
+
+  it("冷热往返都超标时仍然告警", async () => {
+    const report = await runHealthChecks({
+      env: makeEnv({ VERCEL_REGION: "iad1" }),
+      listTables: healthyDeps.listTables,
+      pingDatabase: async () => {
+        await new Promise((resolve) => setTimeout(resolve, SLOW_DATABASE_RTT_MS + 40));
+      },
+    });
+    expect(report.warnings).toHaveLength(1);
+  });
   it("数据库往返正常时无告警，未注入 region 时为 null", async () => {
     const report = await runHealthChecks({ env: makeEnv(), ...healthyDeps });
     expect(report.ok).toBe(true);

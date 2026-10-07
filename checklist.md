@@ -1,49 +1,39 @@
-# 验收清单 · 任务：部署自检（/api/health + 自检脚本）
+# 验收清单 · 任务：部署自检往返误报修复（跨区判断改用热往返）
 
-> 分支：`feat/deploy-selfcheck`
+> 分支：`fix/health-rtt-probe`
 > 开始日期：2026-10-07
-> 参照：`docs/deployment.md` §3.2 · `docs/reports/tech-analysis/M1-6-deployment-verification.md`
+> 参照：`docs/deployment.md` §3.2 · `apps/web/lib/health.ts`
 
 ## 1. 任务目标
 
-- 把「部署配置是否正确」做成可脚本化核对的常设能力：覆盖外部可达性、鉴权边界、OAuth 跳转参数与运行期配置（缓存后端 / 数据库 / 密钥）。
-- 针对用户实测反馈的「翻页报 409 `cursor_expired` + 操作迟钝」给出可自查、可复现的判定方式。
+- 用户已把 Vercel 函数区改到新加坡并重新部署，先确认改区是否消除了跨区延迟。
+- 修掉由此暴露的自检误报：函数与数据库**都在新加坡**时仍被判「跨区」。
 
 ## 2. 范围
 
-- 包含：新增 `GET /api/health` 与 `scripts/deploy-selfcheck.mjs`（`pnpm deploy:selfcheck`）；单元测试；部署文档新增 §3.2 与 §3.1 排查条目。
-- 不包含：修改业务逻辑本身；DNS / 代理环境；Lighthouse 实测。
+- 包含：生产自检复核；`database_reachable` 改为探测两次、跨区判断只看热往返；单元测试与文档同步。
+- 不包含：Neon pooler / 计算唤醒策略的深度调优；E2E（下一个任务）。
 
 ## 3. 验收项
 
-- [x] `/api/health` 核对项齐全：`STORE_BACKEND`（Serverless 下必须 `postgres`）、数据库连通、迁移表齐全、必填密钥、`AUTH_TOKEN_ENC_KEY` 长度
-- [x] 响应只含布尔与说明文字，不泄露密钥值；错误信息里的连接串被抹除
-- [x] 全部通过返回 200，任一失效返回 503
-- [x] 自检脚本覆盖：静态页 200 / 未登录 401 / Cookie 前缀 / OAuth 跳转与 `redirect_uri` / `/api/health` 明细
-- [x] 单元测试 `apps/web/lib/health.test.ts` 11 例通过（含「Serverless 未设 `STORE_BACKEND` 判失败」「缺表列出表名」「不泄露连接串」「跨区告警不判失败」）
-- [x] `pnpm lint` / `typecheck` / `test` 全绿（web 149 通过 / 4 跳过）
-- [x] `/api/health` 返回 `functionRegion`，数据库往返超过 150 ms 时给出「函数区与数据库区不一致」告警（不计入 `ok`）
-- [ ] 生产部署后 `pnpm deploy:selfcheck` 对 <https://utf8-git.vercel.app/> 全绿（待合并部署后执行）
-- [ ] 用户把 Vercel 函数区与 Neon 区对齐（`iad1` → `sin1`，或 Neon 重建到 `aws-us-east-1`）后复测，确认告警消失、点击延迟回落
+- [x] 生产 `pnpm deploy:selfcheck` 全绿，且 `VERCEL_REGION=sin1`、`STORE_BACKEND=postgres`、业务表齐全
+- [x] 复现误报：改区后仍提示「函数区与数据库区大概率不一致」
+- [x] 修复后跨区判断只看热往返，detail 同时给出首次与热往返
+- [x] 单元测试 13 例通过（含「首次慢、热往返快不告警」「冷热都超标仍告警」）
+- [x] `pnpm lint / typecheck / test` 全绿
+- [ ] 重新部署后读取生产「热往返」数值，与同区应有的量级比对
 
 ## 4. 验证方式
 
-- 单元测试 + 对本地实例（`next start`）与生产域名各跑一次 `pnpm deploy:selfcheck`。
-
-实跑记录（2026-10-07）：
-
-- 本地实例（`next start -p 3105`，`DATABASE_URL` 指向 Neon，`VERCEL=1`）：`STORE_BACKEND` 未设时 **2 项未通过**，唯一失败项即 `store_backend`，
-  提示语与用户现象（翻页 409 `cursor_expired` / 操作迟钝）完全对应；设 `STORE_BACKEND=postgres` 后重跑 **全部通过（退出码 0）**。
-- 生产域名（经本地代理）：除 `/api/health` 返回 404（该版本尚未包含自检端点）外全部通过——恰好说明本次自检能力上线前，无法从外部判定缓存后端。
+- 单元测试 + 生产 `pnpm deploy:selfcheck`；合并部署后复跑一次并记录热往返。
 
 ## 5. 通过标准
 
-- 自检能对「缓存后端未共享」这一已知故障给出明确失败项与修复指引；其余检查项在生产域名下全部通过。
+- 同区部署不再产生跨区告警；真正跨区（冷热都偏高）仍然告警。
 
 ## 6. 风险与假设
 
-- 本机至 `vercel.app` 的 DNS 被污染，对生产实跑需经本地代理（`NODE_USE_ENV_PROXY=1`）。
-- OAuth App 回调地址是否已登记无法由脚本判定（GitHub 仅在已登录状态校验），仍需人工比对。
+- 改区后的热往返真实数值要等重新部署才能读到；若仍显著高于同区应有的个位数到几十毫秒，需继续排查 pooler 与计算唤醒策略。
 
 ## 7. 遗留与风险事项
 
