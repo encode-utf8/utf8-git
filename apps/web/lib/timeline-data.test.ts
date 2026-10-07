@@ -4,7 +4,7 @@ import { type CursorChain, type TimelineCacheValue } from "./data-stores";
 import { GitHubRateLimitError } from "./github-errors";
 import { type TimelineData, fetchTimelinePage } from "./github-timeline";
 import { RateLimitStore } from "./rate-limit-store";
-import { TtlCache } from "./server-cache";
+import { TtlCache, cacheKey } from "./server-cache";
 import { TimelineCursorExpiredError, loadTimelinePage } from "./timeline-data";
 
 function makeTimeline(overrides: Partial<TimelineData> = {}): TimelineData {
@@ -99,6 +99,55 @@ describe("loadTimelinePage", () => {
     expect(cursors).toEqual([null, "cursor-page1"]);
     expect(page2.meta.page).toBe(2);
     expect(page1Again.meta.cached).toBe(true);
+  });
+
+  it("上一页 endCursor 为 null 时，后续页直接返回空，不再请求 GitHub（避免重复第 1 页）", async () => {
+    const cursors: Array<string | null | undefined> = [];
+    const fetchPage = (async (params: { cursor?: string | null }) => {
+      cursors.push(params.cursor);
+      return {
+        data: makeTimeline({ pageInfo: { hasNextPage: false, endCursor: null } }),
+        rateLimit: null,
+        warnings: [],
+      };
+    }) as unknown as typeof fetchTimelinePage;
+    const deps = makeDeps({ now: () => 1_000_000 });
+
+    await loadTimelinePage(
+      { userId: "u1", token: "t", owner: "o", name: "n" },
+      { fetchPage, ...deps, threshold: 100 },
+    );
+    const page2 = await loadTimelinePage(
+      { userId: "u1", token: "t", owner: "o", name: "n", page: 2 },
+      { fetchPage, ...deps, threshold: 100 },
+    );
+
+    expect(cursors).toEqual([null]);
+    expect(page2.timeline.commits).toEqual([]);
+    expect(page2.timeline.pageInfo).toEqual({ hasNextPage: false, endCursor: null });
+    expect(page2.timeline.repo.nameWithOwner).toBe("o/n");
+    expect(page2.meta.page).toBe(2);
+    expect(page2.meta.cached).toBe(false);
+  });
+
+  it("上一页 endCursor 为 null 且上一页数据不可用 → TimelineCursorExpiredError", async () => {
+    let calls = 0;
+    const fetchPage = (async () => {
+      calls += 1;
+      return { data: makeTimeline(), rateLimit: null, warnings: [] };
+    }) as unknown as typeof fetchTimelinePage;
+    const deps = makeDeps({ now: () => 1_000_000 });
+    await deps.cursorCache.set(cacheKey("cursor", "u1", "o", "n", ""), {
+      pages: [{ endCursor: null, fetchedAt: 1_000_000 }],
+    });
+
+    await expect(
+      loadTimelinePage(
+        { userId: "u1", token: "t", owner: "o", name: "n", page: 2 },
+        { fetchPage, ...deps, threshold: 100 },
+      ),
+    ).rejects.toBeInstanceOf(TimelineCursorExpiredError);
+    expect(calls).toBe(0);
   });
 
   it("跳到第 2 页但缺少 cursor 链 → TimelineCursorExpiredError", async () => {
