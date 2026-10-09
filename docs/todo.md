@@ -76,8 +76,8 @@
 
 ### 3.2 可视化
 
-- [~] TODO-211 泳道布局算法包（算法内核已完成：`packages/git-graph/src/layout.ts` + 单测；渲染接入见 TODO-212）
-- [ ] TODO-212 PR / Issue 事件泳道渲染
+- [x] TODO-211 泳道布局算法包（`packages/git-graph`：`computeLaneLayout` 内核 + `sliceLaneLayout` 窗口切片 + 合成历史 / 单测 / 性能护栏）
+- [x] TODO-212 分支泳道渲染（SVG 分层渲染 + 虚拟窗口已落地，50 分支 / 5050 提交基准与 E2E 断言齐备；PR / Issue 事件标注见 roadmap M2-3）
 - [ ] TODO-213 时间缩放与范围切换
 - [ ] TODO-214 时间线导出（图片 / 链接分享）
 
