@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import type { ConfirmationView } from "@/lib/operations";
 
 type ConfirmCardProps = {
@@ -8,6 +10,8 @@ type ConfirmCardProps = {
   error?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
+  /** 额外表单字段（如新分支名输入框），渲染在标题与影响预览之间。 */
+  children?: ReactNode;
 };
 
 /**
@@ -20,6 +24,7 @@ export function ConfirmCard({
   error = null,
   onConfirm,
   onCancel,
+  children,
 }: ConfirmCardProps) {
   return (
     <div
@@ -29,6 +34,7 @@ export function ConfirmCard({
       className="rounded-xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-zinc-950"
     >
       <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{view.title}</p>
+      {children}
       {view.impacts.length > 0 ? (
         <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-zinc-600 dark:text-zinc-300">
           {view.impacts.map((impact) => (

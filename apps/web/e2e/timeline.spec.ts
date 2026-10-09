@@ -90,3 +90,22 @@ test("概念解释层：默认关闭，切换模式后显示术语悬浮卡片",
   await modeSelect.selectOption("off");
   await expect(page.getByRole("button", { name: /^解释：/ })).toHaveCount(0);
 });
+
+test("创建分支：确认卡片 → 调上游建分支 → 成功与冲突提示", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+  await page.getByRole("button", { name: "新建分支" }).click();
+  // 确认卡片默认以最新提交为起点，展示影响预览
+  await expect(page.getByRole("dialog", { name: /创建分支/ })).toBeVisible();
+  await expect(page.getByText(/起点：提交/)).toBeVisible();
+
+  // 成功：新分支名 → 上游 201 → 成功提示
+  await page.getByLabel("新分支名称").fill("feature/e2e-created");
+  await page.getByRole("button", { name: "创建分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已创建分支 feature/e2e-created");
+
+  // 冲突：mock 中已存在的分支 → 上游 422 → 提示已存在
+  await page.getByRole("button", { name: "新建分支" }).click();
+  await page.getByLabel("新分支名称").fill("feature/e2e");
+  await page.getByRole("button", { name: "创建分支", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("已存在");
+});

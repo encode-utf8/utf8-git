@@ -3,7 +3,8 @@
 // 把服务端请求指向本进程，让 page / route 在不访问真实 GitHub 的前提下拿到确定性数据。
 //
 // 覆盖：GET /healthz（就绪探针）、GET /user/repos（REST，含 x-ratelimit-* 头）、
-//       POST /graphql（时间线，两页）、GET /repos/{owner}/{name}/commits/{sha}（提交详情）。
+//       POST /graphql（时间线，两页）、GET /repos/{owner}/{name}/commits/{sha}（提交详情）、
+//       POST /repos/{owner}/{name}/git/refs（创建分支；已存在的分支返回 422）。
 
 import { createServer } from "node:http";
 
@@ -95,6 +96,25 @@ function makeCommits(count, startNumber, headlinePrefix) {
 const PAGE_1 = makeCommits(50, 60, "feat: 时间线提交");
 const PAGE_2 = makeCommits(10, 10, "feat: 历史提交");
 
+// 写操作 mock：已存在的分支引用（与 GraphQL 分支列表保持一致），重复创建返回 422
+const EXISTING_REFS = new Set(["refs/heads/main", "refs/heads/feature/e2e"]);
+
+function createRefResult(owner, name, body) {
+  const ref = typeof body.ref === "string" ? body.ref : "";
+  const sha = typeof body.sha === "string" ? body.sha : "";
+  if (!ref.startsWith("refs/heads/") || !sha) {
+    return { status: 422, body: { message: "Invalid request" } };
+  }
+  if (EXISTING_REFS.has(ref)) {
+    return { status: 422, body: { message: "Reference already exists" } };
+  }
+  EXISTING_REFS.add(ref);
+  return {
+    status: 201,
+    body: { ref, object: { sha }, url: `https://api.github.com/repos/${owner}/${name}/git/${ref}` },
+  };
+}
+
 function sendJson(response, status, body, headers = {}) {
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
@@ -173,6 +193,15 @@ const server = createServer(async (request, response) => {
     const body = await readJsonBody(request);
     const variables = body.variables ?? {};
     sendJson(response, 200, timelinePayload(variables, Boolean(variables.cursor)));
+    return;
+  }
+
+  const refMatch = /^\/repos\/([^/]+)\/([^/]+)\/git\/refs$/.exec(url.pathname);
+  if (refMatch && request.method === "POST") {
+    const [, owner, name] = refMatch;
+    const body = await readJsonBody(request);
+    const result = createRefResult(owner, name, body);
+    sendJson(response, result.status, result.body, { "x-ratelimit-remaining": "4996" });
     return;
   }
 

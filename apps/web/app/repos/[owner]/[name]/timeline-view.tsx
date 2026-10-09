@@ -1,10 +1,16 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { computeLaneLayout, sliceLaneLayout } from "@utf8-git/git-graph";
 
+import {
+  createBranchDescriptor,
+  describeCreateBranchFailure,
+  validateBranchName,
+} from "@/lib/branch-ops";
 import { formatRelativeTime, formatUtcDateTime, shortSha } from "@/lib/commit-format";
 import { mergeCommits } from "@/lib/commit-list";
 import { fetchWithRetry } from "@/lib/client-fetch";
@@ -12,6 +18,7 @@ import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/
 import { collectIssues, type TimelineBranch, type TimelineCommit } from "@/lib/github-timeline";
 import { EXPLAIN_MODES, isExplainMode, type ExplainMode } from "@/lib/glossary";
 import { computeLaneMetrics } from "@/lib/lane-geometry";
+import { confirmationView } from "@/lib/operations";
 import {
   EMPTY_TIMELINE_FILTER,
   filterTimelineCommits,
@@ -25,6 +32,7 @@ import {
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { CommitDetailPanel } from "./commit-detail";
+import { ConfirmCard } from "./confirm-card";
 import { GlossaryHint } from "./glossary-hint";
 import { LaneGraph } from "./lane-graph";
 
@@ -200,7 +208,13 @@ export function TimelineView({
   const [nowMs, setNowMs] = useState<number | null>(null);
   const [filters, setFilters] = useState<TimelineFilterState>(EMPTY_TIMELINE_FILTER);
   const [explainMode, setExplainMode] = useState<ExplainMode>("off");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newBranchName, setNewBranchName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null);
 
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // 概念解释层：默认关闭，仅记住用户显式选择过的模式（localStorage 不可用时静默降级）。
@@ -262,6 +276,67 @@ export function TimelineView({
     [commits, filters, nowMs],
   );
   const activeFilters = hasActiveTimelineFilter(filters);
+
+  // 创建分支（M3-2）：起点默认取选中提交，否则取已加载的最新提交（即当前分支头）。
+  const branchStart = selectedCommit ?? commits[0] ?? null;
+  const branchNameError = newBranchName ? validateBranchName(newBranchName.trim()) : null;
+  const branchDescriptor = useMemo(
+    () =>
+      branchStart
+        ? createBranchDescriptor({
+            owner,
+            name,
+            branch: newBranchName.trim(),
+            fromSha: branchStart.oid,
+            fromLabel: `提交 ${shortSha(branchStart.oid)}`,
+          })
+        : null,
+    [branchStart, name, newBranchName, owner],
+  );
+
+  const closeCreateBranch = useCallback(() => {
+    if (creating) {
+      return;
+    }
+    setCreateOpen(false);
+    setCreateError(null);
+  }, [creating]);
+
+  const submitCreateBranch = useCallback(async () => {
+    const trimmed = newBranchName.trim();
+    if (!branchStart || creating) {
+      return;
+    }
+    const nameError = validateBranchName(trimmed);
+    if (nameError) {
+      setCreateError(nameError);
+      return;
+    }
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const response = await fetch(
+        `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/operations/create-branch`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ branch: trimmed, from: branchStart.oid, confirmed: true }),
+        },
+      );
+      const data = (await response.json().catch(() => ({}))) as { error?: string; branch?: string };
+      if (!response.ok) {
+        setCreateError(describeCreateBranchFailure(response.status, data.error));
+        return;
+      }
+      setCreateSuccess(`已创建分支 ${data.branch ?? trimmed}`);
+      setCreateOpen(false);
+      setNewBranchName("");
+      // 重新拉取服务端数据，让分支选择器立即包含新分支
+      router.refresh();
+    } finally {
+      setCreating(false);
+    }
+  }, [branchStart, creating, name, newBranchName, owner, router]);
 
   // 过滤 / 缩放变化时：把仍可见的选中提交重新锚定到视口中央（保持浏览上下文），否则回到顶部。
   const applyFilterPatch = useCallback(
@@ -424,6 +499,19 @@ export function TimelineView({
               <GlossaryHint id="lane" mode={explainMode} />
             </span>
           )}
+          {commits.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCreateOpen(true);
+                setCreateError(null);
+                setCreateSuccess(null);
+              }}
+              className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+            >
+              新建分支
+            </button>
+          ) : null}
           <span className="flex items-center gap-2">
             <label htmlFor="explain-mode">术语解释</label>
             <select
@@ -443,6 +531,44 @@ export function TimelineView({
           <p>已加载 {commits.length} 条提交</p>
         </div>
       </div>
+
+      {createSuccess ? (
+        <p
+          role="status"
+          className="mt-3 rounded-lg border border-green-300 bg-green-50 p-3 text-xs text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200"
+        >
+          {createSuccess}
+        </p>
+      ) : null}
+
+      {createOpen && branchDescriptor ? (
+        <div className="mt-3">
+          <ConfirmCard
+            view={confirmationView(branchDescriptor)}
+            pending={creating}
+            error={createError}
+            onConfirm={() => void submitCreateBranch()}
+            onCancel={closeCreateBranch}
+          >
+            <label
+              className="mt-3 block text-xs text-zinc-600 dark:text-zinc-300"
+              htmlFor="new-branch-name"
+            >
+              新分支名称
+            </label>
+            <input
+              id="new-branch-name"
+              value={newBranchName}
+              onChange={(event) => setNewBranchName(event.target.value)}
+              placeholder="feature/demo"
+              className="mt-1 h-9 w-full max-w-sm rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-400 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
+            />
+            <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+              {branchNameError ?? `起点：提交 ${shortSha(branchStart?.oid ?? "")}`}
+            </p>
+          </ConfirmCard>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         <input
