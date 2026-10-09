@@ -66,3 +66,27 @@ test("点击提交节点打开文件变更详情面板", async ({ page }) => {
   await expect(page.getByText("文件变更（1）")).toBeVisible();
   await expect(page.getByText("src/index.ts")).toBeVisible();
 });
+
+test("概念解释层：默认关闭，切换模式后显示术语悬浮卡片", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+  const modeSelect = page.getByLabel("术语解释模式");
+  await expect(modeSelect).toHaveValue("off");
+  // 默认关闭：不渲染任何术语提示（可关闭、不干扰老用户）
+  await expect(page.getByRole("button", { name: /^解释：/ })).toHaveCount(0);
+
+  // 新手模式：基础术语出现，悬停弹出解释卡片
+  await modeSelect.selectOption("beginner");
+  const shaHint = page.getByRole("button", { name: "解释：提交哈希（SHA）" }).first();
+  await expect(shaHint).toBeVisible();
+  await shaHint.hover();
+  await expect(page.getByRole("tooltip")).toContainText("提交哈希");
+
+  // 进阶模式：基础术语隐藏，进阶术语保留
+  await modeSelect.selectOption("advanced");
+  await expect(page.getByRole("button", { name: "解释：提交哈希（SHA）" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "解释：泳道" })).toBeVisible();
+
+  // 关闭后不再渲染
+  await modeSelect.selectOption("off");
+  await expect(page.getByRole("button", { name: /^解释：/ })).toHaveCount(0);
+});

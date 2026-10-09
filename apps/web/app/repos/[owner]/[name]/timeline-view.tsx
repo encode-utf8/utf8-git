@@ -10,6 +10,7 @@ import { mergeCommits } from "@/lib/commit-list";
 import { fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/lib/error-state";
 import { collectIssues, type TimelineBranch, type TimelineCommit } from "@/lib/github-timeline";
+import { EXPLAIN_MODES, isExplainMode, type ExplainMode } from "@/lib/glossary";
 import { computeLaneMetrics } from "@/lib/lane-geometry";
 import {
   EMPTY_TIMELINE_FILTER,
@@ -24,10 +25,12 @@ import {
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { CommitDetailPanel } from "./commit-detail";
+import { GlossaryHint } from "./glossary-hint";
 import { LaneGraph } from "./lane-graph";
 
 const ROW_HEIGHT = 76;
 const AUTO_LOAD_THRESHOLD = 8;
+const EXPLAIN_MODE_STORAGE_KEY = "utf8-git:explain-mode";
 
 type TimelinePageResponse = {
   commits: TimelineCommit[];
@@ -74,11 +77,13 @@ function issueBadgeClass(state: string): string {
 function CommitRow({
   commit,
   nowMs,
+  mode,
   repoUrl,
   onSelect,
 }: {
   commit: TimelineCommit;
   nowMs: number | null;
+  mode: ExplainMode;
   repoUrl: string;
   onSelect: (commit: TimelineCommit) => void;
 }) {
@@ -113,9 +118,12 @@ function CommitRow({
               {commit.headline || "（无提交信息）"}
             </span>
             {commit.parents.length > 1 ? (
-              <span className="shrink-0 rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[11px] text-orange-800 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200">
-                merge
-              </span>
+              <>
+                <span className="shrink-0 rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[11px] text-orange-800 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200">
+                  merge
+                </span>
+                <GlossaryHint id="merge" mode={mode} />
+              </>
             ) : null}
             {commit.pullRequests.map((pullRequest) => (
               <a
@@ -141,11 +149,15 @@ function CommitRow({
                 #{issue.number} {ISSUE_STATE_LABEL[issue.state] ?? issue.state}
               </a>
             ))}
+            {commit.pullRequests.length > 0 ? <GlossaryHint id="pull-request" mode={mode} /> : null}
+            {issues.length > 0 ? <GlossaryHint id="issue" mode={mode} /> : null}
           </span>
           <span className="mt-1 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
             <span className="truncate">{authorLabel}</span>
+            <GlossaryHint id="author" mode={mode} />
             <span>·</span>
             <code className="font-mono">{shortSha(commit.oid)}</code>
+            <GlossaryHint id="sha" mode={mode} />
             <span>·</span>
             <time
               suppressHydrationWarning
@@ -187,8 +199,35 @@ export function TimelineView({
   const [viewportHeight, setViewportHeight] = useState(600);
   const [nowMs, setNowMs] = useState<number | null>(null);
   const [filters, setFilters] = useState<TimelineFilterState>(EMPTY_TIMELINE_FILTER);
+  const [explainMode, setExplainMode] = useState<ExplainMode>("off");
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // 概念解释层：默认关闭，仅记住用户显式选择过的模式（localStorage 不可用时静默降级）。
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(EXPLAIN_MODE_STORAGE_KEY);
+    } catch {
+      // 隐私模式 / 禁用存储：保持默认关闭
+    }
+    if (!stored || !isExplainMode(stored)) {
+      return;
+    }
+    const mode = stored;
+    // 延迟到宏任务触发，避免在 effect 内同步 setState（react-hooks/set-state-in-effect）
+    const timer = window.setTimeout(() => setExplainMode(mode), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const changeExplainMode = useCallback((next: ExplainMode) => {
+    setExplainMode(next);
+    try {
+      window.localStorage.setItem(EXPLAIN_MODE_STORAGE_KEY, next);
+    } catch {
+      // 忽略写入失败
+    }
+  }, []);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -378,7 +417,31 @@ export function TimelineView({
             ))}
           </select>
         </div>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">已加载 {commits.length} 条提交</p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400">
+          {explainMode === "off" ? null : (
+            <span className="flex items-center gap-1">
+              泳道
+              <GlossaryHint id="lane" mode={explainMode} />
+            </span>
+          )}
+          <span className="flex items-center gap-2">
+            <label htmlFor="explain-mode">术语解释</label>
+            <select
+              id="explain-mode"
+              aria-label="术语解释模式"
+              value={explainMode}
+              onChange={(event) => changeExplainMode(event.target.value as ExplainMode)}
+              className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-xs text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
+            >
+              {EXPLAIN_MODES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </span>
+          <p>已加载 {commits.length} 条提交</p>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
@@ -491,6 +554,7 @@ export function TimelineView({
                       <CommitRow
                         commit={commit}
                         nowMs={nowMs}
+                        mode={explainMode}
                         repoUrl={`https://github.com/${owner}/${name}`}
                         onSelect={setSelectedCommit}
                       />
