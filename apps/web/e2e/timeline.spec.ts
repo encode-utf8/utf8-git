@@ -24,6 +24,15 @@ test("仓库列表 → 时间线 → 翻页（只读最小闭环）", async ({ p
   await expect(laneGraph).toBeVisible();
   expect(await laneGraph.locator("circle").count()).toBeGreaterThan(0);
   expect(await laneGraph.locator("path").count()).toBeGreaterThan(0);
+  // M2-3：关联 PR / Issue 标注为可跳转 GitHub 的链接（mock 第 60 号提交带 PR/Issue）
+  await expect(page.getByRole("link", { name: "#60 已合并" })).toHaveAttribute(
+    "href",
+    /\/pull\/60$/,
+  );
+  await expect(page.getByRole("link", { name: "#1060 已关闭" })).toHaveAttribute(
+    "href",
+    /\/issues\/1060$/,
+  );
 
   // 翻到第 2 页（10 条），到底后显示「已到最底部」
   await page.getByRole("button", { name: "加载更多" }).click();

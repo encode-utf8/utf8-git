@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fetchTimelinePage, normalizeTimelineResponse } from "./github-timeline";
+import { collectIssues, fetchTimelinePage, normalizeTimelineResponse } from "./github-timeline";
 
 const rawResponse = {
   repository: {
@@ -38,6 +38,16 @@ const rawResponse = {
                   state: "MERGED",
                   mergedAt: "2026-10-05T00:00:00Z",
                   url: "https://github.com/encode-utf8/utf8-git/pull/3",
+                  closingIssuesReferences: {
+                    nodes: [
+                      {
+                        number: 12,
+                        title: "时间线偶发空白",
+                        state: "CLOSED",
+                        url: "https://github.com/encode-utf8/utf8-git/issues/12",
+                      },
+                    ],
+                  },
                 },
                 { number: "bad" },
               ],
@@ -86,6 +96,14 @@ describe("normalizeTimelineResponse", () => {
           state: "MERGED",
           mergedAt: "2026-10-05T00:00:00Z",
           url: "https://github.com/encode-utf8/utf8-git/pull/3",
+          issues: [
+            {
+              number: 12,
+              title: "时间线偶发空白",
+              state: "CLOSED",
+              url: "https://github.com/encode-utf8/utf8-git/issues/12",
+            },
+          ],
         },
       ],
     });
@@ -166,5 +184,26 @@ describe("fetchTimelinePage", () => {
 
     const body = JSON.parse(capturedBody ?? "{}") as { variables: Record<string, unknown> };
     expect(body.variables).toEqual({ owner: "o", name: "n", branch: "dev", cursor: "cursor-1" });
+  });
+});
+
+describe("collectIssues", () => {
+  it("跨 PR 聚合 Issue 并按编号去重，保留首次出现顺序", () => {
+    const issue = (number: number) => ({ number, title: `#${number}`, state: "OPEN", url: null });
+    const pullRequest = (number: number, issues: ReturnType<typeof issue>[]) => ({
+      number,
+      title: `PR #${number}`,
+      state: "MERGED",
+      mergedAt: null,
+      url: null,
+      issues,
+    });
+
+    expect(collectIssues([])).toEqual([]);
+    const collected = collectIssues([
+      pullRequest(1, [issue(10), issue(11)]),
+      pullRequest(2, [issue(11), issue(12)]),
+    ]);
+    expect(collected.map((item) => item.number)).toEqual([10, 11, 12]);
   });
 });

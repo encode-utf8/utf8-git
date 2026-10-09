@@ -71,6 +71,16 @@ function makeCommits(count, startNumber, headlinePrefix) {
                   state: "MERGED",
                   mergedAt: "2026-10-07T11:00:00Z",
                   url: `https://github.com/encode-utf8/utf8-git/pull/${number}`,
+                  closingIssuesReferences: {
+                    nodes: [
+                      {
+                        number: number + 1000,
+                        title: `Issue #${number + 1000}`,
+                        state: "CLOSED",
+                        url: `https://github.com/encode-utf8/utf8-git/issues/${number + 1000}`,
+                      },
+                    ],
+                  },
                 },
               ]
             : [],

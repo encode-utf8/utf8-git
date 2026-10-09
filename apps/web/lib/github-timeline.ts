@@ -42,7 +42,16 @@ const TIMELINE_QUERY = `query Timeline($owner: String!, $name: String!, $branch:
             }
             parents(first: 2) { nodes { oid } }
             associatedPullRequests(first: 3) {
-              nodes { number title state mergedAt url }
+              nodes {
+                number
+                title
+                state
+                mergedAt
+                url
+                closingIssuesReferences(first: 3) {
+                  nodes { number title state url }
+                }
+              }
             }
           }
         }
@@ -58,12 +67,21 @@ export type TimelineCommitAuthor = {
   avatarUrl: string | null;
 };
 
+export type TimelineIssue = {
+  number: number;
+  title: string;
+  state: string;
+  url: string | null;
+};
+
 export type TimelinePullRequest = {
   number: number;
   title: string;
   state: string;
   mergedAt: string | null;
   url: string | null;
+  /** 该 PR 关闭的 Issue（GitHub closingIssuesReferences），作为提交标注挂载。 */
+  issues: TimelineIssue[];
 };
 
 export type TimelineCommit = {
@@ -101,12 +119,20 @@ export type TimelineData = {
 
 // ---- 原始响应结构（全部按 unknown 防御式读取）----
 
+type RawIssueNode = {
+  number?: unknown;
+  title?: unknown;
+  state?: unknown;
+  url?: unknown;
+};
+
 type RawPullRequestNode = {
   number?: unknown;
   title?: unknown;
   state?: unknown;
   mergedAt?: unknown;
   url?: unknown;
+  closingIssuesReferences?: { nodes?: Array<RawIssueNode | null> | null } | null;
 };
 
 type RawCommitNode = {
@@ -143,7 +169,7 @@ function readString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function normalizePullRequest(raw: RawPullRequestNode): TimelinePullRequest | null {
+function normalizeIssue(raw: RawIssueNode): TimelineIssue | null {
   const number = typeof raw.number === "number" ? raw.number : null;
   if (number === null) {
     return null;
@@ -152,8 +178,25 @@ function normalizePullRequest(raw: RawPullRequestNode): TimelinePullRequest | nu
     number,
     title: readString(raw.title) ?? "",
     state: readString(raw.state) ?? "UNKNOWN",
+    url: readString(raw.url),
+  };
+}
+
+function normalizePullRequest(raw: RawPullRequestNode): TimelinePullRequest | null {
+  const number = typeof raw.number === "number" ? raw.number : null;
+  if (number === null) {
+    return null;
+  }
+  const issues = (raw.closingIssuesReferences?.nodes ?? [])
+    .map((node) => (node ? normalizeIssue(node) : null))
+    .filter((value): value is TimelineIssue => value !== null);
+  return {
+    number,
+    title: readString(raw.title) ?? "",
+    state: readString(raw.state) ?? "UNKNOWN",
     mergedAt: readString(raw.mergedAt),
     url: readString(raw.url),
+    issues,
   };
 }
 
@@ -221,6 +264,25 @@ export function normalizeTimelineResponse(
       endCursor: readString(history?.pageInfo?.endCursor),
     },
   };
+}
+
+/**
+ * 汇总提交关联 PR 所关闭的 Issue（按编号去重，保留首次出现顺序）。
+ * D1：Issue 作为提交上的标注而非独立节点，故统一在提交维度聚合。
+ */
+export function collectIssues(pullRequests: TimelinePullRequest[]): TimelineIssue[] {
+  const seen = new Set<number>();
+  const issues: TimelineIssue[] = [];
+  for (const pullRequest of pullRequests) {
+    for (const issue of pullRequest.issues) {
+      if (seen.has(issue.number)) {
+        continue;
+      }
+      seen.add(issue.number);
+      issues.push(issue);
+    }
+  }
+  return issues;
 }
 
 export type FetchTimelineParams = {

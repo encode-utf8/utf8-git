@@ -9,7 +9,7 @@ import { formatRelativeTime, formatUtcDateTime, shortSha } from "@/lib/commit-fo
 import { mergeCommits } from "@/lib/commit-list";
 import { fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/lib/error-state";
-import type { TimelineBranch, TimelineCommit } from "@/lib/github-timeline";
+import { collectIssues, type TimelineBranch, type TimelineCommit } from "@/lib/github-timeline";
 import { computeLaneMetrics } from "@/lib/lane-geometry";
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
@@ -49,73 +49,108 @@ function prBadgeClass(state: string): string {
   return "border-zinc-300 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
 }
 
+const ISSUE_STATE_LABEL: Record<string, string> = {
+  OPEN: "开放",
+  CLOSED: "已关闭",
+};
+
+function issueBadgeClass(state: string): string {
+  if (state === "OPEN") {
+    return "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200";
+  }
+  return "border-zinc-300 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
+}
+
 function CommitRow({
   commit,
   nowMs,
+  repoUrl,
   onSelect,
 }: {
   commit: TimelineCommit;
   nowMs: number | null;
+  repoUrl: string;
   onSelect: (commit: TimelineCommit) => void;
 }) {
   const authorLabel = commit.author.login ?? commit.author.name ?? "未知作者";
+  const issues = collectIssues(commit.pullRequests);
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(commit)}
-      className="flex h-full w-full items-start gap-3 border-b border-black/[.06] px-4 py-3 text-left transition-colors hover:bg-black/[.03] focus-visible:bg-black/[.04] focus-visible:outline-none dark:border-white/[.08] dark:hover:bg-white/[.05]"
-    >
-      {commit.author.avatarUrl ? (
-        <Image
-          src={commit.author.avatarUrl}
-          alt=""
-          width={32}
-          height={32}
-          className="mt-0.5 h-8 w-8 shrink-0 rounded-full"
-        />
-      ) : (
-        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-          {authorLabel.slice(0, 1).toUpperCase()}
-        </span>
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-            {commit.headline || "（无提交信息）"}
+    <div className="relative h-full w-full border-b border-black/[.06] dark:border-white/[.08]">
+      {/* 整行可点：遮罩按钮负责选中；内容层 pointer-events-none，链接再单独放开 */}
+      <button
+        type="button"
+        onClick={() => onSelect(commit)}
+        aria-label={`查看提交 ${shortSha(commit.oid)} 详情`}
+        className="absolute inset-0 z-0 transition-colors hover:bg-black/[.03] focus-visible:bg-black/[.04] focus-visible:outline-none dark:hover:bg-white/[.05]"
+      />
+      <div className="pointer-events-none relative z-10 flex h-full w-full items-start gap-3 px-4 py-3">
+        {commit.author.avatarUrl ? (
+          <Image
+            src={commit.author.avatarUrl}
+            alt=""
+            width={32}
+            height={32}
+            className="mt-0.5 h-8 w-8 shrink-0 rounded-full"
+          />
+        ) : (
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            {authorLabel.slice(0, 1).toUpperCase()}
           </span>
-          {commit.parents.length > 1 ? (
-            <span className="shrink-0 rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[11px] text-orange-800 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200">
-              merge
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              {commit.headline || "（无提交信息）"}
             </span>
-          ) : null}
-          {commit.pullRequests.map((pullRequest) => (
-            <span
-              key={pullRequest.number}
-              title={pullRequest.title}
-              className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${prBadgeClass(pullRequest.state)}`}
+            {commit.parents.length > 1 ? (
+              <span className="shrink-0 rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[11px] text-orange-800 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200">
+                merge
+              </span>
+            ) : null}
+            {commit.pullRequests.map((pullRequest) => (
+              <a
+                key={`pr-${pullRequest.number}`}
+                href={pullRequest.url ?? `${repoUrl}/pull/${pullRequest.number}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={pullRequest.title}
+                className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${prBadgeClass(pullRequest.state)}`}
+              >
+                #{pullRequest.number} {PR_STATE_LABEL[pullRequest.state] ?? pullRequest.state}
+              </a>
+            ))}
+            {issues.map((issue) => (
+              <a
+                key={`issue-${issue.number}`}
+                href={issue.url ?? `${repoUrl}/issues/${issue.number}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Issue：${issue.title}`}
+                className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${issueBadgeClass(issue.state)}`}
+              >
+                #{issue.number} {ISSUE_STATE_LABEL[issue.state] ?? issue.state}
+              </a>
+            ))}
+          </span>
+          <span className="mt-1 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="truncate">{authorLabel}</span>
+            <span>·</span>
+            <code className="font-mono">{shortSha(commit.oid)}</code>
+            <span>·</span>
+            <time
+              suppressHydrationWarning
+              title={`${formatUtcDateTime(commit.committedDate)}（UTC）`}
             >
-              #{pullRequest.number} {PR_STATE_LABEL[pullRequest.state] ?? pullRequest.state}
-            </span>
-          ))}
+              {commit.committedDate
+                ? nowMs === null
+                  ? formatUtcDateTime(commit.committedDate)
+                  : formatRelativeTime(Date.parse(commit.committedDate), nowMs)
+                : "—"}
+            </time>
+          </span>
         </span>
-        <span className="mt-1 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-          <span className="truncate">{authorLabel}</span>
-          <span>·</span>
-          <code className="font-mono">{shortSha(commit.oid)}</code>
-          <span>·</span>
-          <time
-            suppressHydrationWarning
-            title={`${formatUtcDateTime(commit.committedDate)}（UTC）`}
-          >
-            {commit.committedDate
-              ? nowMs === null
-                ? formatUtcDateTime(commit.committedDate)
-                : formatRelativeTime(Date.parse(commit.committedDate), nowMs)
-              : "—"}
-          </time>
-        </span>
-      </span>
-    </button>
+      </div>
+    </div>
   );
 }
 
@@ -335,7 +370,12 @@ export function TimelineView({
                     style={{ height: ROW_HEIGHT, paddingLeft: gutterWidth }}
                     role="listitem"
                   >
-                    <CommitRow commit={commit} nowMs={nowMs} onSelect={setSelectedCommit} />
+                    <CommitRow
+                      commit={commit}
+                      nowMs={nowMs}
+                      repoUrl={`https://github.com/${owner}/${name}`}
+                      onSelect={setSelectedCommit}
+                    />
                   </div>
                 ))}
               </div>

@@ -7,7 +7,7 @@ import { formatUtcDateTime, shortSha } from "@/lib/commit-format";
 import { fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
 import type { CommitDetail } from "@/lib/github-commits";
-import type { TimelineCommit } from "@/lib/github-timeline";
+import { collectIssues, type TimelineCommit } from "@/lib/github-timeline";
 
 // 详情接口响应：归一化提交详情 + 缓存 / 降级元信息（与 commit-data.ts 对齐）
 type CommitDetailMeta = {
@@ -56,6 +56,18 @@ function fileStatusClass(status: string): string {
   return "border-zinc-300 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
 }
 
+const ISSUE_STATE_LABEL: Record<string, string> = {
+  OPEN: "开放",
+  CLOSED: "已关闭",
+};
+
+function issueStateClass(state: string): string {
+  if (state === "OPEN") {
+    return "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200";
+  }
+  return "border-zinc-300 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
+}
+
 function prStateClass(state: string): string {
   if (state === "MERGED") {
     return "border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700 dark:bg-purple-950 dark:text-purple-200";
@@ -92,6 +104,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
   const copyTimerRef = useRef<number | null>(null);
 
   const sha = commit?.oid ?? null;
+  const issues = commit ? collectIssues(commit.pullRequests) : [];
   const current = sha !== null && state.sha === sha;
   const detail = current ? state.detail : null;
   const error = current ? state.error : null;
@@ -299,6 +312,24 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                     className={`rounded-full border px-2 py-0.5 underline-offset-4 hover:underline ${prStateClass(pullRequest.state)}`}
                   >
                     #{pullRequest.number} {PR_STATE_LABEL[pullRequest.state] ?? pullRequest.state}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+
+            {issues.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-zinc-500 dark:text-zinc-400">关联 Issue</span>
+                {issues.map((issue) => (
+                  <a
+                    key={issue.number}
+                    href={issue.url ?? `https://github.com/${owner}/${name}/issues/${issue.number}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={issue.title}
+                    className={`rounded-full border px-2 py-0.5 underline-offset-4 hover:underline ${issueStateClass(issue.state)}`}
+                  >
+                    #{issue.number} {ISSUE_STATE_LABEL[issue.state] ?? issue.state}
                   </a>
                 ))}
               </div>
