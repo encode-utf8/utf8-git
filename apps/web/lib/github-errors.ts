@@ -66,6 +66,14 @@ export class GitHubNetworkError extends GitHubApiError {
   }
 }
 
+// 422：请求语义非法（分支名非法、引用已存在等）
+export class GitHubValidationError extends GitHubApiError {
+  constructor(message = "GitHub 拒绝了本次请求（422）") {
+    super(message, 422);
+    this.name = "GitHubValidationError";
+  }
+}
+
 // GraphQL 层返回的语义错误（非限流 / 非未找到）
 export class GitHubGraphQLError extends GitHubApiError {
   readonly details: string[];

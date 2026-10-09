@@ -17,6 +17,7 @@ export {
   GitHubNetworkError,
   GitHubNotFoundError,
   GitHubTimeoutError,
+  GitHubValidationError,
 } from "./github-errors";
 
 // 上游 REST 地址：默认官方 API；E2E / 自建可用 GITHUB_API_BASE_URL 指向本地 mock（仅服务端读取）

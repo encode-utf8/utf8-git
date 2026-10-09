@@ -19,12 +19,20 @@ export type OperationErrorCode = "confirmation_required" | "execution_failed";
 export class OperationError extends Error {
   readonly code: OperationErrorCode;
   readonly detail: string | null;
+  /** 执行阶段抛出的原始错误（如 GitHub 错误分类），供调用方按状态码细化响应。 */
+  readonly originalError: unknown;
 
-  constructor(code: OperationErrorCode, message: string, detail: string | null = null) {
+  constructor(
+    code: OperationErrorCode,
+    message: string,
+    detail: string | null = null,
+    originalError: unknown = null,
+  ) {
     super(message);
     this.name = "OperationError";
     this.code = code;
     this.detail = detail;
+    this.originalError = originalError;
   }
 }
 
@@ -164,6 +172,6 @@ export async function runOperation<T>({
       error: detail,
       recordedAt: now().toISOString(),
     });
-    throw new OperationError("execution_failed", "写操作执行失败，已记录审计。", detail);
+    throw new OperationError("execution_failed", "写操作执行失败，已记录审计。", detail, error);
   }
 }
