@@ -19,6 +19,11 @@ test("仓库列表 → 时间线 → 翻页（只读最小闭环）", async ({ p
   // 第 1 页 50 条，最新提交可见
   await expect(page.getByText("feat: 时间线提交 #60")).toBeVisible();
   await expect(page.getByText("已加载 50 条提交")).toBeVisible();
+  // M2-2：泳道图层随窗口渲染（mock 为线性历史，泳道数为 1）
+  const laneGraph = page.getByRole("list", { name: "提交时间线" }).locator("svg");
+  await expect(laneGraph).toBeVisible();
+  expect(await laneGraph.locator("circle").count()).toBeGreaterThan(0);
+  expect(await laneGraph.locator("path").count()).toBeGreaterThan(0);
 
   // 翻到第 2 页（10 条），到底后显示「已到最底部」
   await page.getByRole("button", { name: "加载更多" }).click();

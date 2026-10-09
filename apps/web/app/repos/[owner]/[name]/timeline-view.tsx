@@ -3,14 +3,18 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { computeLaneLayout, sliceLaneLayout } from "@utf8-git/git-graph";
+
 import { formatRelativeTime, formatUtcDateTime, shortSha } from "@/lib/commit-format";
 import { mergeCommits } from "@/lib/commit-list";
 import { fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/lib/error-state";
 import type { TimelineBranch, TimelineCommit } from "@/lib/github-timeline";
+import { computeLaneMetrics } from "@/lib/lane-geometry";
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { CommitDetailPanel } from "./commit-detail";
+import { LaneGraph } from "./lane-graph";
 
 const ROW_HEIGHT = 76;
 const AUTO_LOAD_THRESHOLD = 8;
@@ -178,6 +182,23 @@ export function TimelineView({
   );
   const visibleCommits = commits.slice(windowRange.start, windowRange.end);
 
+  // 泳道布局：只依赖 commits（切换分支 / 加载更多时重算），窗口滚动不触发。
+  const laneLayout = useMemo(
+    () =>
+      computeLaneLayout(commits.map((commit) => ({ oid: commit.oid, parents: commit.parents }))),
+    [commits],
+  );
+  // 只切出当前窗口内的节点与连线，保证每帧 SVG 元素量恒定（不随总提交数增长）。
+  const laneSlice = useMemo(
+    () => sliceLaneLayout(laneLayout, windowRange.start, windowRange.end),
+    [laneLayout, windowRange.start, windowRange.end],
+  );
+  // 泳道几何：列宽只随整体 laneCount 变化，滚动时稳定。
+  const { laneWidth, gutterWidth } = useMemo(
+    () => computeLaneMetrics(laneSlice.laneCount),
+    [laneSlice.laneCount],
+  );
+
   const loadMore = useCallback(async () => {
     if (loading || !hasNextPage) {
       return;
@@ -295,9 +316,25 @@ export function TimelineView({
             className="mt-3 h-[65vh] overflow-y-auto overscroll-contain rounded-xl border border-black/[.08] bg-white dark:border-white/[.145] dark:bg-zinc-950"
           >
             <div style={{ height: windowRange.totalHeight, position: "relative" }}>
-              <div style={{ transform: `translateY(${windowRange.offsetY}px)` }}>
+              <div
+                style={{ transform: `translateY(${windowRange.offsetY}px)`, position: "relative" }}
+              >
+                {/* 泳道槽与行共用同一 translateY 坐标系，故绝对定位到窗口内容左上角 */}
+                {laneSlice.laneCount > 0 ? (
+                  <LaneGraph
+                    slice={laneSlice}
+                    rowHeight={ROW_HEIGHT}
+                    laneWidth={laneWidth}
+                    height={laneSlice.nodes.length * ROW_HEIGHT}
+                    className="absolute left-0 top-0"
+                  />
+                ) : null}
                 {visibleCommits.map((commit) => (
-                  <div key={commit.oid} style={{ height: ROW_HEIGHT }} role="listitem">
+                  <div
+                    key={commit.oid}
+                    style={{ height: ROW_HEIGHT, paddingLeft: gutterWidth }}
+                    role="listitem"
+                  >
                     <CommitRow commit={commit} nowMs={nowMs} onSelect={setSelectedCommit} />
                   </div>
                 ))}
