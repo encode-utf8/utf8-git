@@ -11,6 +11,35 @@
 
 ---
 
+## 2026-10-09 · M2-3 PR / Issue 关联标注：GraphQL 聚合 + 行内跳转
+
+**目标**：把提交关联的 PR / Issue 作为**提交上的标注**呈现（D1：不新增独立节点），可跳转 GitHub，并能在详情面板展开。
+
+**完成内容**
+
+- `lib/github-timeline.ts`：时间线查询的 `associatedPullRequests` 增加 `closingIssuesReferences(first: 3) { nodes { number title state url } }`；新增 `TimelineIssue` 类型、`TimelinePullRequest.issues` 字段与 `collectIssues()`（跨 PR 按编号去重、保留首次出现顺序）。
+- `timeline-view.tsx`：`CommitRow` 由「整行 `<button>`」改为「遮罩 `<button>` + `pointer-events-none` 内容层」，使行内 PR / Issue 标注可以是真正的 `<a>` 链接（`target="_blank"`，跳转 GitHub）；新增 Issue 徽标。
+- `commit-detail.tsx`：详情面板新增「关联 Issue」段（与既有「关联 Pull Request」并列），聚合该提交所有关联 PR 关闭的 Issue。
+- 单测：`github-timeline.test.ts` 覆盖 `closingIssuesReferences` 归一化与 `collectIssues` 去重。
+- E2E：`mock-github.mjs` 的 PR 节点补 `closingIssuesReferences`；`timeline.spec.ts` 断言行内 `#60 已合并` / `#1060 已关闭` 链接直指 GitHub。
+
+**关键决策**
+
+| 编号     | 决策                                              | 理由                                                                                                    | 备选与否决原因                                                                          |
+| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| ADR-0055 | 行内标注改为「遮罩按钮 + pointer-events 分层」    | `<a>` 不能嵌在 `<button>` 内（HTML 非法、hydration 报错、点击会被父按钮吞掉）；分层后整行仍可点选、标注可独立跳转 | 用 `role="link"` + `onClick` 模拟链接：伪造链接语义，牺牲中键 / 右键 / 可访问性         |
+| ADR-0056 | Issue 数据取 PR 的 `closingIssuesReferences`      | GitHub GraphQL 在 Commit 上没有 `associatedIssues`；提交与 Issue 的关联本质是「由该提交所在 PR 关闭」，与 GitHub 提交页口径一致 | 单独再发一次仓库级 Issue 查询：请求翻倍且仍需自行做提交↔Issue 匹配                     |
+
+**问题与风险**
+
+- Issue 标注口径是「被关联 PR 关闭的 Issue」；未绑定 PR 的 Issue（纯讨论 / 未关闭）不会出现在时间线上。
+- 每个提交的关联 PR 上限 3、每个 PR 的关联 Issue 上限 3（GraphQL `first`），超出部分不展示；详情面板只做「跳转 GitHub」，未内联 Issue 正文。
+- 行内标注在 `pointer-events` 分层下有细微命中边界（徽标附近点击命中链接而非选中该行）。
+
+**下一步**
+
+- M2-4：过滤与搜索（作者 / 分支 / 事件类型 / 关键词）。
+
 ## 2026-10-09 · M2-2 分支泳道渲染：算法包窗口化 + apps/web SVG 接入
 
 **目标**：把 M2-1 的泳道布局算法真正画到时间线上，并在「50 分支 / 5000 提交」规模下保持可交互。
