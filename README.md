@@ -6,7 +6,7 @@ utf8-git 是一个面向 **Git 新手 / 团队新人** 的仓库可视化与交�
 用 GitHub 账号登录后，你可以像看地图一样浏览仓库的分支、提交、合并与 Issue，
 并通过点击完成创建分支、提交 Issue、合并或删除分支等常用操作——**不需要记住任何 Git 命令**。
 
-![status](https://img.shields.io/badge/status-M1%20%E9%AA%A8%E6%9E%B6%E9%98%B6%E6%AE%B5-blue)
+![status](https://img.shields.io/badge/status-M2%20%E5%8F%AA%E8%AF%BB%E5%A2%9E%E5%BC%BA-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -24,13 +24,13 @@ utf8-git 的目标是：**把仓库的开发过程还原成一条可交互的时
 
 ## 核心能力（规划）
 
-| 阶段        | 能力                                       | 说明                                                                                                       |
-| ----------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| M1 只读闭环 | GitHub 登录 · 仓库列表 · 提交时间线        | 登录后可浏览自己创建/参与的**公有与私有**仓库，查看**按提交聚合**的时间线（虚拟滚动 + 提交详情）与分支起点 |
-| M2 只读增强 | 分支图 · PR / Issue 泳道 · 过滤与搜索      | 在同一时间线上叠加分支、合并、Issue 事件，支持按人/分支/时间筛选                                           |
-| M3 交互操作 | 创建分支 · 提交 Issue · 合并 PR · 删除分支 | 点击式写操作，带二次确认、影响预览与审计记录                                                               |
-| M4 体验工程 | 性能 · 缓存 · 测试 · 国际化 · 可访问性     | 面向真实大仓库打磨，形成可持续开发节奏                                                                     |
-| M5 生态扩展 | 教学引导 · 多平台（GitLab 等）· 插件       | 从工具走向「Git 学习平台」                                                                                 |
+| 阶段        | 能力                                       | 说明                                                                                                                                    |
+| ----------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| M1 只读闭环 | GitHub 登录 · 仓库列表 · 提交时间线        | 登录后可浏览自己创建/参与的**公有与私有**仓库，查看**按提交聚合**的时间线（虚拟滚动 + 提交详情）与分支起点                              |
+| M2 只读增强 | 分支泳道 · PR / Issue 标注 · 过滤与搜索    | 分支泳道以 SVG 分层渲染 + 虚拟窗口呈现（50 分支 / 5000+ 提交仍可交互）；提交上挂载 PR / Issue 关联标注并可跳转 GitHub；过滤与搜索规划中 |
+| M3 交互操作 | 创建分支 · 提交 Issue · 合并 PR · 删除分支 | 点击式写操作，带二次确认、影响预览与审计记录                                                                                            |
+| M4 体验工程 | 性能 · 缓存 · 测试 · 国际化 · 可访问性     | 面向真实大仓库打磨，形成可持续开发节奏                                                                                                  |
+| M5 生态扩展 | 教学引导 · 多平台（GitLab 等）· 插件       | 从工具走向「Git 学习平台」                                                                                                              |
 
 ## 目标用户
 
@@ -47,11 +47,11 @@ utf8-git 的目标是：**把仓库的开发过程还原成一条可交互的时
 5. **零配置**：平台内置 OAuth App，用户登录即用，不需要自建应用或填任何配置。
 6. **在线协作**：数据以 GitHub 实时状态为准，不提供离线模式。
 
-## 技术栈（规划）
+## 技术栈
 
 - 全栈：TypeScript · Next.js（App Router）
 - 界面：Tailwind CSS · shadcn/ui
-- 可视化：D3 / 自研泳道布局（提交 DAG）· 时间线组件
+- 可视化：自研泳道布局（`packages/git-graph`，提交 DAG）· SVG 分层渲染 + 虚拟窗口 · 时间线组件
 - 数据：GitHub GraphQL API v4（读）+ REST API v3（写）· PostgreSQL + Prisma
 - 鉴权：Auth.js（GitHub OAuth App）
 - 部署：Vercel + Neon/Supabase · GitHub Actions CI
@@ -80,7 +80,7 @@ utf8-git/
 └── .github/           # CI、Issue/PR 模板
 ```
 
-> 注：仓库骨架已按上述结构初始化（pnpm workspace：`apps/web` + `packages/*`），本地开发说明见下文。
+> 注：仓库骨架已按上述结构初始化（pnpm workspace：`apps/web` + `packages/*`）；其中 `packages/git-graph` 已落地泳道布局、窗口切片与合成历史基准。本地开发说明见下文。
 
 ## 本地开发
 
@@ -97,6 +97,7 @@ pnpm dev        # 启动 apps/web 开发服务器（http://localhost:3000）
 pnpm lint       # ESLint 全量检查
 pnpm typecheck  # TypeScript 类型检查（web 会先生成 Next 路由类型）
 pnpm test       # Vitest 单元测试
+pnpm test:e2e   # Playwright 端到端测试（需本地 PostgreSQL 与 Chromium，见下文）
 pnpm build      # 构建全部 workspace
 ```
 
@@ -121,13 +122,14 @@ pnpm dev                                                # 启动后访问 http:/
 - access / refresh / id token 在数据库中均为 AES-256-GCM 密文，加密密钥（`AUTH_TOKEN_ENC_KEY`）只存在于环境变量中。
 - 令牌自动续期：access token 临近过期（默认提前 5 min）时自动用 refresh token 换取新令牌并轮换入库，无需每 8 小时重新授权；仅在刷新令牌失效时才要求重新授权。
 - 在线状态（M1-9 起）：断网 / 请求超时 / GitHub 限流都有明确提示与「重试」入口——服务端渲染阶段给出可读错误页，客户端请求按指数退避自动重试（401 / 403 / 404 / 429 不重试），断网时页面顶部显示全局横幅，限流时提示恢复时间；降级缓存会标注获取时间，不冒充最新数据。
+- 分支泳道与事件标注（M2-1 ~ M2-3 起）：时间线左侧以 SVG 分层渲染分支泳道（`packages/git-graph` 负责布局与窗口切片，虚拟滚动下每帧只绘窗口内元素）；提交行与详情面板展示关联 PR / Issue 徽标，点击直达 GitHub。
 - 多实例与部署（M1-6 起）：默认（`STORE_BACKEND` 未设置或为 `memory`）用进程内内存缓存，适合单实例与本地开发；设为 `postgres` 后 TTL 缓存与限流快照改存数据库（`shared_cache_entries` / `rate_limit_states`），多实例 / Serverless 下跨实例共享，令牌续期竞态也会复用其他实例已刷新的令牌。部署形态、环境变量清单、连接池与回滚见 [docs/deployment.md](docs/deployment.md)。
 
 > 网络说明：仓库根目录 `.npmrc` 已配置国内镜像（registry.npmmirror.com）；若可直连 npm 官方源，可删除该文件。
 
 ## 参与贡献
 
-项目处于早期，欢迎通过 Issue 提出想法与使用场景。贡献指南（CONTRIBUTING）将在 M1 阶段补齐。
+项目处于早期，欢迎通过 Issue 提出想法与使用场景。贡献指南与 Issue / PR 模板见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## License
 
