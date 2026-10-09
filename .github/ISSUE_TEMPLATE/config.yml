@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用说明与本地开发
+    url: https://github.com/encode-utf8/utf8-git/blob/main/README.md
+    about: README 包含项目背景、技术栈、本地开发与常用命令。
+  - name: 项目文档
+    url: https://github.com/encode-utf8/utf8-git/tree/main/docs
+    about: 需求分析、技术分析、实现路线、待办日志与部署说明。
