@@ -1,16 +1,10 @@
-import { signIn } from "@/lib/auth";
+import Link from "next/link";
 
-// GitHub 授权范围说明（与 lib/auth.ts 中的 scope 保持一致）
-const PERMISSIONS = [
-  {
-    scope: "read:user",
-    purpose: "读取公开资料（昵称、头像、登录名），用于展示账号信息",
-  },
-  {
-    scope: "repo",
-    purpose: "读取你有权访问的仓库（含私有仓库）以生成提交时间线；不会修改任何仓库内容",
-  },
-];
+import { signIn } from "@/lib/auth";
+import { GITHUB_SCOPES } from "@/lib/permissions";
+
+// 权限文案集中在 lib/permissions.ts，登录页与 /permissions 说明页共用
+const PERMISSIONS = GITHUB_SCOPES;
 
 // 仅允许站内相对路径，避免开放重定向
 function normalizeCallbackUrl(value: string | undefined): string {
@@ -72,6 +66,11 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           <p>
             撤销授权：随时前往 GitHub 的 Settings → Applications → Authorized OAuth Apps 中移除
             utf8-git，撤销后令牌立即失效。
+          </p>
+          <p>
+            <Link href="/permissions" className="underline underline-offset-4">
+              查看完整授权说明
+            </Link>
           </p>
         </section>
       </main>

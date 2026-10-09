@@ -237,7 +237,16 @@ export default async function ReposPage() {
               <GitHubAuthorizationLink label="打开 GitHub 授权管理页" />
               ，在 Organization access 中授权对应组织）。
             </li>
-            <li>授权范围不足：重新授权并确认包含 repo 权限。</li>
+            <li>
+              授权范围不足：请
+              <Link
+                href="/permissions"
+                className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
+              >
+                查看授权说明
+              </Link>
+              后重新授权并确认包含 repo 权限。
+            </li>
           </ul>
           <ReauthButton action={reauthorize} />
         </Notice>
