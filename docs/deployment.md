@@ -24,6 +24,9 @@
 | `AUTH_GITHUB_ID`                      | 是   | GitHub OAuth App Client ID                                | 生产与预览可共用，或各建一个                   |
 | `AUTH_GITHUB_SECRET`                  | 是   | GitHub OAuth App Client Secret                            | 同上                                           |
 | `STORE_BACKEND`                       | 否   | `memory`（默认）/ `postgres`                              | 多实例、Serverless 必须设 `postgres`           |
+| `GITHUB_API_BASE_URL`                 | 否   | 上游 REST 基址（默认官方 API）                            | 仅 E2E / 自建指向本地 mock                     |
+| `GITHUB_GRAPHQL_ENDPOINT`             | 否   | 上游 GraphQL 地址（默认官方 API）                         | 同上                                           |
+| `GITHUB_TOKEN_ENDPOINT`               | 否   | 上游令牌地址（默认 GitHub）                               | 同上                                           |
 | `GITHUB_RATE_LIMIT_DEGRADE_THRESHOLD` | 否   | 剩余配额低于该值时进入「只读缓存」降级                    | 默认 `100`                                     |
 | `AUTH_TRUST_HOST`                     | 否   | 非 Vercel 自建部署时信任 `Host` 头                        | 自建填 `true`；Vercel 自动识别无需设置         |
 | `AUTH_URL`                            | 否   | 显式指定外部地址（自建 / 反代场景）                       | `https://<域名>`                               |

@@ -9,7 +9,9 @@ import {
   GitHubUnauthorizedError,
 } from "./github-errors";
 
-const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
+// 上游令牌地址：默认 GitHub；E2E / 自建可用 GITHUB_TOKEN_ENDPOINT 覆盖（仅服务端读取）
+const GITHUB_TOKEN_ENDPOINT =
+  process.env.GITHUB_TOKEN_ENDPOINT ?? "https://github.com/login/oauth/access_token";
 const DEFAULT_TIMEOUT_MS = 8000;
 
 export type RefreshedGitHubToken = {

@@ -104,7 +104,7 @@ flowchart TB
 | 数据库 | PostgreSQL（Neon 或 Supabase） | SQLite / MongoDB | 关系清晰（用户-会话-缓存-审计）；Serverless 友好 |
 | ORM | Prisma | Drizzle | 迁移与类型生成成熟 |
 | 鉴权 | Auth.js（GitHub Provider） | 自研 OAuth | 内置 OAuth/PKCE/会话管理，可自定义 token 持久化 |
-| 测试 | Vitest（单元 + 路由 / API 集成）+ Testing Library（组件） | Jest | 与 Vite/Next 生态契合；MVP 不引入浏览器 E2E |
+| 测试 | Vitest（单元）+ Testing Library（组件）+ Playwright（E2E） | Jest | 与 Vite/Next 生态契合 |
 | CI/CD | GitHub Actions + Vercel | — | 免费、与仓库天然集成 |
 | 代码质量 | ESLint + Prettier + commitlint + Changesets(可选) | — | 统一风格与提交规范 |
 
@@ -293,8 +293,9 @@ for c in commits:
 | --- | --- | --- |
 | 单元测试 | 泳道算法、权限判断、操作编排（幂等/重试）、Zod 校验 | Vitest |
 | 组件测试 | 时间线渲染、确认卡片、错误与空状态 | Testing Library |
-| 集成测试 | 路由 / API（mock 会话与令牌 + fetch 桩）、GitHub 客户端（MSW 模拟 GraphQL/REST）、缓存与降级逻辑 | Vitest（+ MSW） |
-| 性能 | 1000/10000 节点时间线渲染基准 | Vitest bench + 浏览器手动量测 |
+| 集成测试 | GitHub 客户端（MSW 模拟 GraphQL/REST）、缓存与降级逻辑 | Vitest + MSW |
+| E2E | 登录（mock OAuth）→ 选仓库 → 看时间线 → 建分支 → 删分支 → 恢复 | Playwright |
+| 性能 | 1000/10000 节点时间线渲染基准 | Vitest bench + Playwright trace |
 | 可观测性 | 结构化日志（请求耗时、限流剩余、操作结果）；错误上报（Sentry 可选） | — |
 
 ## 10. 技术风险与缓解

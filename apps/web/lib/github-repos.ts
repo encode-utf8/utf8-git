@@ -19,7 +19,8 @@ export {
   GitHubTimeoutError,
 } from "./github-errors";
 
-const GITHUB_API_BASE = "https://api.github.com";
+// 上游 REST 地址：默认官方 API；E2E / 自建可用 GITHUB_API_BASE_URL 指向本地 mock（仅服务端读取）
+const GITHUB_API_BASE = process.env.GITHUB_API_BASE_URL ?? "https://api.github.com";
 
 // REST 响应头中的配额快照（x-ratelimit-*）
 export type RestRateLimitInfo = {

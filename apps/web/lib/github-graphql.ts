@@ -13,7 +13,9 @@ import {
   GitHubUnauthorizedError,
 } from "./github-errors";
 
-const GITHUB_GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
+// 上游 GraphQL 地址：默认官方 API；E2E / 自建可用 GITHUB_GRAPHQL_ENDPOINT 覆盖（仅服务端读取）
+const GITHUB_GRAPHQL_ENDPOINT =
+  process.env.GITHUB_GRAPHQL_ENDPOINT ?? "https://api.github.com/graphql";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_RETRIES = 2;

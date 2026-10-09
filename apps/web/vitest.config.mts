@@ -1,14 +1,10 @@
-import path from "node:path";
-
 import { defineConfig } from "vitest/config";
 
-// 与 apps/web/tsconfig.json 的 paths（"@/*": ["./*"]）保持一致，
-// 让路由 / 页面里的 "@/..." 导入在 vitest 下也能解析（Next 运行时不经过此配置）。
+// 单元 / 集成测试配置。
+// e2e/ 下的 Playwright 用例（*.spec.ts）由 `playwright test` 运行，必须从 vitest 的收集范围里排除，
+// 否则 vitest 会按默认 include（**/*.spec.ts）把它们当测试文件加载并直接报错。
 export default defineConfig({
-  resolve: {
-    alias: { "@": path.resolve(process.cwd(), ".") },
-  },
   test: {
-    environment: "node",
+    exclude: ["**/node_modules/**", "**/dist/**", "**/.next/**", "e2e/**"],
   },
 });

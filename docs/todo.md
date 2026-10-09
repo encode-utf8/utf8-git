@@ -61,7 +61,7 @@
 ### 2.5 验证
 
 - [x] TODO-141 关键路径单元测试（数据层 + 限流降级；数据层部分随 M1-4 完成）
-- [x] TODO-142 关键路径集成测试：登录（mock 会话）→ 选仓库 → 浏览时间线（vitest 路由 / API 集成，见 `apps/web/tests/api-routes.test.ts`）
+- [~] TODO-142 E2E：登录（mock）→ 选仓库 → 浏览时间线（用例、依赖与 CI `e2e` 任务已就绪，待本地 / CI 实跑）
 - [x] TODO-144 部署自检（`GET /api/health` + `pnpm deploy:selfcheck`；见 `docs/deployment.md` §3.2）
 - [x] TODO-143 用 3 个真实仓库（小/中/大）做性能验证（`scripts/perf-validate.mjs` + `docs/reports/tech-analysis/M1-7-perf-validation.md`）
 

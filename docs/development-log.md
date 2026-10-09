@@ -11,7 +11,39 @@
 
 ---
 
+## 2026-10-09 · 恢复 Playwright E2E 基线（撤销 ADR-0049 / ADR-0050）
+
+**目标**：撤销同日「用 vitest 路由 / API 集成测试替代 Playwright E2E」的决策。项目确认**需要 Postgres**，并已在 Vercel 完成部署，数据库驱动的端到端测试是对真实链路的有效保障；此前「为一条用例不该引入数据库」的前提不再成立。
+
+**完成内容**
+
+- 恢复文件：`apps/web/e2e/mock-github.mjs`、`e2e/global-setup.ts`、`e2e/timeline.spec.ts`、`e2e/auth.spec.ts`、`playwright.config.ts`（独立 `*_e2e` 库、mock 上游端口 3211、应用端口 3210）。
+- 恢复依赖与脚本：`apps/web` 加回 `@playwright/test` 与 `test:e2e`；根 `package.json` 恢复 `test:e2e`（先 `next build` 再跑 Playwright）；`.gitignore` 恢复 `apps/web/e2e/.auth/`；CI 恢复 `e2e` 任务（postgres:16 service + chromium，失败上传报告）。
+- 恢复可测试性改造：`github-repos.ts` / `github-commits.ts` / `github-graphql.ts` / `github-token.ts` 的上游地址重新支持 `GITHUB_API_BASE_URL` / `GITHUB_GRAPHQL_ENDPOINT` / `GITHUB_TOKEN_ENDPOINT` 覆盖（默认官方地址）。
+- 撤销 vitest 替代：删除 `apps/web/tests/api-routes.test.ts`；保留精简的 `apps/web/vitest.config.mts`（不含 `@` 别名），仅用于把 `e2e/**` 从 vitest 收集范围排除。
+- 修复一处基线缺陷：恢复后的 Playwright `*.spec.ts` 会被 vitest 默认 include（`**/*.spec.ts`）收集并报「Playwright Test did not expect test() to be called here」，导致 2 个套件失败。原实现从未实跑，故此前未暴露；本次在 `vitest.config.mts` 中显式 `exclude: ["e2e/**"]` 修掉。
+- 锁文件：`pnpm install` 写入 `@playwright/test` / `playwright` / `playwright-core`。
+- 文档同步：`docs/deployment.md`（§2 恢复三条上游覆盖变量）、`docs/todo.md`（TODO-142 改回 E2E 口径）、`docs/roadmap.md`（M1-7 恢复「1 条 E2E」、M4 质量恢复 E2E 覆盖 5 条关键路径）、`docs/technical-analysis.md`（测试选型恢复集成 / E2E / 性能分层）。
+
+**关键决策**
+
+| 编号     | 决策                                                          | 理由                                                                                                          | 备选与否决原因                                                                                               |
+| -------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| ADR-0051 | **保留数据库驱动的 Playwright E2E**，撤销 ADR-0049 / ADR-0050 | 项目需要 Postgres 且已部署 Vercel；E2E 覆盖浏览器 + 服务端组装 + 翻页交互的真实链路，是集成测试无法替代的一层 | 只保留 vitest 集成：覆盖不到浏览器行为与 hydration；E2E 引入数据库成本：项目本就以 Postgres 为准，不再是负担 |
+
+**问题与风险**
+
+- 本机 Docker 有 Postgres 镜像但未起库，`pnpm test:e2e` 未在本地实跑；其余 `install` / `test` / `lint` / `typecheck` / `build` 均已在本地跑通，E2E 以 CI 或本地起库后实跑为准。
+- E2E 依赖单 worker 串行（内存游标链），多实例共享存储下的翻页仍由 M1-6 / M1-7 覆盖。
+
+**下一步**
+
+- 本地 `docker compose -f docker-compose.dev.yml up -d` 起库后跑一次 `pnpm test:e2e`，确认恢复后的基线全绿。
+- M2-2：把 `computeLaneLayout` 接入时间线 SVG 泳道渲染。
+
 ## 2026-10-09 · 撤掉 Playwright E2E，改为 vitest 路由 / API 集成测试
+
+> 注：本条决策已于同日撤销——项目需要 Postgres 且已部署 Vercel，已恢复数据库驱动的 E2E 基线；见上一条与 ADR-0051。
 
 **目标**：上一日引入的 Playwright E2E 需要额外起 Postgres（会话 / 令牌在当前实现里只有 Prisma 一种存储，没有本地文件后端），与「E2E 不应引入浏览器与数据库依赖」的诉求冲突。改为在 vitest 内做路由 / API 集成测试：覆盖同一段组装链路，但零外部依赖。
 
@@ -42,7 +74,8 @@
 - M2-2：把 `computeLaneLayout` 接入时间线 SVG 泳道渲染。
 
 ## 2026-10-08 · M1 收尾（Playwright E2E + 授权说明页 + 协作模板）与 M2-1 算法内核
-> 注：本条中的 Playwright E2E 已于 2026-10-09 撤销（改为 vitest 路由 / API 集成测试），见上一条。
+
+> 注：本条中的 Playwright E2E 于 2026-10-09 短暂撤销后已于同日恢复（见最新一条与 ADR-0051）。
 
 **目标**：补齐 M1 退出标准的两处缺口——E2E 测试基线与 `repo` scope 授权说明；清掉 M0 遗留的协作模板；并为 M2 起步先落地可独立测试的泳道布局算法内核。本次确定三项决策：E2E 用 Playwright、预览环境加稳定别名、可并行的工作并行推进。
 
@@ -67,7 +100,7 @@
 **问题与风险**
 
 - 本机**无 Node / pnpm / Docker / Postgres**，未能执行 `pnpm install`、`build`、`test`、`test:e2e`；上述改动均**未在本机验证**，需在本地或 CI 实跑确认。
-- 新增依赖 `@playwright/test` **尚未写入 `pnpm-lock.yaml`**（需 `pnpm install` 生成并提交），否则 CI 的 `--frozen-lockfile` 与 `e2e` 任务会失败（该依赖随后随 E2E 一并撤销，锁文件已回退，见 2026-10-09）。
+- 新增依赖 `@playwright/test` **尚未写入 `pnpm-lock.yaml`**（需 `pnpm install` 生成并提交），否则 CI 的 `--frozen-lockfile` 与 `e2e` 任务会失败（该依赖已于 2026-10-09 恢复 E2E 时通过 `pnpm install` 写入锁文件）。
 - E2E 依赖 `STORE_BACKEND=memory` 与服务端内存游标链，故配置为单 worker 串行；多实例共享存储下的翻页另由 M1-6 / M1-7 覆盖。
 - `layout.ts` 未经 `pnpm test` 验证，仅由作者以等价仿真核对断言，仍需 CI 单测确认。
 

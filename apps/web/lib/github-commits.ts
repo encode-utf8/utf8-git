@@ -11,7 +11,8 @@ import {
 import { getRateLimitResetAt, readRateLimitHeaders, type RestRateLimitInfo } from "./github-repos";
 import { githubFetch } from "./github-fetch";
 
-const GITHUB_API_BASE = "https://api.github.com";
+// 上游 REST 地址：默认官方 API；E2E / 自建可用 GITHUB_API_BASE_URL 指向本地 mock（仅服务端读取）
+const GITHUB_API_BASE = process.env.GITHUB_API_BASE_URL ?? "https://api.github.com";
 
 // GitHub 最多返回 300 个文件；MVP 截取前 100 并标记截断
 export const COMMIT_FILES_LIMIT = 100;
