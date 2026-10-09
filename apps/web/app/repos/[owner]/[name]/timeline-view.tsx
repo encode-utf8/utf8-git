@@ -127,6 +127,10 @@ export function TimelineView({
   const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
   const [page, setPage] = useState(1);
   const [branch, setBranch] = useState(initialBranch);
+  // 第 1 页由服务端渲染、未指定分支参数；分页请求必须沿用同样的「不传分支」，
+  // 否则服务端的游标链 key（user / owner / name / branch）不一致，会返回 409 cursor_expired。
+  // 用户手动切换分支后，这里同步为具体分支名。
+  const [branchParam, setBranchParam] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<OnlineErrorInfo | null>(null);
   const [selectedCommit, setSelectedCommit] = useState<TimelineCommit | null>(null);
@@ -182,8 +186,8 @@ export function TimelineView({
     setLoadError(null);
     const nextPage = page + 1;
     const query = new URLSearchParams({ page: String(nextPage) });
-    if (branch) {
-      query.set("branch", branch);
+    if (branchParam) {
+      query.set("branch", branchParam);
     }
     try {
       const response = await fetchWithRetry(
@@ -203,7 +207,7 @@ export function TimelineView({
     } finally {
       setLoading(false);
     }
-  }, [branch, hasNextPage, loading, name, owner, page]);
+  }, [branchParam, hasNextPage, loading, name, owner, page]);
 
   useEffect(() => {
     // 存在错误时暂停自动翻页，等待用户手动重试，避免对限流 / 故障反复冲击
@@ -238,6 +242,7 @@ export function TimelineView({
         setHasNextPage(data.pageInfo.hasNextPage);
         setPage(1);
         setBranch(nextBranch);
+        setBranchParam(nextBranch);
         setSelectedCommit(null);
         containerRef.current?.scrollTo({ top: 0 });
       } catch (error) {
