@@ -11,6 +11,14 @@ import { fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/lib/error-state";
 import { collectIssues, type TimelineBranch, type TimelineCommit } from "@/lib/github-timeline";
 import { computeLaneMetrics } from "@/lib/lane-geometry";
+import {
+  EMPTY_TIMELINE_FILTER,
+  filterTimelineCommits,
+  hasActiveTimelineFilter,
+  timelineAuthors,
+  type TimelineEventKind,
+  type TimelineFilterState,
+} from "@/lib/timeline-filters";
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { CommitDetailPanel } from "./commit-detail";
@@ -176,6 +184,7 @@ export function TimelineView({
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
   const [nowMs, setNowMs] = useState<number | null>(null);
+  const [filters, setFilters] = useState<TimelineFilterState>(EMPTY_TIMELINE_FILTER);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -205,23 +214,38 @@ export function TimelineView({
     };
   }, []);
 
+  // 过滤：纯内存计算（数据已加载），实时反馈；作者候选取自当前已加载提交。
+  const authors = useMemo(() => timelineAuthors(commits), [commits]);
+  const filteredCommits = useMemo(
+    () => filterTimelineCommits(commits, filters),
+    [commits, filters],
+  );
+  const activeFilters = hasActiveTimelineFilter(filters);
+
+  const applyFilterPatch = useCallback((patch: Partial<TimelineFilterState>) => {
+    setFilters((previous) => ({ ...previous, ...patch }));
+    containerRef.current?.scrollTo({ top: 0 });
+  }, []);
+
   const windowRange = useMemo(
     () =>
       computeVirtualWindow({
         scrollTop,
         viewportHeight,
         rowHeight: ROW_HEIGHT,
-        total: commits.length,
+        total: filteredCommits.length,
       }),
-    [scrollTop, viewportHeight, commits.length],
+    [scrollTop, viewportHeight, filteredCommits.length],
   );
-  const visibleCommits = commits.slice(windowRange.start, windowRange.end);
+  const visibleCommits = filteredCommits.slice(windowRange.start, windowRange.end);
 
   // 泳道布局：只依赖 commits（切换分支 / 加载更多时重算），窗口滚动不触发。
   const laneLayout = useMemo(
     () =>
-      computeLaneLayout(commits.map((commit) => ({ oid: commit.oid, parents: commit.parents }))),
-    [commits],
+      computeLaneLayout(
+        filteredCommits.map((commit) => ({ oid: commit.oid, parents: commit.parents })),
+      ),
+    [filteredCommits],
   );
   // 只切出当前窗口内的节点与连线，保证每帧 SVG 元素量恒定（不随总提交数增长）。
   const laneSlice = useMemo(
@@ -267,7 +291,8 @@ export function TimelineView({
 
   useEffect(() => {
     // 存在错误时暂停自动翻页，等待用户手动重试，避免对限流 / 故障反复冲击
-    if (!hasNextPage || loading || loadError || commits.length === 0) {
+    // 过滤生效时暂停自动翻页：窗口只展示已加载提交的子集，底部判定无意义（仍可手动「加载更多」）
+    if (activeFilters || !hasNextPage || loading || loadError || commits.length === 0) {
       return;
     }
     if (windowRange.end < commits.length - AUTO_LOAD_THRESHOLD) {
@@ -276,7 +301,7 @@ export function TimelineView({
     // 延迟到宏任务触发，避免在 effect 内同步 setState
     const timer = window.setTimeout(() => void loadMore(), 0);
     return () => window.clearTimeout(timer);
-  }, [commits.length, hasNextPage, loadError, loadMore, loading, windowRange.end]);
+  }, [activeFilters, commits.length, hasNextPage, loadError, loadMore, loading, windowRange.end]);
 
   const switchBranch = useCallback(
     async (nextBranch: string) => {
@@ -337,50 +362,115 @@ export function TimelineView({
         <p className="text-xs text-zinc-500 dark:text-zinc-400">已加载 {commits.length} 条提交</p>
       </div>
 
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        <input
+          type="search"
+          value={filters.query}
+          onChange={(event) => applyFilterPatch({ query: event.target.value })}
+          placeholder="搜索提交 / SHA / 作者"
+          aria-label="搜索提交"
+          className="h-9 w-56 rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-400 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
+        />
+        <select
+          value={filters.author}
+          onChange={(event) => applyFilterPatch({ author: event.target.value })}
+          aria-label="按作者过滤"
+          className="h-9 max-w-[12rem] rounded-lg border border-black/[.08] bg-white px-2 text-xs text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
+        >
+          <option value="">全部作者</option>
+          {authors.map((author) => (
+            <option key={author} value={author}>
+              {author}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.kind}
+          onChange={(event) => applyFilterPatch({ kind: event.target.value as TimelineEventKind })}
+          aria-label="按事件类型过滤"
+          className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-xs text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
+        >
+          <option value="all">全部事件</option>
+          <option value="merge">仅合并提交</option>
+          <option value="pullRequest">仅关联 PR</option>
+          <option value="issue">仅关联 Issue</option>
+        </select>
+        {activeFilters ? (
+          <>
+            <span className="text-zinc-500 dark:text-zinc-400">
+              筛选后 {filteredCommits.length} / {commits.length} 条
+            </span>
+            <button
+              type="button"
+              onClick={() => applyFilterPatch(EMPTY_TIMELINE_FILTER)}
+              className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+            >
+              清除筛选
+            </button>
+          </>
+        ) : null}
+      </div>
+
       {commits.length === 0 ? (
         <div className="mt-3 rounded-xl border border-black/[.08] bg-white p-6 text-sm text-zinc-600 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-300">
           该分支暂无提交（空仓库或分支没有历史）。
         </div>
       ) : (
         <>
-          <div
-            ref={containerRef}
-            onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-            role="list"
-            aria-label="提交时间线"
-            className="mt-3 h-[65vh] overflow-y-auto overscroll-contain rounded-xl border border-black/[.08] bg-white dark:border-white/[.145] dark:bg-zinc-950"
-          >
-            <div style={{ height: windowRange.totalHeight, position: "relative" }}>
-              <div
-                style={{ transform: `translateY(${windowRange.offsetY}px)`, position: "relative" }}
+          {filteredCommits.length === 0 ? (
+            <div className="mt-3 rounded-xl border border-black/[.08] bg-white p-6 text-sm text-zinc-600 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-300">
+              <p>没有匹配的提交（已加载 {commits.length} 条）。</p>
+              <button
+                type="button"
+                onClick={() => applyFilterPatch(EMPTY_TIMELINE_FILTER)}
+                className="mt-2 underline underline-offset-4 hover:text-zinc-900 dark:hover:text-zinc-100"
               >
-                {/* 泳道槽与行共用同一 translateY 坐标系，故绝对定位到窗口内容左上角 */}
-                {laneSlice.laneCount > 0 ? (
-                  <LaneGraph
-                    slice={laneSlice}
-                    rowHeight={ROW_HEIGHT}
-                    laneWidth={laneWidth}
-                    height={laneSlice.nodes.length * ROW_HEIGHT}
-                    className="absolute left-0 top-0"
-                  />
-                ) : null}
-                {visibleCommits.map((commit) => (
-                  <div
-                    key={commit.oid}
-                    style={{ height: ROW_HEIGHT, paddingLeft: gutterWidth }}
-                    role="listitem"
-                  >
-                    <CommitRow
-                      commit={commit}
-                      nowMs={nowMs}
-                      repoUrl={`https://github.com/${owner}/${name}`}
-                      onSelect={setSelectedCommit}
+                清除筛选
+              </button>
+            </div>
+          ) : (
+            <div
+              ref={containerRef}
+              onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+              role="list"
+              aria-label="提交时间线"
+              className="mt-3 h-[65vh] overflow-y-auto overscroll-contain rounded-xl border border-black/[.08] bg-white dark:border-white/[.145] dark:bg-zinc-950"
+            >
+              <div style={{ height: windowRange.totalHeight, position: "relative" }}>
+                <div
+                  style={{
+                    transform: `translateY(${windowRange.offsetY}px)`,
+                    position: "relative",
+                  }}
+                >
+                  {/* 泳道槽与行共用同一 translateY 坐标系，故绝对定位到窗口内容左上角 */}
+                  {laneSlice.laneCount > 0 ? (
+                    <LaneGraph
+                      slice={laneSlice}
+                      rowHeight={ROW_HEIGHT}
+                      laneWidth={laneWidth}
+                      height={laneSlice.nodes.length * ROW_HEIGHT}
+                      className="absolute left-0 top-0"
                     />
-                  </div>
-                ))}
+                  ) : null}
+                  {visibleCommits.map((commit) => (
+                    <div
+                      key={commit.oid}
+                      style={{ height: ROW_HEIGHT, paddingLeft: gutterWidth }}
+                      role="listitem"
+                    >
+                      <CommitRow
+                        commit={commit}
+                        nowMs={nowMs}
+                        repoUrl={`https://github.com/${owner}/${name}`}
+                        onSelect={setSelectedCommit}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="mt-3 flex items-center justify-between gap-3 text-xs">
             <span className="text-zinc-500 dark:text-zinc-400">

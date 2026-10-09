@@ -38,6 +38,15 @@ test("仓库列表 → 时间线 → 翻页（只读最小闭环）", async ({ p
   await page.getByRole("button", { name: "加载更多" }).click();
   await expect(page.getByText("已加载 60 条提交")).toBeVisible();
   await expect(page.getByText("已到最底部")).toBeVisible();
+  // M2-4：客户端即时过滤（关键词 / 事件类型），数量提示实时更新
+  await page.getByLabel("搜索提交").fill("#59");
+  await expect(page.getByText("筛选后 1 / 60 条")).toBeVisible();
+  await page.getByRole("button", { name: "清除筛选" }).click();
+  await page.getByLabel("按事件类型过滤").selectOption("pullRequest");
+  await expect(page.getByText("筛选后 6 / 60 条")).toBeVisible();
+  await expect(page.getByText("feat: 时间线提交 #59")).toHaveCount(0);
+  await page.getByLabel("按事件类型过滤").selectOption("all");
+  await expect(page.getByText("筛选后 6 / 60 条")).toHaveCount(0);
 });
 
 test("点击提交节点打开文件变更详情面板", async ({ page }) => {
