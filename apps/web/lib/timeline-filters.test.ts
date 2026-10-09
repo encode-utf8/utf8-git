@@ -5,6 +5,7 @@ import {
   EMPTY_TIMELINE_FILTER,
   filterTimelineCommits,
   hasActiveTimelineFilter,
+  indexOfCommit,
   timelineAuthors,
   type TimelineFilterState,
 } from "./timeline-filters";
@@ -127,5 +128,53 @@ describe("timelineAuthors", () => {
       author: { login: null, name: "Carol", avatarUrl: null },
     });
     expect(timelineAuthors([named])).toEqual(["Carol"]);
+  });
+});
+
+describe("时间范围过滤", () => {
+  const now = Date.parse("2026-10-09T00:00:00Z");
+  const daysAgo = (days: number, oid: string) =>
+    makeCommit({
+      oid,
+      committedDate: new Date(now - days * 24 * 60 * 60 * 1000).toISOString(),
+    });
+  const ranged = [
+    daysAgo(1, "a".repeat(40)),
+    daysAgo(4, "b".repeat(40)),
+    daysAgo(7, "c".repeat(40)),
+    daysAgo(10, "d".repeat(40)),
+    daysAgo(30, "e".repeat(40)),
+    daysAgo(400, "f".repeat(40)),
+  ];
+
+  it("全部时间不过滤", () => {
+    expect(filterTimelineCommits(ranged, EMPTY_TIMELINE_FILTER, now)).toHaveLength(6);
+  });
+
+  it("近一周 / 近一月按 committedDate 切分", () => {
+    expect(filterTimelineCommits(ranged, state({ range: "week" }), now).map((c) => c.oid)).toEqual([
+      "a".repeat(40),
+      "b".repeat(40),
+      "c".repeat(40),
+    ]);
+    expect(filterTimelineCommits(ranged, state({ range: "month" }), now)).toHaveLength(5);
+  });
+
+  it("时间戳非法时按范围外处理，全部时间仍可见", () => {
+    const invalid = makeCommit({ oid: "z".repeat(40), committedDate: "" });
+    expect(filterTimelineCommits([invalid], state({ range: "week" }), now)).toEqual([]);
+    expect(filterTimelineCommits([invalid], EMPTY_TIMELINE_FILTER, now)).toEqual([invalid]);
+  });
+
+  it("缩放计入「已激活」判定", () => {
+    expect(hasActiveTimelineFilter(state({ range: "week" }))).toBe(true);
+  });
+});
+
+describe("indexOfCommit", () => {
+  it("返回行号；缺失或空 oid 返回 -1", () => {
+    expect(indexOfCommit(commits, withIssue.oid)).toBe(2);
+    expect(indexOfCommit(commits, "missing")).toBe(-1);
+    expect(indexOfCommit(commits, null)).toBe(-1);
   });
 });

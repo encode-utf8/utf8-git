@@ -15,8 +15,10 @@ import {
   EMPTY_TIMELINE_FILTER,
   filterTimelineCommits,
   hasActiveTimelineFilter,
+  indexOfCommit,
   timelineAuthors,
   type TimelineEventKind,
+  type TimelineRange,
   type TimelineFilterState,
 } from "@/lib/timeline-filters";
 import { computeVirtualWindow } from "@/lib/virtual-window";
@@ -217,15 +219,32 @@ export function TimelineView({
   // 过滤：纯内存计算（数据已加载），实时反馈；作者候选取自当前已加载提交。
   const authors = useMemo(() => timelineAuthors(commits), [commits]);
   const filteredCommits = useMemo(
-    () => filterTimelineCommits(commits, filters),
-    [commits, filters],
+    () => filterTimelineCommits(commits, filters, nowMs),
+    [commits, filters, nowMs],
   );
   const activeFilters = hasActiveTimelineFilter(filters);
 
-  const applyFilterPatch = useCallback((patch: Partial<TimelineFilterState>) => {
-    setFilters((previous) => ({ ...previous, ...patch }));
-    containerRef.current?.scrollTo({ top: 0 });
-  }, []);
+  // 过滤 / 缩放变化时：把仍可见的选中提交重新锚定到视口中央（保持浏览上下文），否则回到顶部。
+  const applyFilterPatch = useCallback(
+    (patch: Partial<TimelineFilterState>) => {
+      const next = { ...filters, ...patch };
+      setFilters(next);
+      const container = containerRef.current;
+      if (!container) {
+        return;
+      }
+      const nextCommits = filterTimelineCommits(commits, next, nowMs);
+      const index = indexOfCommit(nextCommits, selectedCommit?.oid ?? null);
+      if (index < 0) {
+        container.scrollTo({ top: 0 });
+        return;
+      }
+      const maxTop = Math.max(0, nextCommits.length * ROW_HEIGHT - container.clientHeight);
+      const centered = index * ROW_HEIGHT - container.clientHeight / 2 + ROW_HEIGHT / 2;
+      container.scrollTo({ top: Math.max(0, Math.min(centered, maxTop)) });
+    },
+    [commits, filters, nowMs, selectedCommit],
+  );
 
   const windowRange = useMemo(
     () =>
@@ -394,6 +413,16 @@ export function TimelineView({
           <option value="merge">仅合并提交</option>
           <option value="pullRequest">仅关联 PR</option>
           <option value="issue">仅关联 Issue</option>
+        </select>
+        <select
+          value={filters.range}
+          onChange={(event) => applyFilterPatch({ range: event.target.value as TimelineRange })}
+          aria-label="时间范围"
+          className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-xs text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
+        >
+          <option value="all">全部时间</option>
+          <option value="week">近一周</option>
+          <option value="month">近一月</option>
         </select>
         {activeFilters ? (
           <>

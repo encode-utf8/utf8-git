@@ -47,6 +47,17 @@ test("仓库列表 → 时间线 → 翻页（只读最小闭环）", async ({ p
   await expect(page.getByText("feat: 时间线提交 #59")).toHaveCount(0);
   await page.getByLabel("按事件类型过滤").selectOption("all");
   await expect(page.getByText("筛选后 6 / 60 条")).toHaveCount(0);
+  // M2-5：时间范围缩放（mock 每条相隔 3 天：近一周 3 条、近一月 10 条）
+  await page.getByLabel("时间范围").selectOption("week");
+  await expect(page.getByText("筛选后 3 / 60 条")).toBeVisible();
+  await page.getByLabel("时间范围").selectOption("month");
+  await expect(page.getByText("筛选后 10 / 60 条")).toBeVisible();
+  // 缩放保持选中上下文：选中最新提交后切换范围，详情面板不关闭
+  await page.getByRole("list", { name: "提交时间线" }).getByRole("button").first().click();
+  await expect(page.getByText("文件变更（1）")).toBeVisible();
+  await page.getByLabel("时间范围").selectOption("all");
+  await expect(page.getByText("文件变更（1）")).toBeVisible();
+  await expect(page.getByText("筛选后 3 / 60 条")).toHaveCount(0);
 });
 
 test("点击提交节点打开文件变更详情面板", async ({ page }) => {
