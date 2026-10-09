@@ -63,7 +63,9 @@ export default defineConfig({
     },
     {
       // 需要先执行 next build（CI 已构建；本地用根目录 pnpm test:e2e 会自动构建）
-      command: `pnpm exec next start -p ${APP_PORT}`,
+      // 注意：Playwright 先起 webServer 再跑 globalSetup，而 /api/health 在缺表时返回 503；
+      // 所以必须先把迁移跑完再启动应用，否则就绪探针等不到 200 会直接超时。
+      command: `pnpm exec prisma migrate deploy && pnpm exec next start -p ${APP_PORT}`,
       url: `${APP_URL}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
