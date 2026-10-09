@@ -107,5 +107,5 @@ test("创建分支：确认卡片 → 调上游建分支 → 成功与冲突提�
   await page.getByRole("button", { name: "新建分支" }).click();
   await page.getByLabel("新分支名称").fill("feature/e2e");
   await page.getByRole("button", { name: "创建分支", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("已存在");
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("已存在");
 });
