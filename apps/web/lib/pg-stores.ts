@@ -3,8 +3,14 @@
 // 取舍：MVP 不引入 Redis，直接用已有的 Postgres 承担跨实例状态；
 // 代价是缓存命中多 1 次数据库读、回源多 1 次写（详见 docs/deployment.md）。
 
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type OperationAudit, type PrismaClient } from "@prisma/client";
 
+import {
+  DEFAULT_AUDIT_LIMIT,
+  type OperationAuditQuery,
+  type OperationAuditStoreLike,
+} from "./operation-audit";
+import type { OperationAuditRecord } from "./operations";
 import type { DegradeDecision, RateLimitSnapshot } from "./rate-limit-store";
 import type { CacheLookup } from "./server-cache";
 import { decideDegrade, isFresh, type RateLimitStoreLike, type TtlCacheLike } from "./shared-store";
@@ -113,4 +119,61 @@ export class PgRateLimitStore implements RateLimitStoreLike {
   ): Promise<DegradeDecision> {
     return decideDegrade(await this.get(userId), threshold, now);
   }
+}
+
+// 写操作审计的 Postgres 实现（M3-1）：与内存实现语义一致，供多实例 / Serverless 部署复用同一管线。
+export class PgOperationAuditStore implements OperationAuditStoreLike {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async find(idempotencyKey: string): Promise<OperationAuditRecord | null> {
+    const row = await this.prisma.operationAudit.findFirst({
+      where: { idempotencyKey },
+      orderBy: { id: "desc" },
+    });
+    return row ? toAuditRecord(row) : null;
+  }
+
+  async append(record: OperationAuditRecord): Promise<void> {
+    await this.prisma.operationAudit.create({
+      data: {
+        idempotencyKey: record.idempotencyKey,
+        kind: record.kind,
+        repo: record.repo,
+        actor: record.actor,
+        status: record.status,
+        summary: record.summary,
+        payload: record.payload as Prisma.InputJsonValue,
+        result: record.result === null ? null : JSON.stringify(record.result),
+        error: record.error,
+        recordedAt: new Date(record.recordedAt),
+      },
+    });
+  }
+
+  async list(query: OperationAuditQuery = {}): Promise<OperationAuditRecord[]> {
+    const rows = await this.prisma.operationAudit.findMany({
+      where: {
+        ...(query.repo ? { repo: query.repo } : {}),
+        ...(query.actor ? { actor: query.actor } : {}),
+      },
+      orderBy: { id: "desc" },
+      take: query.limit ?? DEFAULT_AUDIT_LIMIT,
+    });
+    return rows.map(toAuditRecord);
+  }
+}
+
+function toAuditRecord(row: OperationAudit): OperationAuditRecord {
+  return {
+    idempotencyKey: row.idempotencyKey,
+    kind: row.kind as OperationAuditRecord["kind"],
+    repo: row.repo,
+    actor: row.actor,
+    status: row.status as OperationAuditRecord["status"],
+    summary: row.summary,
+    payload: row.payload as unknown as Record<string, string>,
+    result: row.result === null ? null : JSON.parse(row.result),
+    error: row.error,
+    recordedAt: row.recordedAt.toISOString(),
+  };
 }

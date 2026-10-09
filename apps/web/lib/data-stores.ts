@@ -5,7 +5,8 @@
 import type { CommitDetail } from "./github-commits";
 import type { RepoPage } from "./github-repos";
 import type { TimelineData } from "./github-timeline";
-import { PgRateLimitStore, PgTtlCache } from "./pg-stores";
+import { MemoryOperationAuditStore, type OperationAuditStoreLike } from "./operation-audit";
+import { PgOperationAuditStore, PgRateLimitStore, PgTtlCache } from "./pg-stores";
 import { getPrismaClient } from "./prisma";
 import { RateLimitStore } from "./rate-limit-store";
 import { TtlCache } from "./server-cache";
@@ -57,6 +58,7 @@ type DataStores = {
   cursorCache: TtlCacheLike<CursorChain>;
   commitCache: TtlCacheLike<CommitCacheValue>;
   rateLimitStore: RateLimitStoreLike;
+  operationAudit: OperationAuditStoreLike;
 };
 
 const globalForData = globalThis as unknown as { __utf8gitDataStores?: DataStores };
@@ -70,6 +72,7 @@ function createMemoryStores(): DataStores {
     cursorCache: new TtlCache<CursorChain>({ ttlMs: CURSOR_CHAIN_TTL_MS, maxEntries: 200 }),
     commitCache: new TtlCache<CommitCacheValue>({ ttlMs: COMMIT_DETAIL_CACHE_TTL_MS }),
     rateLimitStore: new RateLimitStore(),
+    operationAudit: new MemoryOperationAuditStore(),
   };
 }
 
@@ -83,6 +86,7 @@ function createPostgresStores(): DataStores {
     cursorCache: new PgTtlCache<CursorChain>(prisma, "cursor", CURSOR_CHAIN_TTL_MS),
     commitCache: new PgTtlCache<CommitCacheValue>(prisma, "commit", COMMIT_DETAIL_CACHE_TTL_MS),
     rateLimitStore: new PgRateLimitStore(prisma),
+    operationAudit: new PgOperationAuditStore(prisma),
   };
 }
 
@@ -94,7 +98,7 @@ export function getDataStores(): DataStores {
   const backend = resolveStoreBackend(process.env.STORE_BACKEND);
   // dev 热重载可能残留旧版本单例（缺少新的缓存字段或后端与配置不一致），此时整体重建
   const existing = globalForData.__utf8gitDataStores as Partial<DataStores> | undefined;
-  if (!existing?.commitCache || existing.backend !== backend) {
+  if (!existing?.commitCache || !existing?.operationAudit || existing.backend !== backend) {
     const stores = createDataStores(backend);
     globalForData.__utf8gitDataStores = stores;
     return stores;

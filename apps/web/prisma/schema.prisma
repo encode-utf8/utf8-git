@@ -94,3 +94,23 @@ model VerificationToken {
   @@unique([identifier, token])
   @@map("verification_tokens")
 }
+
+// 写操作审计（M3-1）：记录每次写操作的「开始 / 成功 / 失败」。
+// 幂等键命中已成功记录时可安全回放，不重复执行；result 存 JSON 字符串以回避 Json null 语义歧义。
+model OperationAudit {
+  id             Int      @id @default(autoincrement())
+  idempotencyKey String   @map("idempotency_key")
+  kind           String // createBranch / createIssue / mergePullRequest / deleteBranch
+  repo           String // owner/name
+  actor          String // 用户标识（GitHub 登录名）
+  status         String // started / succeeded / failed
+  summary        String
+  payload        Json
+  result         String? // 成功结果（JSON 序列化）
+  error          String? // 失败原因
+  recordedAt     DateTime @map("recorded_at")
+
+  @@index([idempotencyKey, id])
+  @@index([repo, recordedAt])
+  @@map("operation_audit")
+}
