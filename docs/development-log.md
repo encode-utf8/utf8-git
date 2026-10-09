@@ -6,10 +6,76 @@
 | 项       | 内容                                         |
 | -------- | -------------------------------------------- |
 | 文档版本 | v0.1                                         |
-| 更新日期 | 2026-10-07                                   |
+| 更新日期 | 2026-10-09                                   |
 | 关联文档 | [实现路线](roadmap.md) · [待办日志](todo.md) |
 
 ---
+
+## 2026-10-09 · 撤掉 Playwright E2E，改为 vitest 路由 / API 集成测试
+
+**目标**：上一日引入的 Playwright E2E 需要额外起 Postgres（会话 / 令牌在当前实现里只有 Prisma 一种存储，没有本地文件后端），与「E2E 不应引入浏览器与数据库依赖」的诉求冲突。改为在 vitest 内做路由 / API 集成测试：覆盖同一段组装链路，但零外部依赖。
+
+**完成内容**
+
+- 删除 Playwright：`apps/web/e2e/*`、`apps/web/playwright.config.ts`、`@playwright/test` 依赖、`test:e2e` 脚本（根 + web）、`.gitignore` 的 `e2e/.auth/`、CI 的 `e2e` 任务（含 postgres service）。
+- 回退仅为 E2E 服务的可测试性改造：`github-repos.ts` / `github-commits.ts` / `github-graphql.ts` / `github-token.ts` 恢复硬编码上游地址（移除 `GITHUB_API_BASE_URL` / `GITHUB_GRAPHQL_ENDPOINT` / `GITHUB_TOKEN_ENDPOINT` 覆盖）。
+- 新增 `apps/web/vitest.config.mts`（ESM 配置，避免 Vite 的 CJS 警告；`@` 别名对齐 tsconfig paths）与 `apps/web/tests/api-routes.test.ts`：用 `vi.mock` 顶替 `@/lib/auth`、`@/lib/access-token`，`vi.stubGlobal("fetch")` 顶替 GitHub 请求，缓存 / 限流走内存后端。覆盖 10 条：仓库列表未登录 401 / 无令牌 401 / 正常 200（字段归一化、响应不含令牌）/ 限流 429 / 不可达 503，时间线未登录 401 / 非法仓库名 400 / 非法页码 400 / 正常 200 / 深页无游标链 409。
+- 锁文件回退：E2E 期间 `pnpm install` 写入 `pnpm-lock.yaml` 的 `@playwright/test` / `playwright` / `playwright-core` 残留（含 `next` / `next-auth` 的 peer 后缀变化）已 `git restore` 回退到与当前清单一致的版本，无需再为 E2E 执行 `pnpm install`。
+- 文档同步：`docs/deployment.md`（删除 §3.3 与 §2 三条上游覆盖变量）、`docs/todo.md`（TODO-142 改口径、移除 TODO-145）、`docs/roadmap.md`（M1-7 验收口径）、`docs/technical-analysis.md`（测试选型）。
+
+**关键决策**
+
+| 编号     | 决策                                                              | 理由                                                                                                   | 备选与否决原因                                                                 |
+| -------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| ADR-0049 | **撤掉 Playwright E2E**，改用 vitest 路由 / API 集成测试          | 原 E2E 依赖 Postgres（会话 / 令牌仅 Prisma 实现），为一条用例引入数据库 + 浏览器成本过高；集成测试覆盖同一组装链路且零外部依赖 | 保留 Playwright + 起库：正是本次要消除的成本；保留 Playwright + 在生产代码开测试会话旁路：安全面更大 |
+| ADR-0050 | 集成测试**不改生产代码**（用 vitest 模块 mock，而非新增测试开关） | 生产代码零测试分支，避免环境变量误配导致鉴权被绕过                                                     | 新增 `E2E_FAKE_AUTH` 类开关：一旦线上误设即绕过鉴权                            |
+
+**问题与风险**
+
+- 本机 pnpm 已恢复（Node 自带 corepack 的 `pnpm@12.9.1` shim）：`pnpm install --frozen-lockfile` 校验锁文件与清单一致，并清理了 node_modules 中残留的 Playwright；`pnpm test` / `pnpm lint` / `pnpm typecheck` 递归全绿（web 159 通过 / 4 跳过，git-graph 14，github-client 6，ui 3）。`pnpm build` 未跑，仍以 CI 为准。
+- 集成测试覆盖服务端链路，但**不覆盖浏览器端行为**（虚拟滚动、翻页合并的交互、hydration）；如需该层，后续单独立项，不阻塞 M1。
+- M1-7 验收口径由「1 条 E2E」改为「关键路径集成测试」，已在 roadmap / todo 同步。
+
+**下一步**
+
+- 本地 / CI 跑一次 `pnpm build`（`next build`）确认产物；`install` / `test` / `lint` / `typecheck` 已在本地跑通。
+- M2-2：把 `computeLaneLayout` 接入时间线 SVG 泳道渲染。
+
+## 2026-10-08 · M1 收尾（Playwright E2E + 授权说明页 + 协作模板）与 M2-1 算法内核
+> 注：本条中的 Playwright E2E 已于 2026-10-09 撤销（改为 vitest 路由 / API 集成测试），见上一条。
+
+**目标**：补齐 M1 退出标准的两处缺口——E2E 测试基线与 `repo` scope 授权说明；清掉 M0 遗留的协作模板；并为 M2 起步先落地可独立测试的泳道布局算法内核。本次确定三项决策：E2E 用 Playwright、预览环境加稳定别名、可并行的工作并行推进。
+
+**完成内容**
+
+- E2E 基线（TODO-142）：接入 Playwright。`apps/web/e2e/mock-github.mjs` 提供本地 REST / GraphQL 上游；`e2e/global-setup.ts` 直接向 E2E 库写入用户 + 加密令牌 + 会话（等价「已完成登录」），并自动执行 `prisma migrate deploy`；`playwright.config.ts` 同时拉起 mock 与 `next start`。用例覆盖「仓库列表 → 时间线 → 翻页 → 提交详情」（`timeline.spec.ts`）与未登录拦截 / 授权文案（`auth.spec.ts`）。
+- 可测试性改造：`github-repos.ts` / `github-commits.ts` / `github-graphql.ts` / `github-token.ts` 的上游地址改为可由 `GITHUB_API_BASE_URL` / `GITHUB_GRAPHQL_ENDPOINT` / `GITHUB_TOKEN_ENDPOINT` 覆盖（默认值不变，仅服务端读取）。
+- 授权说明页（TODO-115）：新增公开页 `/permissions` 与共享文案模块 `lib/permissions.ts`；登录页与 `/repos` 的「授权范围不足」空状态改为链接该页，统一「权限用途 / 数据使用 / 不做什么 / 撤销方式 / SSO」说明。
+- 协作模板（TODO-009）：新增 `CONTRIBUTING.md` 与 `.github/PULL_REQUEST_TEMPLATE.md`、`.github/ISSUE_TEMPLATE/*`。
+- M2-1 算法内核：`packages/git-graph/src/layout.ts`（`computeLaneLayout`）与单测 `layout.test.ts`，覆盖 merge / octopus / root / 多独立根 / rebase 遗弃 / 分页截断父提交；`types.ts` 补充 `LaneSegment` / `LaneEdge` / `LaneLayout`，`index.ts` 导出。
+- CI：`.github/workflows/ci.yml` 新增 `e2e` 任务（postgres service + Playwright chromium，失败上传报告）。
+
+**关键决策**
+
+| 编号     | 决策                                                              | 理由                                                                             | 备选与否决原因                                                  |
+| -------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| ADR-0045 | E2E 用 **Playwright**，并以「mock 上游 + 落库会话」而非真实 OAuth | 真实 OAuth 依赖外部账号与随机回调地址，不可控；落库会话可精确复现登录态          | 组件级 vitest 集成：覆盖不到服务端页面 / 路由与翻页链路         |
+| ADR-0046 | 上游地址通过**环境变量覆盖**（默认官方地址）                      | 让 E2E / 自建指向本地 mock，且不改动生产行为；服务端读取，不进入前端包           | 测试内改写 DNS / 全局 fetch：不可靠、影响面大                   |
+| ADR-0047 | 预览环境用**固定别名 + 单独 OAuth App**                           | GitHub OAuth App 只能登记一个回调地址，随机预览域名无法共用生产 App              | 共用生产 App：需反复改回调，风险高                              |
+| ADR-0048 | 泳道算法先做成**独立可测的纯函数包**，再接渲染                    | 算法边界多（merge / octopus / 截断），独立单测成本低、回归快                      | 直接在组件里算：难测试、易与渲染耦合                            |
+
+**问题与风险**
+
+- 本机**无 Node / pnpm / Docker / Postgres**，未能执行 `pnpm install`、`build`、`test`、`test:e2e`；上述改动均**未在本机验证**，需在本地或 CI 实跑确认。
+- 新增依赖 `@playwright/test` **尚未写入 `pnpm-lock.yaml`**（需 `pnpm install` 生成并提交），否则 CI 的 `--frozen-lockfile` 与 `e2e` 任务会失败（该依赖随后随 E2E 一并撤销，锁文件已回退，见 2026-10-09）。
+- E2E 依赖 `STORE_BACKEND=memory` 与服务端内存游标链，故配置为单 worker 串行；多实例共享存储下的翻页另由 M1-6 / M1-7 覆盖。
+- `layout.ts` 未经 `pnpm test` 验证，仅由作者以等价仿真核对断言，仍需 CI 单测确认。
+
+**下一步**
+
+- 执行 `pnpm install` 并提交更新后的 `pnpm-lock.yaml`，本地 / CI 实跑 `pnpm test:e2e` 并修复暴露的问题。
+- 按 `docs/deployment.md` §7 落地预览稳定别名与预览 OAuth App；生产实跑 `pnpm deploy:selfcheck`。
+- M2-2：把 `computeLaneLayout` 结果接入时间线 SVG 泳道渲染。
 
 ## 2026-10-07 · 部署自检（/api/health + 自检脚本）
 

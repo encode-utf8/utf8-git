@@ -125,6 +125,15 @@ node scripts/deploy-selfcheck.mjs --base=http://127.0.0.1:3100   # 校验本地�
 ## 7. 预览环境与回滚
 
 - 预览：每个 PR 一套；`AUTH_SECRET` / `AUTH_TOKEN_ENC_KEY` 与生产隔离，数据库可用 Neon branch 或独立库。
+- **预览环境 OAuth（稳定别名）**：Vercel 预览部署默认是随机域名，GitHub OAuth App 无法为随机域名登记回调，
+  预览点登录会失败。给固定预览分支分配**稳定别名**并单独注册 OAuth App：
+  1. 在 Vercel 项目 Settings → Domains 添加固定预览域名（如 `utf8-git-preview.vercel.app` 或自有子域），
+     并在 Git 集成里把它指派给固定分支（如 `develop` / `preview`），让别名自动跟随最新预览部署；
+     也可用 CLI 手动重指：`vercel alias set <preview-deployment-url> utf8-git-preview.vercel.app`。
+  2. GitHub OAuth App 的 Authorization callback URL **只能填一个地址**，预览与生产无法共用同一个 App，
+     需**为预览单独建一个 OAuth App**，回调填 `https://<预览别名>/api/auth/callback/github`；
+     预览环境把 `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` 指向它。
+  3. 预览环境同样设 `STORE_BACKEND=postgres` 并用独立的 Neon branch / 库，`AUTH_SECRET`、`AUTH_TOKEN_ENC_KEY` 与生产隔离。
 - 回滚：Vercel 一键回滚到上一个 deployment（应用层）；数据库迁移要求**前向兼容**（先加列 → 双写 → 再删列），
   必要时手写 down 脚本，不要依赖 `migrate reset`。
 
@@ -134,7 +143,7 @@ node scripts/deploy-selfcheck.mjs --base=http://127.0.0.1:3100   # 校验本地�
   Neon 已应用全部迁移，未登录路径与 OAuth 跳转验收通过，详见 `docs/reports/tech-analysis/M1-6-deployment-verification.md`。
 - 浏览器完整登录一次（写入会话 + 令牌加密入库 + 拉取仓库列表）待用户确认；本机无该账号授权，无法代做。
 - 「Lighthouse ≥ 80」需浏览器实测；「冷启动 < 3s」需在无代理环境复测（本次线上读数含代理开销）。
-- 预览部署的随机域名无法完成 OAuth 回调：需要稳定的分支别名并注册到 OAuth App，或为预览单独建 App。
+- ~~预览部署的随机域名无法完成 OAuth 回调~~ **方案见 §7**：固定预览分支稳定别名 + 单独预览 OAuth App。
 - 若平台函数超时上限先于我们的 15s GitHub 超时触发（Hobby 默认 10s），可为路由声明 `maxDuration`。
 - 续期去重的双刷新窗口可用「数据库租约」彻底消除（后续任务）。
 - 多 region 复制、Redis 等外部缓存：MVP 明确不做。

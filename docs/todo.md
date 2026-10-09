@@ -3,7 +3,7 @@
 | 项       | 内容                                                    |
 | -------- | ------------------------------------------------------- |
 | 文档版本 | v0.1                                                    |
-| 更新日期 | 2026-10-07                                              |
+| 更新日期 | 2026-10-09                                              |
 | 标记约定 | `[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成 · `[!]` 阻塞   |
 | 关联文档 | [实现路线](roadmap.md) · [开发记录](development-log.md) |
 
@@ -21,7 +21,7 @@
 - [x] TODO-006 建立开发记录与待办日志机制
 - [x] TODO-007 确认 4 个 Open Questions：按提交聚合 / 私有仓库进 MVP / 零配置登录 / 不支持离线（2026-10-03 已确认，见需求分析 §12、ADR-0006~0009）
 - [x] TODO-008 确定包管理器与运行时版本（pnpm + Node LTS）并写入文档
-- [ ] TODO-009 补充 Issue / PR 模板与贡献指南（CONTRIBUTING）
+- [x] TODO-009 补充 Issue / PR 模板与贡献指南（`CONTRIBUTING.md` + `.github/PULL_REQUEST_TEMPLATE.md` + `.github/ISSUE_TEMPLATE/*`）
 
 ## 2. 下一迭代：M1 · 只读最小闭环
 
@@ -39,7 +39,7 @@
 - [x] TODO-112 会话持久化 + 令牌加密存储（AES-256-GCM）
 - [x] TODO-113 `/repos` 仓库列表页（创建/参与，**含私有仓库与可见性标识**，排序、空状态）
 - [x] TODO-114 仓库搜索与可见性过滤
-- [ ] TODO-115 `repo` scope 授权说明页（明确权限用途与撤销方式）
+- [x] TODO-115 `repo` scope 授权说明页（新增公开页 `/permissions` + `lib/permissions.ts`；登录页与 `/repos` 授权不足提示均链向该页）
 - [x] TODO-116 组织 SSO / 权限不足的自助引导（授权成功但仓库为空的排查路径）
 - [x] TODO-117 OAuth 令牌自动续期（refresh token 轮换入库）
 
@@ -61,7 +61,7 @@
 ### 2.5 验证
 
 - [x] TODO-141 关键路径单元测试（数据层 + 限流降级；数据层部分随 M1-4 完成）
-- [ ] TODO-142 E2E：登录（mock）→ 选仓库 → 浏览时间线
+- [x] TODO-142 关键路径集成测试：登录（mock 会话）→ 选仓库 → 浏览时间线（vitest 路由 / API 集成，见 `apps/web/tests/api-routes.test.ts`）
 - [x] TODO-144 部署自检（`GET /api/health` + `pnpm deploy:selfcheck`；见 `docs/deployment.md` §3.2）
 - [x] TODO-143 用 3 个真实仓库（小/中/大）做性能验证（`scripts/perf-validate.mjs` + `docs/reports/tech-analysis/M1-7-perf-validation.md`）
 
@@ -76,7 +76,7 @@
 
 ### 3.2 可视化
 
-- [ ] TODO-211 泳道布局算法包（merge/root/多父/rebase 边界用例）
+- [~] TODO-211 泳道布局算法包（算法内核已完成：`packages/git-graph/src/layout.ts` + 单测；渲染接入见 TODO-212）
 - [ ] TODO-212 PR / Issue 事件泳道渲染
 - [ ] TODO-213 时间缩放与范围切换
 - [ ] TODO-214 时间线导出（图片 / 链接分享）
