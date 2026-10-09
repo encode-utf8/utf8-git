@@ -11,7 +11,7 @@ test("仓库列表 → 时间线 → 翻页（只读最小闭环）", async ({ p
   // 私有仓库带可见性标识
   await expect(page.getByText("私有").first()).toBeVisible();
 
-  await page.getByRole("link", { name: "encode-utf8/utf8-git" }).click();
+  await page.getByRole("link", { name: "encode-utf8/utf8-git", exact: true }).click();
   await expect(page).toHaveURL(/\/repos\/encode-utf8\/utf8-git$/);
   await expect(page.getByRole("heading", { name: "encode-utf8/utf8-git" })).toBeVisible();
   await expect(page.getByText("公开").first()).toBeVisible();

@@ -14,6 +14,6 @@ test("登录页展示 repo 权限用途与撤销说明", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByText("申请的权限与用途")).toBeVisible();
   // repo scope 说明必须明确「读取 + 不改写」
-  await expect(page.getByText(/不会修改任何仓库内容/)).toBeVisible();
+  await expect(page.getByText(/不会创建、修改或删除任何仓库内容/)).toBeVisible();
   await expect(page.getByText(/撤销授权/)).toBeVisible();
 });
