@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pickBranchColor } from "./color";
-import { computeLaneLayout } from "./layout";
+import { computeLaneLayout, sliceLaneLayout } from "./layout";
+import { makeBranchyHistory } from "./synthetic-history";
 import type { CommitLike, LaneLayout, LaneSegment } from "./types";
 
 /** 按 oid 查找节点，便于断言。 */
@@ -93,12 +94,44 @@ describe("computeLaneLayout", () => {
     expect(layout.laneCount).toBe(2);
 
     expect(segmentsAt(layout, 0)).toEqual([
-      { row: 0, fromLane: 0, toLane: 0, oid: "A", color: colorM, kind: "straight", truncated: false },
-      { row: 0, fromLane: 0, toLane: 1, oid: "B", color: colorB, kind: "diagonal", truncated: false },
+      {
+        row: 0,
+        fromLane: 0,
+        toLane: 0,
+        oid: "A",
+        color: colorM,
+        kind: "straight",
+        truncated: false,
+      },
+      {
+        row: 0,
+        fromLane: 0,
+        toLane: 1,
+        oid: "B",
+        color: colorB,
+        kind: "diagonal",
+        truncated: false,
+      },
     ]);
     expect(segmentsAt(layout, 2)).toEqual([
-      { row: 2, fromLane: 0, toLane: 0, oid: "Base", color: colorM, kind: "straight", truncated: false },
-      { row: 2, fromLane: 1, toLane: 0, oid: "Base", color: colorB, kind: "diagonal", truncated: false },
+      {
+        row: 2,
+        fromLane: 0,
+        toLane: 0,
+        oid: "Base",
+        color: colorM,
+        kind: "straight",
+        truncated: false,
+      },
+      {
+        row: 2,
+        fromLane: 1,
+        toLane: 0,
+        oid: "Base",
+        color: colorB,
+        kind: "diagonal",
+        truncated: false,
+      },
     ]);
 
     expect(layout.edges.find((edge) => edge.fromOid === "M" && edge.toOid === "A")).toMatchObject({
@@ -158,7 +191,10 @@ describe("computeLaneLayout", () => {
     expect(node(layout, "R1").lane).toBe(0);
     expect(node(layout, "R2").lane).toBe(1);
     expect(layout.laneCount).toBe(2);
-    expect(layout.edges.map((edge) => `${edge.fromOid}->${edge.toOid}`)).toEqual(["T1->R1", "T2->R2"]);
+    expect(layout.edges.map((edge) => `${edge.fromOid}->${edge.toOid}`)).toEqual([
+      "T1->R1",
+      "T2->R2",
+    ]);
   });
 
   it("分叉点：两个子提交共享同一父提交时于父处收束", () => {
@@ -255,5 +291,125 @@ describe("computeLaneLayout", () => {
     const second = computeLaneLayout(commits);
     expect(second).toEqual(first);
     expect(JSON.stringify(commits)).toBe(snapshot);
+  });
+});
+describe("sliceLaneLayout", () => {
+  // 线性历史 A -> B -> C -> D：行带 0 / 1 / 2 分别连接相邻两行
+  const linear: CommitLike[] = [
+    { oid: "A", parents: ["B"] },
+    { oid: "B", parents: ["C"] },
+    { oid: "C", parents: ["D"] },
+    { oid: "D", parents: [] },
+  ];
+
+  it("全量窗口等价于原布局", () => {
+    const layout = computeLaneLayout(linear);
+    const slice = sliceLaneLayout(layout, 0, layout.nodes.length);
+    expect(slice.start).toBe(0);
+    expect(slice.end).toBe(4);
+    expect(slice.laneCount).toBe(layout.laneCount);
+    expect(slice.nodes).toEqual(layout.nodes);
+    expect(slice.segments).toEqual(layout.segments);
+  });
+
+  it("中间窗口只保留两端都在窗口内的行带", () => {
+    const layout = computeLaneLayout(linear);
+    const slice = sliceLaneLayout(layout, 1, 3);
+    expect(slice.nodes.map((node) => node.oid)).toEqual(["B", "C"]);
+    expect(slice.segments.map((segment) => segment.row)).toEqual([1]);
+  });
+
+  it("窗口末行若没有越底线段则不绘制（终点行在窗口之外）", () => {
+    const layout = computeLaneLayout(linear);
+    expect(sliceLaneLayout(layout, 0, 1).segments).toEqual([]);
+  });
+
+  it("末行悬挂段（父提交不在已加载集合）仍保留：它要画到窗口底部", () => {
+    const truncated = computeLaneLayout([
+      { oid: "A", parents: ["B"] },
+      { oid: "B", parents: ["C"] }, // C 不在输入中
+    ]);
+    // 全量窗口下与原布局等价（含悬挂段）
+    expect(sliceLaneLayout(truncated, 0, 2).segments).toEqual(truncated.segments);
+    // 只切末行时，悬挂段不能被末行规则丢掉
+    const slice = sliceLaneLayout(truncated, 1, 2);
+    expect(slice.nodes.map((node) => node.oid)).toEqual(["B"]);
+    expect(slice.segments).toHaveLength(1);
+    expect(slice.segments[0]).toMatchObject({ row: 1, truncated: true });
+  });
+
+  it("越界与非法输入被钳制", () => {
+    const layout = computeLaneLayout(linear);
+    expect(sliceLaneLayout(layout, -5, 3)).toMatchObject({ start: 0, end: 3 });
+    expect(sliceLaneLayout(layout, 2, 999)).toMatchObject({ start: 2, end: 4 });
+    expect(sliceLaneLayout(layout, 3, 1)).toMatchObject({ start: 3, end: 3 });
+    expect(sliceLaneLayout(layout, Number.NaN, 2)).toMatchObject({ start: 0, end: 2 });
+    expect(sliceLaneLayout(layout, 1.7, 2.9)).toMatchObject({ start: 1, end: 2 });
+  });
+
+  it("空窗口 / 空布局返回空切片", () => {
+    expect(sliceLaneLayout(computeLaneLayout([]), 0, 10)).toEqual({
+      start: 0,
+      end: 0,
+      laneCount: 0,
+      nodes: [],
+      segments: [],
+    });
+    const layout = computeLaneLayout(linear);
+    expect(sliceLaneLayout(layout, 2, 2)).toMatchObject({
+      start: 2,
+      end: 2,
+      nodes: [],
+      segments: [],
+    });
+  });
+
+  it("laneCount 不随窗口变化（滚动时列宽稳定）", () => {
+    const layout = computeLaneLayout([
+      { oid: "M", parents: ["A", "B"] },
+      { oid: "A", parents: ["Base"] },
+      { oid: "B", parents: ["Base"] },
+      { oid: "Base", parents: [] },
+    ]);
+    expect(layout.laneCount).toBe(2);
+    expect(sliceLaneLayout(layout, 0, 1).laneCount).toBe(2);
+    expect(sliceLaneLayout(layout, 3, 4).laneCount).toBe(2);
+  });
+
+  it("不修改入参", () => {
+    const layout = computeLaneLayout(linear);
+    const snapshot = JSON.stringify(layout);
+    sliceLaneLayout(layout, 1, 3);
+    expect(JSON.stringify(layout)).toBe(snapshot);
+  });
+});
+
+describe("makeBranchyHistory", () => {
+  it("生成确定性的多分支历史，且父提交总是晚于子提交（拓扑序前提）", () => {
+    const commits = makeBranchyHistory({ branches: 50, commitsPerBranch: 100 });
+    // 50 条主干（每条含 1 个 merge）+ 50 × 100 条功能分支提交
+    expect(commits).toHaveLength(5051);
+
+    const rowByOid = new Map(commits.map((commit, index) => [commit.oid, index]));
+    const violations = commits.flatMap((commit, index) =>
+      commit.parents
+        .filter((parent) => (rowByOid.get(parent) ?? -1) <= index)
+        .map((parent) => `${commit.oid} → ${parent}`),
+    );
+    expect(violations).toEqual([]);
+
+    const sample = { branches: 3, commitsPerBranch: 2 };
+    expect(JSON.stringify(makeBranchyHistory(sample))).toBe(
+      JSON.stringify(makeBranchyHistory(sample)),
+    );
+  });
+
+  it("基准输入确实包含多条泳道", () => {
+    const layout = computeLaneLayout(makeBranchyHistory({ branches: 50, commitsPerBranch: 100 }));
+    expect(layout.nodes).toHaveLength(5051);
+    // 默认并发 6：主干 1 条 + 功能分支 6 条左右
+    expect(layout.laneCount).toBeGreaterThan(1);
+    expect(layout.laneCount).toBeLessThanOrEqual(10);
+    expect(layout.segments.length).toBeGreaterThan(5000);
   });
 });

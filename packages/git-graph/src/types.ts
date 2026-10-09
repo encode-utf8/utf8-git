@@ -15,6 +15,22 @@ export interface LaneAssignment {
   lane: number;
   color: string;
 }
+/**
+ * 渲染窗口切片：虚拟滚动时只取当前窗口需要的节点与连线，
+ * 避免为 5000+ 提交一次性创建全部 SVG 元素。
+ */
+export interface LaneSlice {
+  /** 窗口起始行（含），对应 `LaneLayout.nodes` 的下标。 */
+  start: number;
+  /** 窗口结束行（不含）。 */
+  end: number;
+  /** 整体布局的泳道总数（不随窗口变化，保证滚动时列宽稳定）。 */
+  laneCount: number;
+  /** 窗口内的节点，下标 i 对应行 `start + i`。 */
+  nodes: LaneAssignment[];
+  /** 窗口内的连线段；末行只保留越过底部的悬挂段，其余在视口之外。 */
+  segments: LaneSegment[];
+}
 
 /**
  * 相邻两行之间的连线段：连接输入中的第 `row` 行与第 `row + 1` 行。

@@ -1,5 +1,12 @@
 import { pickBranchColor } from "./color";
-import type { CommitLike, LaneAssignment, LaneEdge, LaneLayout, LaneSegment } from "./types";
+import type {
+  CommitLike,
+  LaneAssignment,
+  LaneEdge,
+  LaneLayout,
+  LaneSegment,
+  LaneSlice,
+} from "./types";
 
 /** 内部泳道状态：一条正在向下推进、等待某个提交出现的连线。 */
 interface Lane {
@@ -250,4 +257,36 @@ export function computeLaneLayout(commits: CommitLike[]): LaneLayout {
   const laneCount = nodes.length > 0 ? maxColumn + 1 : 0;
 
   return { nodes, segments, edges, laneCount };
+}
+/** 把行号钳制到 [0, total]；非有限输入按 0 处理，小数截断。 */
+function clampRow(value: number, total: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(Math.trunc(value), total));
+}
+
+/**
+ * 从完整布局切出渲染窗口 `[start, end)`（虚拟滚动 / 窗口化）。
+ *
+ * - `nodes` 为行 `start`..`end - 1`；
+ * - `segments` 只保留起点行在窗口内、且终点行也在窗口内（或本身是越底悬挂段）的连线段：
+ *   窗口末行之外的行带落在视口外（`computeVirtualWindow` 已含 overscan），无需创建 SVG 元素；
+ * - `laneCount` 取整体值，保证滚动时列宽稳定。
+ *
+ * 纯函数、无副作用，不修改入参。
+ */
+export function sliceLaneLayout(layout: LaneLayout, start: number, end: number): LaneSlice {
+  const total = layout.nodes.length;
+  const from = clampRow(start, total);
+  const to = Math.max(from, clampRow(end, total));
+
+  return {
+    start: from,
+    end: to,
+    laneCount: layout.laneCount,
+    nodes: layout.nodes.slice(from, to),
+    segments: layout.segments.filter(
+      (segment) =>
+        segment.row >= from && segment.row < to && (segment.row + 1 < to || segment.truncated),
+    ),
+  };
 }

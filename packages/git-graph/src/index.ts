@@ -1,3 +1,10 @@
 export { pickBranchColor } from "./color";
-export { computeLaneLayout } from "./layout";
-export type { CommitLike, LaneAssignment, LaneEdge, LaneLayout, LaneSegment } from "./types";
+export { computeLaneLayout, sliceLaneLayout } from "./layout";
+export type {
+  CommitLike,
+  LaneAssignment,
+  LaneEdge,
+  LaneLayout,
+  LaneSegment,
+  LaneSlice,
+} from "./types";
