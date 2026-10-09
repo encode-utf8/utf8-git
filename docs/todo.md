@@ -87,7 +87,7 @@
 
 ### 3.3 操作能力
 
-- [~] TODO-221 操作编排框架（M3-1：`lib/operations.ts` 确认 + 幂等 + 审计接口与 `confirm-card.tsx` 已落地；审计表持久化与重试待补）
+- [x] TODO-221 操作编排框架（M3-1：统一管线 `lib/operations.ts`（确认 + 幂等 + 审计）+ 确认卡片 `confirm-card.tsx` + 审计表 `operation_audit`，内存 / Postgres 双实现随 `STORE_BACKEND` 切换）
 - [ ] TODO-222 创建分支
 - [ ] TODO-223 创建 Issue（Markdown 预览 + 标签）
 - [ ] TODO-224 PR 合并流程（可合并性检查、冲突提示）

@@ -11,6 +11,37 @@
 
 ---
 
+## 2026-10-09 · M3-1 收尾：审计表 + 内存 / Postgres 双实现
+
+**目标**：给写操作管线补上持久化审计（路线图 M3-1 的「审计表」），并让内存 / Postgres 两种后端复用同一管线。
+
+**完成内容**
+
+- `prisma/schema.prisma` + 迁移 `20261009120000_m3_1_operation_audit`：新增 `operation_audit` 表（自增 id、`idempotency_key`、`kind`、`repo`、`actor`、`status`、`summary`、`payload` JSONB、`result` / `error` 文本、`recorded_at`），并建 `(idempotency_key, id)`、`(repo, recorded_at)` 索引。
+- 新增 `lib/operation-audit.ts`：`OperationAuditStoreLike` 接口（`find` / `append` / `list`）与 `MemoryOperationAuditStore`（单测与 `STORE_BACKEND=memory` 使用）。
+- `lib/pg-stores.ts` 新增 `PgOperationAuditStore`：`find` 取该幂等键最新一条（`orderBy id desc`），`list` 支持 repo / actor 过滤与 limit。
+- `lib/data-stores.ts`：把 `operationAudit` 纳入数据层单例，随 `STORE_BACKEND` 在内存 / Postgres 间切换。
+- 单测：`operation-audit.test.ts` 覆盖 find 取最新、list 过滤 / 排序 / limit，以及「管线 + 审计存储」联调（同键重放不重复执行，审计留 started + succeeded 两条；共 3 条，累计 185）。
+
+**关键决策**
+
+| 编号     | 决策                                                             | 理由                                                                                                                    | 备选与否决原因                                                                       |
+| -------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| ADR-0068 | 审计表用**显式列** + `payload` JSONB，`result` 存 JSON 字符串    | status / repo / actor 需要可直接过滤与索引；`result` 类型未知，存字符串可规避 Prisma `JsonNull` / `DbNull` 哨兵语义歧义 | 整行存 JSON blob：无法按状态 / 仓库索引；`result` 用 `Json?`：空值语义要哨兵，易踩坑 |
+| ADR-0069 | 审计存储纳入 `data-stores` 单例，随 `STORE_BACKEND` 切换         | 与 M1-6 缓存 / 限流一致：单实例用内存、多实例 / Serverless 用 Postgres，无需另立开关                                    | 单独加 `AUDIT_BACKEND`：多一个配置维度，部署更易错                                   |
+| ADR-0070 | 迁移 SQL **手写**，交由 CI `e2e` 的 `prisma migrate deploy` 验证 | 本地无 Docker / Postgres，无法 `migrate dev` 生成；CI 有 postgres:16 service 会实际应用迁移                             | 等有库再写：阻塞 M3 进度；`migrate diff`：同样需要影子数据库                         |
+
+**问题与风险**
+
+- 迁移未经本地真实数据库验证，首次以 CI `e2e` job 的 `migrate deploy` 为准；SQL 有误会在 CI 暴露。
+- `PgOperationAuditStore` 未单测（本地无库），仅靠类型检查与 CI 迁移兜底；真正写入路径在 M3-2 接入首个写操作时端到端跑。
+- 审计表暂无保留期 / 归档，长期会增长（M3-7 操作历史页与 M4 可观测性一并处理）。
+- 幂等「自动重试」仍未实现，当前只做「同键回放」。
+
+**下一步**
+
+- M3-2：创建分支（基于提交 / 分支建分支 + 命名校验），接线 `ConfirmCard` 与 `runOperation`，打通首个写操作端到端。
+
 ## 2026-10-09 · M2 收官复盘 + M3-1 操作管线起步
 
 **目标**：为 M2（只读增强）做阶段性复盘并核对退出标准；同时启动 M3 交互操作的第一块——统一写操作管线。
