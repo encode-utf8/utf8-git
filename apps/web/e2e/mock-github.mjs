@@ -58,8 +58,8 @@ function makeCommits(count, startNumber, headlinePrefix) {
     commits.push({
       oid: oid(100000 + number),
       messageHeadline: `${headlinePrefix} #${number}`,
-      // 相对 now 递增的提交时间（每条相差 3 天），便于时间范围（近一周 / 近一月）测试保持稳定
-      committedDate: new Date(Date.now() - ((60 - number) * 3 + 1) * 86400000).toISOString(),
+      // 相对 now 递增的提交时间（每条相差 3 天，含 0.5 天偏移），避免踩到整周 / 整月边界导致时间范围测试抖动
+      committedDate: new Date(Date.now() - ((60 - number) * 3 + 0.5) * 86400000).toISOString(),
       author: { name: "E2E Bot", user: { login: "e2e-bot", avatarUrl: null } },
       parents: { nodes: parentNumber === null ? [] : [{ oid: oid(100000 + parentNumber) }] },
       associatedPullRequests: {
