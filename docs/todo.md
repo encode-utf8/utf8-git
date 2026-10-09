@@ -88,7 +88,7 @@
 ### 3.3 操作能力
 
 - [x] TODO-221 操作编排框架（M3-1：统一管线 `lib/operations.ts`（确认 + 幂等 + 审计）+ 确认卡片 `confirm-card.tsx` + 审计表 `operation_audit`，内存 / Postgres 双实现随 `STORE_BACKEND` 切换）
-- [ ] TODO-222 创建分支
+- [x] TODO-222 创建分支（M3-2：`POST /api/repos/[owner]/[name]/operations/create-branch` 走统一管线；分支名校验 + 提交 SHA 起点；时间线「新建分支」确认卡片，成功后 `router.refresh()` 即时更新分支列表）
 - [ ] TODO-223 创建 Issue（Markdown 预览 + 标签）
 - [ ] TODO-224 PR 合并流程（可合并性检查、冲突提示）
 - [ ] TODO-225 删除分支（保护规则 + 影响预览）

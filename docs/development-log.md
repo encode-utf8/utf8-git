@@ -11,6 +11,38 @@
 
 ---
 
+## 2026-10-09 · M3-2 创建分支：首个写操作端到端
+
+**目标**：打通首个写操作——基于提交创建分支，复用 M3-1 的确认卡片 + 统一管线 + 审计。
+
+**完成内容**
+
+- 上游客户端：新增 `lib/github-branches.ts`（`createBranchRef` 调 REST `POST /repos/{owner}/{repo}/git/refs`，`normalizeCreatedRef` 归一化响应）；`github-errors.ts` 新增 `GitHubValidationError`（422：分支名非法或引用已存在）。
+- 纯逻辑：新增 `lib/branch-ops.ts`——`validateBranchName`（按 git check-ref-format 规则给出中文提示）、`createBranchDescriptor`（确认卡片与审计共用的操作描述）、`describeCreateBranchFailure`（失败码 → 可读文案）。
+- 接口：新增 `POST /api/repos/[owner]/[name]/operations/create-branch`，body `{ branch, from(sha), confirmed }`；幂等键由 `(actor, 描述)` 派生，执行走 `runOperation`，审计写入 `operationAudit`；`OperationError.originalError` 保留原始 GitHub 错误，据此映射 401 / 403 / 404 / 422 / 429 / 503 / 504。
+- UI：`timeline-view.tsx` 头部新增「新建分支」→ `ConfirmCard` 内含分支名输入与起点预览；成功后 `router.refresh()` 让分支选择器立即包含新分支；`confirm-card.tsx` 增加 `children` 表单插槽。
+- 测试：`branch-ops.test.ts`（校验 / 描述 / 失败文案，6 条）、`github-branches.test.ts`（归一化 + 5 类错误，7 条），累计 198；E2E 新增「创建分支」用例（成功 + 422 冲突）。
+
+**关键决策**
+
+| 编号     | 决策                                                          | 理由                                                                           | 备选与否决原因                                                     |
+| -------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| ADR-0071 | 幂等键**服务端**由 `(actor, 描述)` 派生，客户端不传           | 客户端不知道稳定的用户标识；派生键让「同参数重发」自然去重，无需客户端保存 key | 客户端生成并透传 `Idempotency-Key`：需额外持久化，且丢失后无从去重 |
+| ADR-0072 | `OperationError` 保留 `originalError`，路由据此细化 HTTP 状态 | 管线统一包装错误，但调用方仍需把 GitHub 422 / 429 等映射为准确响应             | 在 execute 内直接返回错误码：破坏「描述 + execute」的通用签名      |
+| ADR-0073 | 分支起点固定为**提交 SHA**（不做分支名 → SHA 解析）           | UI 始终能给出 SHA（选中提交或分支头），少一次上游查询、语义单一                | 支持传分支名：需额外 GET 解析，且并发下分支可能已前移              |
+
+**问题与风险**
+
+- 上游写端点仅 E2E mock 覆盖（`POST /git/refs`），真实 GitHub 写入需登录后手动验收。
+- 成功后只 `router.refresh()` 刷新分支列表；时间线提交列表不变（新分支指向已有提交，属预期）。
+- 仓库策略冲突（保护规则 / 命名策略）目前统一落 403 / 422，文案较笼统。
+- 幂等「自动重试」仍未实现：网络中断后需用户手动重试（同参数会回放）。
+
+**下一步**
+
+- M3-3：创建 Issue（表单 + Markdown 预览 + 标签），复用确认卡片与统一管线。
+- 可选：把「创建分支」入口也放到提交详情面板（以该提交为起点）。
+
 ## 2026-10-09 · M3-1 收尾：审计表 + 内存 / Postgres 双实现
 
 **目标**：给写操作管线补上持久化审计（路线图 M3-1 的「审计表」），并让内存 / Postgres 两种后端复用同一管线。
