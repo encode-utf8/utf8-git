@@ -179,3 +179,26 @@ test("创建 PR：确认卡片 → 选择 base/head → 调上游创建 → 成�
   await page.getByRole("button", { name: "创建 PR", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("已存在");
 });
+
+test("删除分支：保护规则 → 影响预览 → 删除执行", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+  await page.getByRole("button", { name: "删除分支" }).click();
+
+  const select = page.getByLabel("要删除的分支");
+  await expect(select).toBeVisible();
+
+  // 默认分支：只给出不可删除的原因，不提供确认入口（无确认对话框）
+  await select.selectOption("main");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "不可删除：默认分支不能删除" }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // 可删除分支：展示影响预览 → 确认删除 → 状态提示
+  await select.selectOption("junk/delete-me");
+  const dialog = page.getByRole("dialog", { name: /删除分支/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(/不会删除任何提交/)).toBeVisible();
+  await dialog.getByRole("button", { name: "删除分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已删除分支 junk/delete-me");
+});

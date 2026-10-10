@@ -9,6 +9,8 @@
 //       POST /repos/{owner}/{name}/pulls（创建 PR；标题含「已存在」或 head=base 返回 422）
 //       GET /repos/{owner}/{name}/pulls/{number}（PR 详情：可合并 / 冲突 / 已合并）、
 //       PUT /repos/{owner}/{name}/pulls/{number}/merge（合并 PR；非法 merge_method 返回 422）。
+//       GET /repos/{owner}/{name}（默认分支）、GET .../branches/{branch}（保护状态，main 视为受保护）、
+//       DELETE .../git/refs/heads/{branch}（删除分支；main 返回 422，未知名返回 404）。
 
 import { createServer } from "node:http";
 
@@ -120,8 +122,15 @@ function makeCommits(count, startNumber, headlinePrefix) {
 const PAGE_1 = makeCommits(50, 60, "feat: 时间线提交");
 const PAGE_2 = makeCommits(10, 10, "feat: 历史提交");
 
-// 写操作 mock：已存在的分支引用（与 GraphQL 分支列表保持一致），重复创建返回 422
-const EXISTING_REFS = new Set(["refs/heads/main", "refs/heads/feature/e2e"]);
+// 写操作 mock：已存在的分支引用，重复创建返回 422；删除分支会从中移除
+const EXISTING_REFS = new Set([
+  "refs/heads/main",
+  "refs/heads/feature/e2e",
+  "refs/heads/junk/delete-me",
+]);
+
+// 分支列表（时间线选择器）：与 EXISTING_REFS 联动，删除分支后刷新页面即消失
+const REF_NAMES = ["main", "feature/e2e", "junk/delete-me"];
 
 // 创建 Issue 的递增编号（成功创建时自增，保证每次返回不同编号）
 let issueNumber = 100;
@@ -260,6 +269,11 @@ function sendJson(response, status, body, headers = {}) {
   response.end(JSON.stringify(body));
 }
 
+function sendEmpty(response, status) {
+  response.writeHead(status, {});
+  response.end();
+}
+
 function readJsonBody(request) {
   return new Promise((resolve) => {
     let raw = "";
@@ -287,10 +301,12 @@ function timelinePayload(variables, secondPage) {
         isPrivate: false,
         defaultBranchRef: { name: "main" },
         refs: {
-          nodes: [
-            { name: "main", target: { oid: head.oid, committedDate: head.committedDate } },
-            { name: "feature/e2e", target: { oid: head.oid, committedDate: head.committedDate } },
-          ],
+          nodes: REF_NAMES.filter((name) => EXISTING_REFS.has(`refs/heads/${name}`)).map(
+            (name) => ({
+              name,
+              target: { oid: head.oid, committedDate: head.committedDate },
+            }),
+          ),
         },
         object: {
           history: {
@@ -374,6 +390,51 @@ const server = createServer(async (request, response) => {
     sendJson(response, 200, pullRequestResult(owner, name, Number(number)), {
       "x-ratelimit-remaining": "4994",
     });
+    return;
+  }
+
+  const deleteRefMatch = /^\/repos\/([^/]+)\/([^/]+)\/git\/refs\/heads\/(.+)$/.exec(url.pathname);
+  if (deleteRefMatch && request.method === "DELETE") {
+    const branch = decodeURIComponent(deleteRefMatch[3]);
+    const ref = `refs/heads/${branch}`;
+    if (!EXISTING_REFS.has(ref)) {
+      sendJson(response, 404, { message: "Reference does not exist" });
+      return;
+    }
+    if (branch === "main") {
+      sendJson(response, 422, { message: "Protected branch cannot be deleted" });
+      return;
+    }
+    EXISTING_REFS.delete(ref);
+    sendEmpty(response, 204);
+    return;
+  }
+
+  const branchMatch = /^\/repos\/([^/]+)\/([^/]+)\/branches\/(.+)$/.exec(url.pathname);
+  if (branchMatch && request.method === "GET") {
+    const branch = decodeURIComponent(branchMatch[3]);
+    if (!EXISTING_REFS.has(`refs/heads/${branch}`)) {
+      sendJson(response, 404, { message: "Branch not found" });
+      return;
+    }
+    sendJson(
+      response,
+      200,
+      { name: branch, protected: branch === "main", commit: { sha: oid(100060) } },
+      { "x-ratelimit-remaining": "4991" },
+    );
+    return;
+  }
+
+  const repoMatch = /^\/repos\/([^/]+)\/([^/]+)$/.exec(url.pathname);
+  if (repoMatch && request.method === "GET") {
+    const [, owner, name] = repoMatch;
+    sendJson(
+      response,
+      200,
+      { name, full_name: `${owner}/${name}`, default_branch: "main", private: false },
+      { "x-ratelimit-remaining": "4990" },
+    );
     return;
   }
 
