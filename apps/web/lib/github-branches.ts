@@ -99,3 +99,63 @@ export async function createBranchRef(params: {
   const payload: unknown = await response.json();
   return { ...normalizeCreatedRef(payload, branch), rateLimit: readRateLimitHeaders(response) };
 }
+
+// 分支名可能含 /（feature/x）；逐段编码保留路径分隔符，避免把 / 编码成 %2F。
+function encodeRefPath(branch: string): string {
+  return branch.split("/").map(encodeURIComponent).join("/");
+}
+
+/** 删除分支引用（DELETE /repos/{owner}/{repo}/git/refs/heads/{branch}）；成功返回 204。 */
+export async function deleteBranchRef(params: {
+  token: string;
+  owner: string;
+  name: string;
+  branch: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}): Promise<{ branch: string; deleted: true }> {
+  const { token, owner, name, branch, fetchImpl = fetch, timeoutMs } = params;
+  const url =
+    `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}` +
+    `/git/refs/heads/${encodeRefPath(branch)}`;
+
+  const response = await githubFetch(
+    url,
+    {
+      method: "DELETE",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "utf8-git",
+      },
+      cache: "no-store",
+    },
+    { fetchImpl, timeoutMs },
+  );
+
+  if (response.status === 401) {
+    throw new GitHubUnauthorizedError();
+  }
+  if (response.status === 403 || response.status === 429) {
+    const remaining = response.headers.get("x-ratelimit-remaining");
+    const retryAfter = response.headers.get("retry-after");
+    if (response.status === 429 || remaining === "0" || retryAfter) {
+      throw new GitHubRateLimitError("GitHub API 访问频率超限", getRateLimitResetAt(response));
+    }
+    throw new GitHubForbiddenError();
+  }
+  if (response.status === 404) {
+    throw new GitHubNotFoundError("分支不存在或无权删除");
+  }
+  if (response.status === 422) {
+    // 受保护分支 / 引用非法（GitHub 对受保护分支返回 422）
+    throw new GitHubValidationError("GitHub 拒绝删除该分支（422）");
+  }
+  if (!response.ok) {
+    throw new GitHubApiError(`GitHub API 返回错误（${response.status}）`, response.status);
+  }
+
+  // 成功为 204 No Content，无响应体
+  return { branch, deleted: true };
+}
