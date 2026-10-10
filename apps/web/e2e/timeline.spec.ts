@@ -136,3 +136,23 @@ test("创建 Issue：确认卡片 → Markdown 预览 → 调上游创建 → �
   await page.getByRole("button", { name: "创建 Issue", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("不被接受");
 });
+
+test("合并 PR：可合并性检查 → 确认合并 → 冲突提示", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+  await page.getByRole("list", { name: "提交时间线" }).getByRole("button").first().click();
+  const detail = page.getByRole("dialog", { name: "提交详情" });
+  await expect(detail).toBeVisible();
+
+  // 可合并：检查通过 → 确认合并 → 状态提示
+  await detail.getByRole("button", { name: "合并 PR #61" }).click();
+  const mergeDialog = detail.getByRole("dialog", { name: /合并 PR #61/ });
+  await expect(mergeDialog).toBeVisible();
+  await expect(mergeDialog.getByText("可合并性检查：可合并")).toBeVisible();
+  await mergeDialog.getByRole("button", { name: "合并 PR", exact: true }).click();
+  await expect(detail.getByRole("status")).toContainText("已合并 PR #61");
+
+  // 冲突：#62 的检查结果不可合并 → 仅给出原因，不提供确认按钮
+  await detail.getByRole("button", { name: "合并 PR #62" }).click();
+  await expect(detail.getByRole("alert")).toContainText("可合并性检查：存在合并冲突");
+  await expect(detail.getByRole("button", { name: "合并 PR", exact: true })).toHaveCount(0);
+});

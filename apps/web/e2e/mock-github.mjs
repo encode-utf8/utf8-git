@@ -6,6 +6,8 @@
 //       POST /graphql（时间线，两页）、GET /repos/{owner}/{name}/commits/{sha}（提交详情）、
 //       POST /repos/{owner}/{name}/git/refs（创建分支；已存在的分支返回 422）。
 //       POST /repos/{owner}/{name}/issues（创建 Issue；标题含「已存在」返回 422）
+//       GET /repos/{owner}/{name}/pulls/{number}（PR 详情：可合并 / 冲突 / 已合并）、
+//       PUT /repos/{owner}/{name}/pulls/{number}/merge（合并 PR；非法 merge_method 返回 422）。
 
 import { createServer } from "node:http";
 
@@ -85,6 +87,26 @@ function makeCommits(count, startNumber, headlinePrefix) {
                     ],
                   },
                 },
+                ...(number === 60
+                  ? [
+                      {
+                        number: 61,
+                        title: "feat: 待合并的分支",
+                        state: "OPEN",
+                        mergedAt: null,
+                        url: `https://github.com/encode-utf8/utf8-git/pull/61`,
+                        closingIssuesReferences: { nodes: [] },
+                      },
+                      {
+                        number: 62,
+                        title: "feat: 有冲突的改动",
+                        state: "OPEN",
+                        mergedAt: null,
+                        url: `https://github.com/encode-utf8/utf8-git/pull/62`,
+                        closingIssuesReferences: { nodes: [] },
+                      },
+                    ]
+                  : []),
               ]
             : [],
       },
@@ -133,6 +155,66 @@ function createIssueResult(owner, name, body) {
       title,
       state: "open",
       html_url: `https://github.com/${owner}/${name}/issues/${issueNumber}`,
+    },
+  };
+}
+
+// PR 详情：61 可合并、62 有冲突、其余视为已合并（用于合并前的可合并性检查）
+function pullRequestResult(owner, name, number) {
+  if (number === 61) {
+    return {
+      number: 61,
+      title: "feat: 待合并的分支",
+      state: "open",
+      merged: false,
+      draft: false,
+      mergeable: true,
+      mergeable_state: "clean",
+      head: { ref: "feature/e2e-created" },
+      base: { ref: "main" },
+      html_url: `https://github.com/${owner}/${name}/pull/61`,
+    };
+  }
+  if (number === 62) {
+    return {
+      number: 62,
+      title: "feat: 有冲突的改动",
+      state: "open",
+      merged: false,
+      draft: false,
+      mergeable: false,
+      mergeable_state: "dirty",
+      head: { ref: "feature/e2e-created" },
+      base: { ref: "main" },
+      html_url: `https://github.com/${owner}/${name}/pull/62`,
+    };
+  }
+  return {
+    number,
+    title: "已合并的改动",
+    state: "closed",
+    merged: true,
+    draft: false,
+    mergeable: false,
+    mergeable_state: "unknown",
+    head: { ref: "feature/done" },
+    base: { ref: "main" },
+    html_url: `https://github.com/${owner}/${name}/pull/${number}`,
+  };
+}
+
+// 合并 PR：merge_method 非法（非 merge/squash/rebase）返回 422，否则确定性成功
+function mergePullRequestResult(number, body) {
+  const method = body.merge_method;
+  if (method !== undefined && !["merge", "squash", "rebase"].includes(method)) {
+    return { status: 422, body: { message: "Validation Failed" } };
+  }
+  return {
+    status: 200,
+    body: {
+      merged: true,
+      message: "Pull Request successfully merged",
+      sha: oid(200000 + number),
     },
   };
 }
@@ -233,6 +315,23 @@ const server = createServer(async (request, response) => {
     const body = await readJsonBody(request);
     const result = createRefResult(owner, name, body);
     sendJson(response, result.status, result.body, { "x-ratelimit-remaining": "4996" });
+    return;
+  }
+
+  const mergeMatch = /^\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)\/merge$/.exec(url.pathname);
+  if (mergeMatch && request.method === "PUT") {
+    const body = await readJsonBody(request);
+    const result = mergePullRequestResult(Number(mergeMatch[3]), body);
+    sendJson(response, result.status, result.body, { "x-ratelimit-remaining": "4993" });
+    return;
+  }
+
+  const pullMatch = /^\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)$/.exec(url.pathname);
+  if (pullMatch && request.method === "GET") {
+    const [, owner, name, number] = pullMatch;
+    sendJson(response, 200, pullRequestResult(owner, name, Number(number)), {
+      "x-ratelimit-remaining": "4994",
+    });
     return;
   }
 
