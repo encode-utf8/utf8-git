@@ -1,6 +1,6 @@
 # 贡献指南（CONTRIBUTING）
 
-感谢你关注 utf8-git。本文说明如何准备本地环境、提交改动与发起 Pull Request。项目当前处于 M1 阶段，欢迎通过 Issue 反馈问题与使用场景。
+感谢你关注 utf8-git。本文说明如何准备本地环境、提交改动与发起 Pull Request。项目已公网可用、正在快速迭代，欢迎通过 Issue 反馈问题与使用场景。
 
 - 项目背景、核心能力与文档导航见 [README.md](README.md)
 - 迭代节奏、分支模型与 Definition of Done 见 [docs/roadmap.md](docs/roadmap.md) 的「§8 迭代节奏与工程约定」

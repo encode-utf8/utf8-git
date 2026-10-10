@@ -1,7 +1,7 @@
 # 部署形态与多实例一致性（M1-6）
 
 > 关联：`docs/roadmap.md` M1-6 · `docs/technical-analysis.md` §2 / §6.2 / §10 · `docs/todo.md` TODO-104
-> 状态：代码与文档已落地；真实 Vercel / Neon 部署需用户账号（见 §8 遗留事项）
+> 状态：已在 Vercel + 托管 PostgreSQL（Neon）完成生产部署，推送到 `main` 自动发布
 
 ## 1. 目标部署形态
 
