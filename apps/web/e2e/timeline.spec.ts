@@ -206,22 +206,52 @@ test("删除分支：保护规则 → 影响预览 → 删除执行", async ({ p
 test("恢复分支：24h 窗口内撤销删除", async ({ page }) => {
   await page.goto("/repos/encode-utf8/utf8-git");
 
-  // 删除 feature/e2e（审计记录会保存删除前的分支头 SHA，作为恢复依据）
+  // 建一个专属分支：写操作失效时间线缓存后，刷新即出现在分支选择器里
+  await page.getByRole("button", { name: "新建分支" }).click();
+  await page.getByLabel("新分支名称").fill("feature/restore-me");
+  await page.getByRole("button", { name: "创建分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已创建分支 feature/restore-me");
+
+  // 删除它：审计记录会保存删除前的分支头 SHA，作为恢复依据
   await page.getByRole("button", { name: "删除分支" }).click();
-  await expect(page.getByLabel("要删除的分支")).toHaveValue("feature/e2e");
+  await page.getByLabel("要删除的分支").selectOption("feature/restore-me");
   const deleteDialog = page.getByRole("dialog", { name: /删除分支/ });
   await expect(deleteDialog).toBeVisible();
   await deleteDialog.getByRole("button", { name: "删除分支", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("已删除分支 feature/e2e");
+  await expect(page.getByRole("status")).toContainText("已删除分支 feature/restore-me");
 
   // 恢复入口：列出近 24h 的删除记录 → 选回该分支 → 重建引用
   await page.getByRole("button", { name: "恢复分支" }).click();
-  const candidate = page.getByRole("radio", { name: /^恢复 feature\/e2e（/ });
+  const candidate = page.getByRole("radio", { name: /^恢复 feature\/restore-me（/ });
   await expect(candidate).toBeVisible();
   await candidate.check();
   await page
     .getByRole("dialog", { name: /恢复分支/ })
     .getByRole("button", { name: "恢复分支", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("已恢复分支 feature/e2e");
+  await expect(page.getByRole("status")).toContainText("已恢复分支 feature/restore-me");
+});
+
+test("操作历史：审计记录含状态、等价命令与结果链接", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  // 先制造一条可识别的记录
+  await page.getByRole("button", { name: "新建分支" }).click();
+  await page.getByLabel("新分支名称").fill("feature/history-check");
+  await page.getByRole("button", { name: "创建分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已创建分支 feature/history-check");
+
+  await page.getByRole("link", { name: "操作历史" }).click();
+  await expect(page).toHaveURL(/\/repos\/encode-utf8\/utf8-git\/operations$/);
+  await expect(page.getByRole("heading", { name: "操作历史" })).toBeVisible();
+
+  // 每条记录含：操作类型、状态、等价 Git 命令与结果链接
+  const item = page.getByRole("listitem").filter({ hasText: "feature/history-check" }).first();
+  await expect(item).toContainText("创建分支");
+  await expect(item).toContainText("成功");
+  await expect(item.locator("code")).toContainText("git push origin");
+  await expect(item.getByRole("link", { name: "在 GitHub 查看分支" })).toHaveAttribute(
+    "href",
+    /\/tree\/feature\/history-check$/,
+  );
 });
