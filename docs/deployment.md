@@ -28,6 +28,9 @@
 | `GITHUB_GRAPHQL_ENDPOINT`             | 否   | 上游 GraphQL 地址（默认官方 API）                         | 同上                                           |
 | `GITHUB_TOKEN_ENDPOINT`               | 否   | 上游令牌地址（默认 GitHub）                               | 同上                                           |
 | `GITHUB_RATE_LIMIT_DEGRADE_THRESHOLD` | 否   | 剩余配额低于该值时进入「只读缓存」降级                    | 默认 `100`                                     |
+| `WRITE_OPERATION_LIMIT`               | 否   | 单个用户在一个窗口内允许的写操作次数上限                  | 默认 `20`                                      |
+| `WRITE_OPERATION_WINDOW_MS`           | 否   | 写操作频率限制的滑动窗口（毫秒）                          | 默认 `60000`                                   |
+| `OPERATION_AUDIT_RETENTION_DAYS`      | 否   | 写操作审计保留天数（写入时按概率清理更早的记录）          | 默认 `90`                                      |
 | `AUTH_TRUST_HOST`                     | 否   | 非 Vercel 自建部署时信任 `Host` 头                        | 自建填 `true`；Vercel 自动识别无需设置         |
 | `AUTH_URL`                            | 否   | 显式指定外部地址（自建 / 反代场景）                       | `https://<域名>`                               |
 | `NODE_USE_ENV_PROXY` + `HTTPS_PROXY`  | 否   | 仅本地开发在受限网络下访问 `github.com` 用                | 生产不需要                                     |

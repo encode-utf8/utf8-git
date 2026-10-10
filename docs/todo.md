@@ -97,7 +97,7 @@
 
 ### 3.4 安全与合规
 
-- [ ] TODO-231 写操作频率限制与防重放
+- [x] TODO-231 写操作频率限制与防重放（M3-8：`lib/write-rate-limit.ts` 按「用户 + 滑动窗口」判定（默认 20 次 / 分钟，`WRITE_OPERATION_LIMIT` / `WRITE_OPERATION_WINDOW_MS` 可调），计数复用写操作审计的 `started` 记录（`OperationAuditStoreLike.count`，内存 / Postgres 双实现），6 个写接口在调用上游前统一走 `enforceWriteRateLimit`，超限返回 429 + `Retry-After`；防重放：`runOperation` 的幂等回放限定在 10 分钟窗口内（`isWithinReplayWindow`），过期记录按新意图重新执行，避免同参数的新操作被历史成功记录静默吞掉；顺带修既有问题——审计保留期（`prune` + `OPERATION_AUDIT_RETENTION_DAYS`，默认 90 天，写入时按概率清理）与写操作网络失败自动重试（`fetchJsonWithRetry`，只重试「没拿到响应」的网络失败，4xx / 5xx 原样交给调用方））
 - [ ] TODO-232 用户数据清除与授权撤销（GDPR 友好）
 - [ ] TODO-233 审计日志导出
 
