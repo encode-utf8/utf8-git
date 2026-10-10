@@ -10,7 +10,7 @@ import {
 } from "@/lib/branch-restore-ops";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { createBranchRef } from "@/lib/github-branches";
-import { mapOperationFailure } from "@/lib/operation-http";
+import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
 import { createIdempotencyKey, repositorySlug, runOperation } from "@/lib/operations";
 
 // 输入约束：只允许安全字符（异常参数不进入上游请求）
@@ -117,6 +117,10 @@ export async function POST(
     return NextResponse.json({ error: "invalid_key" }, { status: 400 });
   }
 
+  const limited = await enforceWriteRateLimit(userId);
+  if (limited) {
+    return limited;
+  }
   const audit = getDataStores().operationAudit;
   const source = await audit.find(key);
   if (

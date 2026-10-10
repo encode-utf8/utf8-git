@@ -8,6 +8,9 @@ import type { CacheLookup } from "./server-cache";
 
 export type MaybePromise<T> = T | Promise<T>;
 
+/** 环境变量查询表：配置解析函数用它做入参，便于单测直接传入普通对象。 */
+export type EnvLike = Record<string, string | undefined>;
+
 export interface TtlCacheLike<V> {
   get(key: string): MaybePromise<CacheLookup<V> | null>;
   set(key: string, value: V): MaybePromise<void>;

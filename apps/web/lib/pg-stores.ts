@@ -6,7 +6,9 @@
 import { Prisma, type OperationAudit, type PrismaClient } from "@prisma/client";
 
 import {
+  AUDIT_PURGE_PROBABILITY,
   DEFAULT_AUDIT_LIMIT,
+  getAuditRetentionMs,
   type OperationAuditQuery,
   type OperationAuditStoreLike,
 } from "./operation-audit";
@@ -127,7 +129,15 @@ export class PgRateLimitStore implements RateLimitStoreLike {
 
 // 写操作审计的 Postgres 实现（M3-1）：与内存实现语义一致，供多实例 / Serverless 部署复用同一管线。
 export class PgOperationAuditStore implements OperationAuditStoreLike {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly options: {
+      now?: () => number;
+      random?: () => number;
+      retentionMs?: number;
+      purgeProbability?: number;
+    } = {},
+  ) {}
 
   async find(idempotencyKey: string): Promise<OperationAuditRecord | null> {
     const row = await this.prisma.operationAudit.findFirst({
@@ -152,21 +162,50 @@ export class PgOperationAuditStore implements OperationAuditStoreLike {
         recordedAt: new Date(record.recordedAt),
       },
     });
+    const random = this.options.random ?? Math.random;
+    const probability = this.options.purgeProbability ?? AUDIT_PURGE_PROBABILITY;
+    if (random() < probability) {
+      await this.prune(this.retentionCutoff());
+    }
   }
 
   async list(query: OperationAuditQuery = {}): Promise<OperationAuditRecord[]> {
     const rows = await this.prisma.operationAudit.findMany({
-      where: {
-        ...(query.repo ? { repo: query.repo } : {}),
-        ...(query.actor ? { actor: query.actor } : {}),
-        ...(query.kind ? { kind: query.kind } : {}),
-        ...(query.status ? { status: query.status } : {}),
-      },
+      where: auditWhere(query),
       orderBy: { id: "desc" },
       take: query.limit ?? DEFAULT_AUDIT_LIMIT,
     });
     return rows.map(toAuditRecord);
   }
+
+  /** 统计命中条件的记录数（频率限制只关心窗口内的 started 记录）。 */
+  async count(query: OperationAuditQuery = {}): Promise<number> {
+    return this.prisma.operationAudit.count({ where: auditWhere(query) });
+  }
+
+  /** 删除 recordedAt < before 的记录，返回删除条数（保留期清理）。 */
+  async prune(before: Date): Promise<number> {
+    const result = await this.prisma.operationAudit.deleteMany({
+      where: { recordedAt: { lt: before } },
+    });
+    return result.count;
+  }
+
+  private retentionCutoff(): Date {
+    const now = this.options.now ?? Date.now;
+    const retentionMs = this.options.retentionMs ?? getAuditRetentionMs();
+    return new Date(now() - retentionMs);
+  }
+}
+
+function auditWhere(query: OperationAuditQuery): Prisma.OperationAuditWhereInput {
+  return {
+    ...(query.repo ? { repo: query.repo } : {}),
+    ...(query.actor ? { actor: query.actor } : {}),
+    ...(query.kind ? { kind: query.kind } : {}),
+    ...(query.status ? { status: query.status } : {}),
+    ...(query.since ? { recordedAt: { gte: new Date(query.since) } } : {}),
+  };
 }
 
 function toAuditRecord(row: OperationAudit): OperationAuditRecord {

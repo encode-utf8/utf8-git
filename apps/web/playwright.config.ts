@@ -32,6 +32,8 @@ const APP_ENV: Record<string, string> = {
   AUTH_TRUST_HOST: "true",
   ...TEST_SECRETS,
   STORE_BACKEND: "memory",
+  // 频率限制在 E2E 中放宽：整轮用例共用一个登录态，会连续发起十余次写操作
+  WRITE_OPERATION_LIMIT: "200",
   GITHUB_API_BASE_URL: MOCK_URL,
   GITHUB_GRAPHQL_ENDPOINT: `${MOCK_URL}/graphql`,
   GITHUB_TOKEN_ENDPOINT: `${MOCK_URL}/login/oauth/access_token`,

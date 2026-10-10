@@ -4,6 +4,7 @@
 
 import { NextResponse } from "next/server";
 
+import { getDataStores } from "./data-stores";
 import {
   GitHubApiError,
   GitHubForbiddenError,
@@ -14,7 +15,14 @@ import {
   GitHubUnauthorizedError,
   GitHubValidationError,
 } from "./github-errors";
+import type { OperationAuditStoreLike } from "./operation-audit";
 import { OperationError } from "./operations";
+import type { EnvLike } from "./shared-store";
+import {
+  decideWriteRateLimit,
+  getWriteRateLimitConfig,
+  rateLimitWindowStart,
+} from "./write-rate-limit";
 
 export function mapOperationFailure(error: unknown, conflictCode: string): NextResponse {
   const cause = error instanceof OperationError ? error.originalError : error;
@@ -49,4 +57,36 @@ export function mapOperationFailure(error: unknown, conflictCode: string): NextR
     return NextResponse.json({ error: error.code, message: error.message }, { status: 400 });
   }
   return NextResponse.json({ error: "internal_error" }, { status: 500 });
+}
+
+/**
+ * 写操作频率限制守卫（M3-8 / TODO-231）：超限返回 429（含 Retry-After），放行返回 null。
+ * 计数来自写操作审计（窗口内的 started 记录），因此不引入新表，且与审计同源、多实例一致。
+ */
+export async function enforceWriteRateLimit(
+  actor: string,
+  options: { audit?: OperationAuditStoreLike; env?: EnvLike; now?: Date } = {},
+): Promise<NextResponse | null> {
+  const config = getWriteRateLimitConfig(options.env);
+  const now = options.now ?? new Date();
+  const audit = options.audit ?? getDataStores().operationAudit;
+  const recent = await audit.count({
+    actor,
+    status: "started",
+    since: rateLimitWindowStart(now, config.windowMs).toISOString(),
+  });
+  const decision = decideWriteRateLimit({ recent, limit: config.limit, windowMs: config.windowMs });
+  if (decision.allowed) {
+    return null;
+  }
+  return NextResponse.json(
+    { error: "too_many_requests", limit: decision.limit, retryAfterMs: decision.retryAfterMs },
+    {
+      status: 429,
+      headers: {
+        "retry-after": String(Math.ceil(decision.retryAfterMs / 1000)),
+        "cache-control": "no-store",
+      },
+    },
+  );
 }

@@ -4,7 +4,7 @@ import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { createPullRequest } from "@/lib/github-pulls";
-import { mapOperationFailure } from "@/lib/operation-http";
+import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
 import { createIdempotencyKey, runOperation } from "@/lib/operations";
 import {
   createPullRequestDescriptor,
@@ -71,6 +71,10 @@ export async function POST(
     return NextResponse.json({ error: "invalid_pull", message: bodyError }, { status: 400 });
   }
 
+  const limited = await enforceWriteRateLimit(userId);
+  if (limited) {
+    return limited;
+  }
   const token = await getGitHubAccessToken(userId);
   if (!token) {
     return NextResponse.json({ error: "no_token" }, { status: 401 });

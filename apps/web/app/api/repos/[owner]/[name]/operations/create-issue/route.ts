@@ -10,7 +10,7 @@ import {
   validateIssueLabels,
   validateIssueTitle,
 } from "@/lib/issue-ops";
-import { mapOperationFailure } from "@/lib/operation-http";
+import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
 import { createIdempotencyKey, runOperation } from "@/lib/operations";
 
 // 输入约束：只允许安全字符（异常参数不进入上游请求）
@@ -67,6 +67,10 @@ export async function POST(
     return NextResponse.json({ error: "invalid_issue", message: labelsError }, { status: 400 });
   }
 
+  const limited = await enforceWriteRateLimit(userId);
+  if (limited) {
+    return limited;
+  }
   const token = await getGitHubAccessToken(userId);
   if (!token) {
     return NextResponse.json({ error: "no_token" }, { status: 401 });

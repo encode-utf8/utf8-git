@@ -7,7 +7,7 @@ import { createDeleteBranchDescriptor, evaluateBranchDeletion } from "@/lib/bran
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { fetchBranchDeletionContext } from "@/lib/github-branch-settings";
 import { deleteBranchRef } from "@/lib/github-branches";
-import { mapOperationFailure } from "@/lib/operation-http";
+import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
 import { createIdempotencyKey, runOperation } from "@/lib/operations";
 
 // 输入约束：只允许安全字符（异常参数不进入上游请求）
@@ -125,6 +125,11 @@ export async function POST(
   const current =
     typeof input.current === "string" && input.current.trim() ? input.current.trim() : null;
   const headSha = typeof input.sha === "string" && SHA_PATTERN.test(input.sha) ? input.sha : null;
+
+  const limited = await enforceWriteRateLimit(userId);
+  if (limited) {
+    return limited;
+  }
 
   let settings;
   try {

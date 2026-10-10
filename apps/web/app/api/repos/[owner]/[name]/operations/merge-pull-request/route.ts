@@ -4,7 +4,7 @@ import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { fetchPullRequest, mergePullRequest } from "@/lib/github-pulls";
-import { mapOperationFailure } from "@/lib/operation-http";
+import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
 import { createIdempotencyKey, runOperation } from "@/lib/operations";
 import {
   createMergePullRequestDescriptor,
@@ -116,6 +116,11 @@ export async function POST(
     return NextResponse.json({ error: "invalid_method" }, { status: 400 });
   }
   const method: MergeMethod = isMergeMethod(input.method) ? input.method : "merge";
+
+  const limited = await enforceWriteRateLimit(userId);
+  if (limited) {
+    return limited;
+  }
 
   let pull;
   try {

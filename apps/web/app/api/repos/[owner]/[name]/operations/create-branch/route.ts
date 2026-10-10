@@ -7,7 +7,7 @@ import { shortSha } from "@/lib/commit-format";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { createBranchRef } from "@/lib/github-branches";
 import { createIdempotencyKey, runOperation } from "@/lib/operations";
-import { mapOperationFailure } from "@/lib/operation-http";
+import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
 
 // 输入约束：只允许安全字符（异常参数不进入上游请求）
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-_.]{0,98})$/;
@@ -52,6 +52,10 @@ export async function POST(
     return NextResponse.json({ error: "invalid_branch", message: nameError }, { status: 400 });
   }
 
+  const limited = await enforceWriteRateLimit(userId);
+  if (limited) {
+    return limited;
+  }
   const token = await getGitHubAccessToken(userId);
   if (!token) {
     return NextResponse.json({ error: "no_token" }, { status: 401 });
