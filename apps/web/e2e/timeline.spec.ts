@@ -241,6 +241,12 @@ test("操作历史：审计记录含状态、等价命令与结果链接", async
   await page.getByRole("button", { name: "创建分支", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("已创建分支 feature/history-check");
 
+  // 再制造一条可识别的失败记录（上游 422：分支已存在），用于验证状态筛选
+  await page.getByRole("button", { name: "新建分支" }).click();
+  await page.getByLabel("新分支名称").fill("feature/e2e");
+  await page.getByRole("button", { name: "创建分支", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("已存在");
+
   await page.getByRole("link", { name: "操作历史" }).click();
   await expect(page).toHaveURL(/\/repos\/encode-utf8\/utf8-git\/operations$/);
   await expect(page.getByRole("heading", { name: "操作历史" })).toBeVisible();
@@ -253,5 +259,25 @@ test("操作历史：审计记录含状态、等价命令与结果链接", async
   await expect(item.getByRole("link", { name: "在 GitHub 查看分支" })).toHaveAttribute(
     "href",
     /\/tree\/feature\/history-check$/,
+  );
+
+  // 状态筛选：仅成功 / 仅失败（URL 带上 status 参数，筛选条件可分享）
+  await page.getByRole("link", { name: "仅成功" }).click();
+  await expect(page).toHaveURL(/\/operations\?status=succeeded$/);
+  await expect(page.getByRole("listitem").filter({ hasText: "feature/history-check" })).toHaveCount(
+    1,
+  );
+
+  await page.getByRole("link", { name: "仅失败" }).click();
+  await expect(page).toHaveURL(/\/operations\?status=failed$/);
+  await expect(page.getByRole("listitem").filter({ hasText: "feature/history-check" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("listitem").first()).toContainText("失败");
+
+  await page.getByRole("link", { name: "全部" }).click();
+  await expect(page).toHaveURL(/\/repos\/encode-utf8\/utf8-git\/operations$/);
+  await expect(page.getByRole("listitem").filter({ hasText: "feature/history-check" })).toHaveCount(
+    1,
   );
 });

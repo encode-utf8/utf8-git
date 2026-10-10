@@ -9,6 +9,8 @@ import {
   AUDIT_PURGE_PROBABILITY,
   DEFAULT_AUDIT_LIMIT,
   getAuditRetentionMs,
+  latestOperationPage,
+  operationScanLimit,
   type OperationAuditQuery,
   type OperationAuditStoreLike,
 } from "./operation-audit";
@@ -174,8 +176,27 @@ export class PgOperationAuditStore implements OperationAuditStoreLike {
       where: auditWhere(query),
       orderBy: { id: "desc" },
       take: query.limit ?? DEFAULT_AUDIT_LIMIT,
+      skip: query.offset ?? 0,
     });
     return rows.map(toAuditRecord);
+  }
+
+  /** 操作历史分页：预取原始记录后按幂等键收敛（见 latestOperationPage）。 */
+  async listOperations(query: OperationAuditQuery = {}): Promise<OperationAuditRecord[]> {
+    const limit = query.limit ?? DEFAULT_AUDIT_LIMIT;
+    const offset = query.offset ?? 0;
+    const rows = await this.list({ ...query, limit: operationScanLimit(limit, offset), offset: 0 });
+    return latestOperationPage(rows, limit, offset);
+  }
+
+  /** 命中条件中最早一条的 recordedAt（频率限制据此算精确等待时间）。 */
+  async oldestRecordedAt(query: OperationAuditQuery = {}): Promise<string | null> {
+    const row = await this.prisma.operationAudit.findFirst({
+      where: auditWhere(query),
+      orderBy: { recordedAt: "asc" },
+      select: { recordedAt: true },
+    });
+    return row ? row.recordedAt.toISOString() : null;
   }
 
   /** 统计命中条件的记录数（频率限制只关心窗口内的 started 记录）。 */

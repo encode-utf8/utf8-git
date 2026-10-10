@@ -18,7 +18,10 @@ export type OperationAuditQuery = {
   status?: OperationAuditStatus;
   /** 只匹配 recordedAt >= since 的记录（M3-8 写操作频率限制的滑动窗口）。 */
   since?: string;
+  /** 原始记录条数上限（list / count / oldestRecordedAt 共用）。 */
   limit?: number;
+  /** 原始记录偏移（list 用；按「操作条数」分页请用 listOperations）。 */
+  offset?: number;
 };
 
 /**
@@ -28,8 +31,31 @@ export type OperationAuditQuery = {
  */
 export interface OperationAuditStoreLike extends OperationAuditSink {
   list(query?: OperationAuditQuery): Promise<OperationAuditRecord[]>;
+  /** 操作历史：按「单次操作」分页（同键只保留最新一条），offset / limit 以操作条数计。 */
+  listOperations(query?: OperationAuditQuery): Promise<OperationAuditRecord[]>;
   count(query?: OperationAuditQuery): Promise<number>;
+  /** 命中条件中最早一条的 recordedAt：频率限制据此给出精确的 Retry-After。 */
+  oldestRecordedAt(query?: OperationAuditQuery): Promise<string | null>;
   prune(before: Date): Promise<number>;
+}
+
+// 操作历史分页：同一次操作通常写 2 条记录（started + 终态），按「操作条数」分页要多取一些
+// 原始记录再收敛；达到上限只展示较新的部分（更深的翻页需要游标，见开发记录的风险清单）。
+export const OPERATION_SCAN_FACTOR = 3;
+export const OPERATION_SCAN_LIMIT = 600;
+
+/** 为某个分页窗口预取的原始记录条数。 */
+export function operationScanLimit(limit: number, offset: number): number {
+  return Math.min((offset + limit) * OPERATION_SCAN_FACTOR, OPERATION_SCAN_LIMIT);
+}
+
+/** 收敛后分页：按幂等键收敛成「每次操作一条」，再取第 offset 条起的 limit 条。 */
+export function latestOperationPage(
+  records: OperationAuditRecord[],
+  limit: number,
+  offset = 0,
+): OperationAuditRecord[] {
+  return latestPerIdempotencyKey(records).slice(offset, offset + limit);
 }
 
 export const DEFAULT_AUDIT_LIMIT = 50;
@@ -120,18 +146,46 @@ export class MemoryOperationAuditStore implements OperationAuditStoreLike {
     }
   }
 
-  /** 最新优先；支持按仓库 / 操作人 / 类型 / 状态 / 时间下界过滤与条数上限。 */
+  /** 最新优先；支持按仓库 / 操作人 / 类型 / 状态 / 时间下界过滤与条数上限、偏移。 */
   async list(query: OperationAuditQuery = {}): Promise<OperationAuditRecord[]> {
     const limit = query.limit ?? DEFAULT_AUDIT_LIMIT;
-    return this.records
-      .filter((item) => matchesQuery(item, query))
-      .slice(-limit)
-      .reverse();
+    const offset = query.offset ?? 0;
+    const matched = this.records.filter((item) => matchesQuery(item, query));
+    const end = Math.max(0, matched.length - offset);
+    return matched.slice(Math.max(0, end - limit), end).reverse();
+  }
+
+  /** 操作历史分页：预取原始记录后按幂等键收敛（见 latestOperationPage）。 */
+  async listOperations(query: OperationAuditQuery = {}): Promise<OperationAuditRecord[]> {
+    const limit = query.limit ?? DEFAULT_AUDIT_LIMIT;
+    const offset = query.offset ?? 0;
+    const rows = await this.list({ ...query, limit: operationScanLimit(limit, offset), offset: 0 });
+    return latestOperationPage(rows, limit, offset);
   }
 
   /** 统计命中条件的记录数（频率限制只关心窗口内的 started 记录）。 */
   async count(query: OperationAuditQuery = {}): Promise<number> {
     return this.records.reduce((total, item) => (matchesQuery(item, query) ? total + 1 : total), 0);
+  }
+
+  /** 命中条件中最早一条的 recordedAt（频率限制据此算精确等待时间）。 */
+  async oldestRecordedAt(query: OperationAuditQuery = {}): Promise<string | null> {
+    let oldestAt: number | null = null;
+    let oldest: string | null = null;
+    for (const item of this.records) {
+      if (!matchesQuery(item, query)) {
+        continue;
+      }
+      const at = Date.parse(item.recordedAt);
+      if (!Number.isFinite(at)) {
+        continue;
+      }
+      if (oldestAt === null || at < oldestAt) {
+        oldestAt = at;
+        oldest = item.recordedAt;
+      }
+    }
+    return oldest;
   }
 
   /** 删除 recordedAt < before 的记录，返回删除条数（保留期清理）。 */

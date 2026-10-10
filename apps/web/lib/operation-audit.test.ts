@@ -4,6 +4,7 @@ import {
   MemoryOperationAuditStore,
   getAuditRetentionMs,
   latestPerIdempotencyKey,
+  operationScanLimit,
 } from "./operation-audit";
 import {
   createIdempotencyKey,
@@ -133,6 +134,70 @@ describe("内存审计存储：窗口计数与保留期", () => {
 
     await store.append(record({ idempotencyKey: "fresh", recordedAt: "2026-10-08T23:59:00.000Z" }));
     expect((await store.list()).map((item) => item.idempotencyKey)).toEqual(["fresh"]);
+  });
+});
+
+describe("操作历史分页", () => {
+  async function seededStore() {
+    const store = new MemoryOperationAuditStore();
+    await store.append(record({ idempotencyKey: "a", status: "started" }));
+    await store.append(record({ idempotencyKey: "a", status: "succeeded" }));
+    await store.append(record({ idempotencyKey: "b", status: "started" }));
+    await store.append(record({ idempotencyKey: "b", status: "failed" }));
+    await store.append(record({ idempotencyKey: "c", status: "started" }));
+    await store.append(record({ idempotencyKey: "c", status: "succeeded" }));
+    return store;
+  }
+
+  it("listOperations 按操作条数分页，同键只保留最新一条", async () => {
+    const store = await seededStore();
+
+    expect(
+      (await store.listOperations({ limit: 2 })).map(
+        (item) => `${item.idempotencyKey}:${item.status}`,
+      ),
+    ).toEqual(["c:succeeded", "b:failed"]);
+    expect(
+      (await store.listOperations({ limit: 2, offset: 2 })).map((item) => item.idempotencyKey),
+    ).toEqual(["a"]);
+    expect(await store.listOperations({ limit: 2, offset: 4 })).toEqual([]);
+  });
+
+  it("listOperations 支持状态筛选", async () => {
+    const store = await seededStore();
+
+    expect(
+      (await store.listOperations({ status: "failed" })).map((item) => item.idempotencyKey),
+    ).toEqual(["b"]);
+    expect(
+      (await store.listOperations({ status: "succeeded" })).map((item) => item.idempotencyKey),
+    ).toEqual(["c", "a"]);
+  });
+
+  it("list 支持 offset（按原始记录翻页）", async () => {
+    const store = await seededStore();
+    expect(
+      (await store.list({ limit: 2, offset: 2 })).map((item) => `${item.idempotencyKey}`),
+    ).toEqual(["b", "b"]);
+    expect(await store.list({ limit: 2, offset: 8 })).toEqual([]);
+  });
+
+  it("预取条数按操作条数放大，并受上限约束", () => {
+    expect(operationScanLimit(20, 0)).toBe(60);
+    expect(operationScanLimit(20, 20)).toBe(120);
+    expect(operationScanLimit(100, 200)).toBe(600);
+  });
+
+  it("oldestRecordedAt 取命中条件中最早一条", async () => {
+    const store = new MemoryOperationAuditStore();
+    await store.append(record({ idempotencyKey: "a", recordedAt: "2026-10-09T00:10:00.000Z" }));
+    await store.append(record({ idempotencyKey: "b", recordedAt: "2026-10-09T00:00:00.000Z" }));
+
+    expect(await store.oldestRecordedAt()).toBe("2026-10-09T00:00:00.000Z");
+    expect(await store.oldestRecordedAt({ since: "2026-10-09T00:05:00.000Z" })).toBe(
+      "2026-10-09T00:10:00.000Z",
+    );
+    expect(await store.oldestRecordedAt({ actor: "nobody" })).toBeNull();
   });
 });
 
