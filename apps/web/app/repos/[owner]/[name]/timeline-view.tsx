@@ -33,6 +33,7 @@ import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { CommitDetailPanel } from "./commit-detail";
 import { ConfirmCard } from "./confirm-card";
+import { CreateIssuePanel } from "./create-issue-panel";
 import { GlossaryHint } from "./glossary-hint";
 import { LaneGraph } from "./lane-graph";
 
@@ -213,6 +214,8 @@ export function TimelineView({
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
+  const [issueOpen, setIssueOpen] = useState(false);
+  const [issueSuccess, setIssueSuccess] = useState<string | null>(null);
 
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -337,6 +340,16 @@ export function TimelineView({
       setCreating(false);
     }
   }, [branchStart, creating, name, newBranchName, owner, router]);
+
+  // 创建 Issue（M3-3）：成功后关闭面板、展示提示并刷新服务端数据（沿用创建分支的约定）。
+  const handleIssueCreated = useCallback(
+    (message: string) => {
+      setIssueOpen(false);
+      setIssueSuccess(message);
+      router.refresh();
+    },
+    [router],
+  );
 
   // 过滤 / 缩放变化时：把仍可见的选中提交重新锚定到视口中央（保持浏览上下文），否则回到顶部。
   const applyFilterPatch = useCallback(
@@ -500,17 +513,29 @@ export function TimelineView({
             </span>
           )}
           {commits.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => {
-                setCreateOpen(true);
-                setCreateError(null);
-                setCreateSuccess(null);
-              }}
-              className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
-            >
-              新建分支
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreateOpen(true);
+                  setCreateError(null);
+                  setCreateSuccess(null);
+                }}
+                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+              >
+                新建分支
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIssueOpen(true);
+                  setIssueSuccess(null);
+                }}
+                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+              >
+                新建 Issue
+              </button>
+            </>
           ) : null}
           <span className="flex items-center gap-2">
             <label htmlFor="explain-mode">术语解释</label>
@@ -532,12 +557,12 @@ export function TimelineView({
         </div>
       </div>
 
-      {createSuccess ? (
+      {createSuccess || issueSuccess ? (
         <p
           role="status"
           className="mt-3 rounded-lg border border-green-300 bg-green-50 p-3 text-xs text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200"
         >
-          {createSuccess}
+          {createSuccess ?? issueSuccess}
         </p>
       ) : null}
 
@@ -567,6 +592,17 @@ export function TimelineView({
               {branchNameError ?? `起点：提交 ${shortSha(branchStart?.oid ?? "")}`}
             </p>
           </ConfirmCard>
+        </div>
+      ) : null}
+
+      {issueOpen ? (
+        <div className="mt-3">
+          <CreateIssuePanel
+            owner={owner}
+            name={name}
+            onCreated={handleIssueCreated}
+            onCancel={() => setIssueOpen(false)}
+          />
         </div>
       ) : null}
 
