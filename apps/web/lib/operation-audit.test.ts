@@ -113,6 +113,17 @@ describe("内存审计存储：窗口计数与保留期", () => {
     ).toBe(1);
   });
 
+  it("deleteByActor 只删除该操作人的记录并返回条数", async () => {
+    const store = new MemoryOperationAuditStore();
+    await store.append(record({ idempotencyKey: "a", actor: "u1" }));
+    await store.append(record({ idempotencyKey: "b", actor: "u2" }));
+    await store.append(record({ idempotencyKey: "c", actor: "u1" }));
+
+    expect(await store.deleteByActor("u1")).toBe(2);
+    expect((await store.list()).map((item) => item.idempotencyKey)).toEqual(["b"]);
+    expect(await store.deleteByActor("u1")).toBe(0);
+  });
+
   it("prune 删除保留期之前的记录并返回条数", async () => {
     const store = new MemoryOperationAuditStore();
     await store.append(record({ idempotencyKey: "old", recordedAt: "2026-01-01T00:00:00.000Z" }));

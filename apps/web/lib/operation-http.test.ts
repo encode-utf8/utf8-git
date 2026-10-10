@@ -20,6 +20,7 @@ function auditStub(options: { recent: number; oldest?: string | null }) {
       return options.oldest ?? null;
     },
     prune: async () => 0,
+    deleteByActor: async () => 0,
   } satisfies OperationAuditStoreLike;
   return { store, queries, oldestCalls: () => oldestCalls };
 }

@@ -92,7 +92,26 @@ export default function PermissionsPage() {
             >
               GitHub 的 Settings → Applications → Authorized OAuth Apps
             </a>
-            移除 utf8-git，撤销后令牌立即失效，本应用将无法再读取任何仓库。
+            移除 utf8-git，撤销后令牌立即失效，本应用将无法再读取任何仓库。也可以直接在{" "}
+            <Link
+              href="/me"
+              className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
+            >
+              我的账号
+            </Link>{" "}
+            页点「撤销 GitHub 授权」：它会调用 GitHub
+            接口撤销令牌，并删除本应用保存的令牌密文与登录会话。
+          </p>
+        </section>
+
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold text-black dark:text-zinc-50">
+            如何清除本应用的数据
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+            「我的账号」页的「清除我的数据」会删除本应用保存的全部账号数据——访问令牌、登录会话、
+            写操作审计记录与缓存，并删除该账号在本应用中的用户记录，随后自动结束登录会话。
+            这是不可恢复的操作；它不会影响你 GitHub 上的仓库、提交、Issue 与 PR。
           </p>
         </section>
 

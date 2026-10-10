@@ -47,6 +47,14 @@ describe("确认视图", () => {
     expect(view.title).toContain("feature/demo");
   });
 
+  it("账号级操作也是危险操作并给出按钮文案", () => {
+    expect(confirmationView(descriptor({ kind: "revokeAuthorization" })).danger).toBe(true);
+    expect(confirmationView(descriptor({ kind: "revokeAuthorization" })).confirmLabel).toBe(
+      "撤销授权",
+    );
+    expect(confirmationView(descriptor({ kind: "purgeAccountData" })).confirmLabel).toBe("清除数据");
+  });
+
   it("创建类操作不算危险操作", () => {
     expect(confirmationView(descriptor({ kind: "createBranch" })).danger).toBe(false);
     expect(confirmationView(descriptor({ kind: "createIssue" })).confirmLabel).toBe("创建 Issue");

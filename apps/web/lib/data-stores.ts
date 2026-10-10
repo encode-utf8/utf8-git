@@ -113,6 +113,51 @@ export function getRateLimitThreshold(): number {
 }
 
 /**
+ * 账号级缓存前缀：四类缓存键都以 `userId` 作为第 2 段（见 repos-data / timeline-data /
+ * commit-data 的 cacheKey 调用），因此「清除数据 / 撤销授权」按用户整体失效时，
+ * 用 `cacheKey(scope, userId)` + 字段分隔符作为前缀即可一次清干净。
+ */
+export function userCachePrefixes(userId: string): {
+  repos: string;
+  timeline: string;
+  cursor: string;
+  commit: string;
+} {
+  const separator = "\u001f";
+  return {
+    repos: `${cacheKey("repos", userId)}${separator}`,
+    timeline: `${cacheKey("timeline", userId)}${separator}`,
+    cursor: `${cacheKey("cursor", userId)}${separator}`,
+    commit: `${cacheKey("commit", userId)}${separator}`,
+  };
+}
+
+/** 需要按用户整体失效的那几类缓存（结构与 DataStores 对应，便于单测注入）。 */
+export type UserCaches = {
+  reposCache: TtlCacheLike<unknown>;
+  timelineCache: TtlCacheLike<unknown>;
+  cursorCache: TtlCacheLike<unknown>;
+  commitCache: TtlCacheLike<unknown>;
+};
+
+/**
+ * 失效某个用户的全部缓存（M3-9）：撤销授权 / 清除数据后，这些条目既没有令牌可用、
+ * 也不应继续留在应用内（限流降级时会读旧值展示），必须整体清掉。
+ */
+export async function invalidateUserCaches(
+  userId: string,
+  caches: UserCaches = getDataStores(),
+): Promise<void> {
+  const prefixes = userCachePrefixes(userId);
+  await Promise.all([
+    caches.reposCache.deleteByPrefix(prefixes.repos),
+    caches.timelineCache.deleteByPrefix(prefixes.timeline),
+    caches.cursorCache.deleteByPrefix(prefixes.cursor),
+    caches.commitCache.deleteByPrefix(prefixes.commit),
+  ]);
+}
+
+/**
  * 写操作成功后失效该用户在此仓库的时间线缓存（含分支列表 / PR 状态等派生数据）。
  * 不失效时，写操作后的 router.refresh() 会命中旧缓存——M3-6 发现「新建分支后选择器不更新」
  * 就是这个原因。只失效时间线缓存、不动游标分页链：提交本身没有变化，游标链仍然有效。

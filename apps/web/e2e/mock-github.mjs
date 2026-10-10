@@ -10,7 +10,8 @@
 //       GET /repos/{owner}/{name}/pulls/{number}（PR 详情：可合并 / 冲突 / 已合并）、
 //       PUT /repos/{owner}/{name}/pulls/{number}/merge（合并 PR；非法 merge_method 返回 422）。
 //       GET /repos/{owner}/{name}（默认分支）、GET .../branches/{branch}（保护状态，main 视为受保护）、
-//       DELETE .../git/refs/heads/{branch}（删除分支；main 返回 422，未知名返回 404）。
+//       DELETE .../git/refs/heads/{branch}（删除分支；main 返回 422，未知名返回 404）、
+//       DELETE /applications/{client_id}/token（撤销授权；缺 Basic 认证返回 401，client_id 不符返回 404）。
 
 import { createServer } from "node:http";
 
@@ -330,6 +331,28 @@ const server = createServer(async (request, response) => {
 
   if (url.pathname === "/healthz") {
     sendJson(response, 200, { ok: true });
+    return;
+  }
+
+  // 撤销 OAuth 授权（M3-9）：GitHub 用 Basic(client_id:client_secret) 认证，成功返回 204
+  const revokeMatch = /^\/applications\/([^/]+)\/token$/.exec(url.pathname);
+  if (revokeMatch && request.method === "DELETE") {
+    const authorization = request.headers.authorization ?? "";
+    if (!authorization.startsWith("Basic ")) {
+      sendJson(response, 401, { message: "Requires authentication" });
+      return;
+    }
+    const body = await readJsonBody(request);
+    if (typeof body.access_token !== "string" || body.access_token.length === 0) {
+      sendJson(response, 422, { message: "Validation Failed" });
+      return;
+    }
+    const clientId = decodeURIComponent(revokeMatch[1]);
+    if (clientId !== (process.env.E2E_GITHUB_ID ?? "e2e-github-id")) {
+      sendJson(response, 404, { message: "Not Found" });
+      return;
+    }
+    sendEmpty(response, 204);
     return;
   }
 

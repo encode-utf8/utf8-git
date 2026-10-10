@@ -9,7 +9,9 @@ export type OperationKind =
   | "createPullRequest"
   | "mergePullRequest"
   | "deleteBranch"
-  | "restoreBranch";
+  | "restoreBranch"
+  | "revokeAuthorization"
+  | "purgeAccountData";
 
 export type RepositoryRef = { owner: string; name: string };
 
@@ -101,9 +103,16 @@ export const OPERATION_KIND_LABEL: Record<OperationKind, string> = {
   mergePullRequest: "合并 PR",
   deleteBranch: "删除分支",
   restoreBranch: "恢复分支",
+  revokeAuthorization: "撤销授权",
+  purgeAccountData: "清除数据",
 };
 
-const DANGER_KINDS: ReadonlySet<OperationKind> = new Set<OperationKind>(["deleteBranch"]);
+// 破坏性操作：确认卡片用红色主按钮呈现（删除分支、撤销授权、清除数据）
+const DANGER_KINDS: ReadonlySet<OperationKind> = new Set<OperationKind>([
+  "deleteBranch",
+  "revokeAuthorization",
+  "purgeAccountData",
+]);
 
 export type ConfirmationView = {
   title: string;
@@ -246,7 +255,11 @@ export function describeOperationFailure(
     case "issue_invalid":
     case "pull_invalid":
     case "pull_not_mergeable":
+    case "revoke_failed":
+    case "purge_failed":
       return conflictMessage;
+    case "revoke_unavailable":
+      return "服务端未配置 GitHub 应用凭据，无法自助撤销；请到 GitHub 设置中手动移除授权。";
     default:
       break;
   }

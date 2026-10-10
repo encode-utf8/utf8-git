@@ -27,7 +27,8 @@ export type OperationAuditQuery = {
 /**
  * 审计存储：写操作管线只依赖 find / append。
  * list 供分支恢复（M3-6）与操作历史页（M3-7）使用；count 供写操作频率限制（M3-8）
- * 统计窗口内的尝试次数；prune 负责保留期清理，避免审计表无限增长。
+ * 统计窗口内的尝试次数；prune 负责保留期清理，避免审计表无限增长；
+ * deleteByActor 供「清除我的数据」（M3-9）按用户整体删除。
  */
 export interface OperationAuditStoreLike extends OperationAuditSink {
   list(query?: OperationAuditQuery): Promise<OperationAuditRecord[]>;
@@ -37,6 +38,8 @@ export interface OperationAuditStoreLike extends OperationAuditSink {
   /** 命中条件中最早一条的 recordedAt：频率限制据此给出精确的 Retry-After。 */
   oldestRecordedAt(query?: OperationAuditQuery): Promise<string | null>;
   prune(before: Date): Promise<number>;
+  /** 删除某个操作人的全部审计记录（账号数据清除），返回删除条数。 */
+  deleteByActor(actor: string): Promise<number>;
 }
 
 // 操作历史分页：同一次操作通常写 2 条记录（started + 终态），按「操作条数」分页要多取一些
@@ -186,6 +189,15 @@ export class MemoryOperationAuditStore implements OperationAuditStoreLike {
       }
     }
     return oldest;
+  }
+
+  /** 删除某个操作人的全部审计记录（账号数据清除），返回删除条数。 */
+  async deleteByActor(actor: string): Promise<number> {
+    const kept = this.records.filter((item) => item.actor !== actor);
+    const removed = this.records.length - kept.length;
+    this.records.length = 0;
+    this.records.push(...kept);
+    return removed;
   }
 
   /** 删除 recordedAt < before 的记录，返回删除条数（保留期清理）。 */

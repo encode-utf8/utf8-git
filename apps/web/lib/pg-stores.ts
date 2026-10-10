@@ -204,6 +204,12 @@ export class PgOperationAuditStore implements OperationAuditStoreLike {
     return this.prisma.operationAudit.count({ where: auditWhere(query) });
   }
 
+  /** 删除某个操作人的全部审计记录（账号数据清除），返回删除条数。 */
+  async deleteByActor(actor: string): Promise<number> {
+    const result = await this.prisma.operationAudit.deleteMany({ where: { actor } });
+    return result.count;
+  }
+
   /** 删除 recordedAt < before 的记录，返回删除条数（保留期清理）。 */
   async prune(before: Date): Promise<number> {
     const result = await this.prisma.operationAudit.deleteMany({
