@@ -175,3 +175,40 @@ export async function runOperation<T>({
     throw new OperationError("execution_failed", "写操作执行失败，已记录审计。", detail, error);
   }
 }
+
+/**
+ * 把写操作接口的失败映射为可读文案（供客户端展示）。
+ * conflictMessage 由具体操作提供——不同操作「冲突」的语义不同。
+ */
+export function describeOperationFailure(
+  status: number,
+  code: string | undefined,
+  conflictMessage: string,
+): string {
+  switch (code) {
+    case "token_invalid":
+    case "no_token":
+      return "授权已失效，请重新登录后再试。";
+    case "forbidden":
+      return "权限不足，无法完成该操作。";
+    case "not_found":
+      return "仓库不存在或无权访问。";
+    case "rate_limited":
+      return "GitHub 请求过于频繁，请稍后再试。";
+    case "github_unreachable":
+      return "无法连接 GitHub，请检查网络后重试。";
+    case "github_timeout":
+      return "GitHub 请求超时，请重试。";
+    case "confirmation_required":
+      return "请先在确认卡片中确认本次操作。";
+    case "branch_conflict":
+    case "issue_invalid":
+      return conflictMessage;
+    default:
+      break;
+  }
+  if (status === 400) {
+    return "请求参数有误，请检查输入。";
+  }
+  return "操作失败，请稍后重试。";
+}

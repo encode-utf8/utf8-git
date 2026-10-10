@@ -6,58 +6,13 @@ import { createBranchDescriptor, validateBranchName } from "@/lib/branch-ops";
 import { shortSha } from "@/lib/commit-format";
 import { getDataStores } from "@/lib/data-stores";
 import { createBranchRef } from "@/lib/github-branches";
-import {
-  GitHubApiError,
-  GitHubForbiddenError,
-  GitHubNetworkError,
-  GitHubNotFoundError,
-  GitHubRateLimitError,
-  GitHubTimeoutError,
-  GitHubUnauthorizedError,
-  GitHubValidationError,
-} from "@/lib/github-errors";
-import { OperationError, createIdempotencyKey, runOperation } from "@/lib/operations";
+import { createIdempotencyKey, runOperation } from "@/lib/operations";
+import { mapOperationFailure } from "@/lib/operation-http";
 
 // 输入约束：只允许安全字符（异常参数不进入上游请求）
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-_.]{0,98})$/;
 const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
-
-// 写操作错误 → HTTP 响应：透传 runOperation 里的原始 GitHub 错误分类
-function mapOperationFailure(error: unknown): NextResponse {
-  const cause = error instanceof OperationError ? error.originalError : error;
-  if (cause instanceof GitHubUnauthorizedError) {
-    return NextResponse.json({ error: "token_invalid" }, { status: 401 });
-  }
-  if (cause instanceof GitHubRateLimitError) {
-    return NextResponse.json(
-      { error: "rate_limited", resetAt: cause.resetAt?.toISOString() ?? null },
-      { status: 429 },
-    );
-  }
-  if (cause instanceof GitHubValidationError) {
-    return NextResponse.json({ error: "branch_conflict" }, { status: 422 });
-  }
-  if (cause instanceof GitHubNotFoundError) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-  if (cause instanceof GitHubForbiddenError) {
-    return NextResponse.json({ error: "forbidden", ssoUrl: cause.ssoUrl }, { status: 403 });
-  }
-  if (cause instanceof GitHubNetworkError) {
-    return NextResponse.json({ error: "github_unreachable" }, { status: 503 });
-  }
-  if (cause instanceof GitHubTimeoutError) {
-    return NextResponse.json({ error: "github_timeout" }, { status: 504 });
-  }
-  if (cause instanceof GitHubApiError) {
-    return NextResponse.json({ error: "github_error" }, { status: 502 });
-  }
-  if (error instanceof OperationError) {
-    return NextResponse.json({ error: error.code, message: error.message }, { status: 400 });
-  }
-  return NextResponse.json({ error: "internal_error" }, { status: 500 });
-}
 
 // 创建分支：POST /api/repos/{owner}/{name}/operations/create-branch
 // body: { branch: string; from: string(sha); confirmed: true }
@@ -133,6 +88,6 @@ export async function POST(
       },
     );
   } catch (error) {
-    return mapOperationFailure(error);
+    return mapOperationFailure(error, "branch_conflict");
   }
 }

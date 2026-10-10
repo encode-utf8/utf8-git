@@ -1,7 +1,7 @@
 // M3-2 创建分支：分支名校验与操作描述构造（纯逻辑，前后端共用，无 IO）。
 
 import { shortSha } from "./commit-format";
-import { repositorySlug, type OperationDescriptor } from "./operations";
+import { describeOperationFailure, repositorySlug, type OperationDescriptor } from "./operations";
 
 export const BRANCH_NAME_MAX_LENGTH = 255;
 
@@ -80,29 +80,5 @@ export function createBranchDescriptor(input: CreateBranchInput): OperationDescr
 
 /** 把创建分支接口的失败映射为可读文案（供客户端展示）。 */
 export function describeCreateBranchFailure(status: number, code?: string): string {
-  switch (code) {
-    case "token_invalid":
-    case "no_token":
-      return "授权已失效，请重新登录后再试。";
-    case "forbidden":
-      return "权限不足，无法在该仓库创建分支。";
-    case "not_found":
-      return "仓库不存在或无权访问。";
-    case "branch_conflict":
-      return "分支已存在或名称不被接受，请换一个名字。";
-    case "rate_limited":
-      return "GitHub 请求过于频繁，请稍后再试。";
-    case "github_unreachable":
-      return "无法连接 GitHub，请检查网络后重试。";
-    case "github_timeout":
-      return "GitHub 请求超时，请重试。";
-    case "confirmation_required":
-      return "请先在确认卡片中确认本次操作。";
-    default:
-      break;
-  }
-  if (status === 400) {
-    return "请求参数有误，请检查分支名。";
-  }
-  return "创建分支失败，请稍后重试。";
+  return describeOperationFailure(status, code, "分支已存在或名称不被接受，请换一个名字。");
 }
