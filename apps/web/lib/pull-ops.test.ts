@@ -2,11 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   createMergePullRequestDescriptor,
+  createPullRequestDescriptor,
+  describeCreatePullRequestFailure,
   describeMergePullRequestFailure,
   evaluateMergeability,
   isMergeMethod,
   mergeMethodLabel,
   parsePullNumber,
+  validatePullBody,
+  validatePullBranches,
+  validatePullTitle,
   type MergeabilityInput,
 } from "./pull-ops";
 
@@ -111,5 +116,71 @@ describe("合并 PR 失败文案", () => {
     expect(describeMergePullRequestFailure(422, "pull_not_mergeable")).toContain("无法合并");
     expect(describeMergePullRequestFailure(403, "forbidden")).toContain("权限不足");
     expect(describeMergePullRequestFailure(429, "rate_limited")).toContain("过于频繁");
+  });
+});
+
+describe("创建 PR 字段校验", () => {
+  it("标题必填且有长度上限", () => {
+    expect(validatePullTitle("")).toContain("不能为空");
+    expect(validatePullTitle("   ")).toContain("不能为空");
+    expect(validatePullTitle("a".repeat(257))).toContain("256");
+    expect(validatePullTitle("feat: 合并时间线")).toBeNull();
+  });
+
+  it("正文可为空但有长度上限", () => {
+    expect(validatePullBody("")).toBeNull();
+    expect(validatePullBody("a".repeat(65537))).toContain("65536");
+  });
+
+  it("来源 / 目标分支须合法且不能相同", () => {
+    expect(validatePullBranches({ head: "feature/x", base: "main" })).toBeNull();
+    expect(validatePullBranches({ head: "", base: "main" })).toContain("来源分支");
+    expect(validatePullBranches({ head: "feature/x", base: "ma in" })).toContain("目标分支");
+    expect(validatePullBranches({ head: "main", base: "main" })).toContain("不能相同");
+  });
+});
+
+describe("创建 PR 操作描述", () => {
+  it("包含分支方向 / 标题与草稿标记", () => {
+    const descriptor = createPullRequestDescriptor({
+      owner: "encode-utf8",
+      name: "utf8-git",
+      head: "feature/e2e",
+      base: "main",
+      title: "  feat: 合并时间线  ",
+      body: "## 背景",
+      draft: true,
+    });
+    expect(descriptor.kind).toBe("createPullRequest");
+    expect(descriptor.summary).toBe("在 encode-utf8/utf8-git 创建 PR：feature/e2e → main");
+    expect(descriptor.impacts[0]).toContain("feat: 合并时间线");
+    expect(descriptor.impacts[1]).toContain("草稿");
+    expect(descriptor.payload).toEqual({
+      head: "feature/e2e",
+      base: "main",
+      title: "feat: 合并时间线",
+      body: "## 背景",
+      draft: "true",
+    });
+  });
+
+  it("非草稿时给出可合并提示", () => {
+    const descriptor = createPullRequestDescriptor({
+      owner: "o",
+      name: "n",
+      head: "h",
+      base: "b",
+      title: "t",
+      body: "",
+      draft: false,
+    });
+    expect(descriptor.impacts[1]).toBe("创建为可合并的 PR");
+  });
+});
+
+describe("创建 PR 失败文案", () => {
+  it("冲突错误使用 PR 专用文案", () => {
+    expect(describeCreatePullRequestFailure(422, "pull_invalid")).toContain("已存在");
+    expect(describeCreatePullRequestFailure(403, "forbidden")).toContain("权限不足");
   });
 });

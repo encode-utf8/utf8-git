@@ -1,5 +1,6 @@
-// M3-4 PR 合并：可合并性判定、合并方式与操作描述构造（纯逻辑，前后端共用，无 IO）。
+// M3-4 PR 流程：创建 PR 字段校验 + 可合并性判定 + 合并（纯逻辑，前后端共用，无 IO）。
 
+import { validateBranchName } from "./branch-ops";
 import { describeOperationFailure, repositorySlug, type OperationDescriptor } from "./operations";
 
 export type MergeMethod = "merge" | "squash" | "rebase";
@@ -116,5 +117,85 @@ export function describeMergePullRequestFailure(status: number, code?: string): 
     status,
     code,
     "PR 暂时无法合并（可能已合并、已关闭或存在冲突）。",
+  );
+}
+
+export const PR_TITLE_MAX_LENGTH = 256;
+export const PR_BODY_MAX_LENGTH = 65536;
+
+/** 校验 PR 标题；通过返回 null，否则返回可读原因。 */
+export function validatePullTitle(title: string): string | null {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    return "PR 标题不能为空。";
+  }
+  if (trimmed.length > PR_TITLE_MAX_LENGTH) {
+    return `PR 标题不能超过 ${PR_TITLE_MAX_LENGTH} 个字符。`;
+  }
+  return null;
+}
+
+/** 校验 PR 正文长度（正文可为空）。 */
+export function validatePullBody(body: string): string | null {
+  if (body.length > PR_BODY_MAX_LENGTH) {
+    return `PR 正文不能超过 ${PR_BODY_MAX_LENGTH} 个字符。`;
+  }
+  return null;
+}
+
+export type PullBranchPair = { head: string; base: string };
+
+/** 校验来源 / 目标分支：各自须是合法分支名，且不能是同一个分支。 */
+export function validatePullBranches({ head, base }: PullBranchPair): string | null {
+  const headError = validateBranchName(head.trim());
+  if (headError) {
+    return `来源分支：${headError}`;
+  }
+  const baseError = validateBranchName(base.trim());
+  if (baseError) {
+    return `目标分支：${baseError}`;
+  }
+  if (head.trim() === base.trim()) {
+    return "来源分支与目标分支不能相同。";
+  }
+  return null;
+}
+
+export type CreatePullRequestInput = {
+  owner: string;
+  name: string;
+  head: string;
+  base: string;
+  title: string;
+  body: string;
+  draft: boolean;
+};
+
+/** 构造「创建 PR」操作描述：确认卡片与审计记录共用同一份数据。 */
+export function createPullRequestDescriptor(input: CreatePullRequestInput): OperationDescriptor {
+  const { owner, name, title, body, draft } = input;
+  const head = input.head.trim();
+  const base = input.base.trim();
+  const repo = repositorySlug({ owner, name });
+  const trimmedTitle = title.trim();
+  return {
+    kind: "createPullRequest",
+    repo: { owner, name },
+    summary: `在 ${repo} 创建 PR：${head} → ${base}`,
+    impacts: [
+      `新建 PR「${trimmedTitle}」：${head} → ${base}`,
+      draft ? "创建为草稿（不立即请求合并）" : "创建为可合并的 PR",
+      "不会修改任何分支或提交",
+    ],
+    payload: { head, base, title: trimmedTitle, body, draft: draft ? "true" : "false" },
+  };
+}
+
+/** 把创建 PR 接口的失败映射为可读文案（供客户端展示）。 */
+export function describeCreatePullRequestFailure(status: number, code?: string): string {
+  return describeOperationFailure(
+    status,
+    code,
+    "该分支组合已存在 PR，或标题不被接受，请检查后重试。",
   );
 }

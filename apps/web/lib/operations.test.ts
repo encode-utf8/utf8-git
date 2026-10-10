@@ -46,6 +46,9 @@ describe("确认视图", () => {
   it("创建类操作不算危险操作", () => {
     expect(confirmationView(descriptor({ kind: "createBranch" })).danger).toBe(false);
     expect(confirmationView(descriptor({ kind: "createIssue" })).confirmLabel).toBe("创建 Issue");
+    expect(confirmationView(descriptor({ kind: "createPullRequest" })).confirmLabel).toBe(
+      "创建 PR",
+    );
     expect(confirmationView(descriptor({ kind: "mergePullRequest" })).confirmLabel).toBe("合并 PR");
   });
 

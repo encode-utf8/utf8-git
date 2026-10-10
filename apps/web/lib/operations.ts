@@ -1,7 +1,8 @@
 // M3-1 操作编排：所有写操作（建分支 / 建 Issue / 合并 PR / 删分支）走同一条管线。
 // 纯逻辑、无 IO：执行器与审计写入都通过参数注入，便于单测与后续替换持久化实现。
 
-export type OperationKind = "createBranch" | "createIssue" | "mergePullRequest" | "deleteBranch";
+export type OperationKind =
+  "createBranch" | "createIssue" | "createPullRequest" | "mergePullRequest" | "deleteBranch";
 
 export type RepositoryRef = { owner: string; name: string };
 
@@ -66,6 +67,7 @@ export type OperationOutcome<T> = {
 const CONFIRM_LABEL: Record<OperationKind, string> = {
   createBranch: "创建分支",
   createIssue: "创建 Issue",
+  createPullRequest: "创建 PR",
   mergePullRequest: "合并 PR",
   deleteBranch: "删除分支",
 };
@@ -203,6 +205,7 @@ export function describeOperationFailure(
       return "请先在确认卡片中确认本次操作。";
     case "branch_conflict":
     case "issue_invalid":
+    case "pull_invalid":
     case "pull_not_mergeable":
       return conflictMessage;
     default:
