@@ -5,6 +5,7 @@
 // 覆盖：GET /healthz（就绪探针）、GET /user/repos（REST，含 x-ratelimit-* 头）、
 //       POST /graphql（时间线，两页）、GET /repos/{owner}/{name}/commits/{sha}（提交详情）、
 //       POST /repos/{owner}/{name}/git/refs（创建分支；已存在的分支返回 422）。
+//       POST /repos/{owner}/{name}/issues（创建 Issue；标题含「已存在」返回 422）
 
 import { createServer } from "node:http";
 
@@ -99,6 +100,9 @@ const PAGE_2 = makeCommits(10, 10, "feat: 历史提交");
 // 写操作 mock：已存在的分支引用（与 GraphQL 分支列表保持一致），重复创建返回 422
 const EXISTING_REFS = new Set(["refs/heads/main", "refs/heads/feature/e2e"]);
 
+// 创建 Issue 的递增编号（成功创建时自增，保证每次返回不同编号）
+let issueNumber = 100;
+
 function createRefResult(owner, name, body) {
   const ref = typeof body.ref === "string" ? body.ref : "";
   const sha = typeof body.sha === "string" ? body.sha : "";
@@ -112,6 +116,24 @@ function createRefResult(owner, name, body) {
   return {
     status: 201,
     body: { ref, object: { sha }, url: `https://api.github.com/repos/${owner}/${name}/git/${ref}` },
+  };
+}
+
+// 写操作 mock：创建 Issue（标题含「已存在」时返回 422，作为 E2E 错误分支的确定性触发条件）
+function createIssueResult(owner, name, body) {
+  const title = typeof body.title === "string" ? body.title : "";
+  if (title.trim() === "" || title.includes("已存在")) {
+    return { status: 422, body: { message: "Validation Failed" } };
+  }
+  issueNumber += 1;
+  return {
+    status: 201,
+    body: {
+      number: issueNumber,
+      title,
+      state: "open",
+      html_url: `https://github.com/${owner}/${name}/issues/${issueNumber}`,
+    },
   };
 }
 
@@ -193,6 +215,15 @@ const server = createServer(async (request, response) => {
     const body = await readJsonBody(request);
     const variables = body.variables ?? {};
     sendJson(response, 200, timelinePayload(variables, Boolean(variables.cursor)));
+    return;
+  }
+
+  const issueMatch = /^\/repos\/([^/]+)\/([^/]+)\/issues$/.exec(url.pathname);
+  if (issueMatch && request.method === "POST") {
+    const [, owner, name] = issueMatch;
+    const body = await readJsonBody(request);
+    const result = createIssueResult(owner, name, body);
+    sendJson(response, result.status, result.body, { "x-ratelimit-remaining": "4995" });
     return;
   }
 

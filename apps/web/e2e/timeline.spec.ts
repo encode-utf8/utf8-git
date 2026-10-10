@@ -109,3 +109,30 @@ test("创建分支：确认卡片 → 调上游建分支 → 成功与冲突提�
   await page.getByRole("button", { name: "创建分支", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("已存在");
 });
+
+test("创建 Issue：确认卡片 → Markdown 预览 → 调上游创建 → 成功与冲突提示", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+  await page.getByRole("button", { name: "新建 Issue" }).click();
+  const dialog = page.getByRole("dialog", { name: /创建 Issue/ });
+  await expect(dialog).toBeVisible();
+
+  // 填写标题 / 正文 / 标签
+  await page.getByLabel("Issue 标题").fill("时间线排序异常");
+  await page.getByLabel("正文（Markdown）").fill("## 步骤\n\n- 打开页面\n\n**期望**：按时间倒序");
+  await page.getByLabel("标签（逗号分隔）").fill("bug, ui");
+
+  // Markdown 预览：正文渲染为结构化元素（不做 HTML 注入）
+  await expect(dialog.locator("p", { hasText: /^步骤$/ })).toBeVisible();
+  await expect(dialog.locator("li", { hasText: "打开页面" })).toBeVisible();
+  await expect(dialog.locator("strong", { hasText: "期望" })).toBeVisible();
+
+  // 成功：mock 返回 201 → 状态提示
+  await page.getByRole("button", { name: "创建 Issue", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已创建 Issue");
+
+  // 冲突：mock 对标题含「已存在」返回 422 → 卡片内 alert 提示
+  await page.getByRole("button", { name: "新建 Issue" }).click();
+  await page.getByLabel("Issue 标题").fill("已存在的标题");
+  await page.getByRole("button", { name: "创建 Issue", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("不被接受");
+});
