@@ -98,7 +98,7 @@
 ### 3.4 安全与合规
 
 - [x] TODO-231 写操作频率限制与防重放（M3-8：`lib/write-rate-limit.ts` 按「用户 + 滑动窗口」判定（默认 20 次 / 分钟，`WRITE_OPERATION_LIMIT` / `WRITE_OPERATION_WINDOW_MS` 可调），计数复用写操作审计的 `started` 记录（`OperationAuditStoreLike.count`，内存 / Postgres 双实现），6 个写接口在调用上游前统一走 `enforceWriteRateLimit`，超限返回 429 + `Retry-After`；防重放：`runOperation` 的幂等回放限定在 10 分钟窗口内（`isWithinReplayWindow`），过期记录按新意图重新执行，避免同参数的新操作被历史成功记录静默吞掉；顺带修既有问题——审计保留期（`prune` + `OPERATION_AUDIT_RETENTION_DAYS`，默认 90 天，写入时按概率清理）与写操作网络失败自动重试（`fetchJsonWithRetry`，只重试「没拿到响应」的网络失败，4xx / 5xx 原样交给调用方；`Retry-After` 按窗口内最早一条记录的剩余时间给出，回放窗口可用 `WRITE_OPERATION_REPLAY_WINDOW_MS` 调整））
-- [ ] TODO-232 用户数据清除与授权撤销（GDPR 友好）
+- [x] TODO-232 用户数据清除与授权撤销（M3-9：`/me` 新增「已授权信息」（scope 取自账号记录、令牌有效期、审计条数）与「危险操作」区——「撤销 GitHub 授权」「清除我的数据」都先弹 `ConfirmCard` 影响预览再执行；接口 `POST /api/account/revoke` / `POST /api/account/purge` 走统一写管线（确认 + 审计 + 频率限制，`replayWindowMs: 0` 保证破坏性操作每次真正执行）；`lib/account-ops.ts` 负责描述符与失败文案（账号级操作挂在约定的 `account/self` 作用域下），`lib/github-app-authorization.ts` 调 GitHub `DELETE /applications/{client_id}/token`（404 视为「已不可用」），`lib/account-data.ts` 负责清除顺序（审计 → 令牌 / 会话 → 缓存 → 配额快照 → 用户记录，撤销则保留审计与用户记录）；`OperationAuditStoreLike.deleteByActor`（内存 / Pg）与 `invalidateUserCaches`（按 `cacheKey(scope, userId)` 前缀清四类缓存）为新增数据层能力；`/permissions` 说明页补充一键撤销入口）
 - [ ] TODO-233 审计日志导出
 
 ### 3.5 工程化
