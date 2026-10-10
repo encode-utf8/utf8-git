@@ -30,6 +30,7 @@
 | `GITHUB_RATE_LIMIT_DEGRADE_THRESHOLD` | 否   | 剩余配额低于该值时进入「只读缓存」降级                    | 默认 `100`                                     |
 | `WRITE_OPERATION_LIMIT`               | 否   | 单个用户在一个窗口内允许的写操作次数上限                  | 默认 `20`                                      |
 | `WRITE_OPERATION_WINDOW_MS`           | 否   | 写操作频率限制的滑动窗口（毫秒）                          | 默认 `60000`                                   |
+| `WRITE_OPERATION_REPLAY_WINDOW_MS`    | 否   | 幂等回放窗口（毫秒）：同参数的新操作超过该窗口会重新执行  | 默认 `600000`                                  |
 | `OPERATION_AUDIT_RETENTION_DAYS`      | 否   | 写操作审计保留天数（写入时按概率清理更早的记录）          | 默认 `90`                                      |
 | `AUTH_TRUST_HOST`                     | 否   | 非 Vercel 自建部署时信任 `Host` 头                        | 自建填 `true`；Vercel 自动识别无需设置         |
 | `AUTH_URL`                            | 否   | 显式指定外部地址（自建 / 反代场景）                       | `https://<域名>`                               |
