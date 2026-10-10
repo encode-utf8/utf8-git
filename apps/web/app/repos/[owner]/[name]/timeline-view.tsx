@@ -38,6 +38,7 @@ import { CreatePullPanel } from "./create-pull-panel";
 import { DeleteBranchPanel } from "./delete-branch-panel";
 import { GlossaryHint } from "./glossary-hint";
 import { LaneGraph } from "./lane-graph";
+import { RestoreBranchPanel } from "./restore-branch-panel";
 
 const ROW_HEIGHT = 76;
 const AUTO_LOAD_THRESHOLD = 8;
@@ -224,9 +225,20 @@ export function TimelineView({
   const [pullSuccess, setPullSuccess] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreSuccess, setRestoreSuccess] = useState<string | null>(null);
 
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // 打开任写操作面板时清掉上一次的成功提示，避免旧横幅误导当前操作
+  const resetOperationAlerts = useCallback(() => {
+    setCreateSuccess(null);
+    setIssueSuccess(null);
+    setPullSuccess(null);
+    setDeleteSuccess(null);
+    setRestoreSuccess(null);
+  }, []);
 
   // 概念解释层：默认关闭，仅记住用户显式选择过的模式（localStorage 不可用时静默降级）。
   useEffect(() => {
@@ -374,6 +386,16 @@ export function TimelineView({
     (message: string) => {
       setDeleteOpen(false);
       setDeleteSuccess(message);
+      router.refresh();
+    },
+    [router],
+  );
+
+  // 恢复分支（M3-6）：从审计里的删除记录重建引用，成功后刷新分支选择器。
+  const handleBranchRestored = useCallback(
+    (message: string) => {
+      setRestoreOpen(false);
+      setRestoreSuccess(message);
       router.refresh();
     },
     [router],
@@ -545,9 +567,9 @@ export function TimelineView({
               <button
                 type="button"
                 onClick={() => {
+                  resetOperationAlerts();
                   setCreateOpen(true);
                   setCreateError(null);
-                  setCreateSuccess(null);
                 }}
                 className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
               >
@@ -556,8 +578,8 @@ export function TimelineView({
               <button
                 type="button"
                 onClick={() => {
+                  resetOperationAlerts();
                   setIssueOpen(true);
-                  setIssueSuccess(null);
                 }}
                 className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
               >
@@ -566,8 +588,8 @@ export function TimelineView({
               <button
                 type="button"
                 onClick={() => {
+                  resetOperationAlerts();
                   setPullOpen(true);
-                  setPullSuccess(null);
                 }}
                 className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
               >
@@ -576,12 +598,22 @@ export function TimelineView({
               <button
                 type="button"
                 onClick={() => {
+                  resetOperationAlerts();
                   setDeleteOpen(true);
-                  setDeleteSuccess(null);
                 }}
                 className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
               >
                 删除分支
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetOperationAlerts();
+                  setRestoreOpen(true);
+                }}
+                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+              >
+                恢复分支
               </button>
             </>
           ) : null}
@@ -605,12 +637,12 @@ export function TimelineView({
         </div>
       </div>
 
-      {createSuccess || issueSuccess || pullSuccess || deleteSuccess ? (
+      {createSuccess || issueSuccess || pullSuccess || deleteSuccess || restoreSuccess ? (
         <p
           role="status"
           className="mt-3 rounded-lg border border-green-300 bg-green-50 p-3 text-xs text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200"
         >
-          {createSuccess ?? issueSuccess ?? pullSuccess ?? deleteSuccess}
+          {createSuccess ?? issueSuccess ?? pullSuccess ?? deleteSuccess ?? restoreSuccess}
         </p>
       ) : null}
 
@@ -677,6 +709,17 @@ export function TimelineView({
             currentBranch={branch}
             onDeleted={handleBranchDeleted}
             onCancel={() => setDeleteOpen(false)}
+          />
+        </div>
+      ) : null}
+
+      {restoreOpen ? (
+        <div className="mt-3">
+          <RestoreBranchPanel
+            owner={owner}
+            name={name}
+            onRestored={handleBranchRestored}
+            onCancel={() => setRestoreOpen(false)}
           />
         </div>
       ) : null}
