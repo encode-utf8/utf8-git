@@ -6,10 +6,44 @@
 | 项       | 内容                                         |
 | -------- | -------------------------------------------- |
 | 文档版本 | v0.1                                         |
-| 更新日期 | 2026-10-09                                   |
+| 更新日期 | 2026-10-10                                   |
 | 关联文档 | [实现路线](roadmap.md) · [待办日志](todo.md) |
 
 ---
+
+## 2026-10-10 · M3-3 创建 Issue：Markdown 预览 + 标签
+
+**目标**：在时间线上直接创建 Issue，复用 M3-1 的确认卡片 + 统一写管线 + 审计；正文提供轻量 Markdown 预览，标签以逗号输入。
+
+**完成内容**
+
+- 上游客户端：新增 `lib/github-issues.ts`（`createIssue` 调 REST `POST /repos/{owner}/{repo}/issues`，`normalizeCreatedIssue` 归一化响应；空正文 / 空标签不带字段；422 与 410（仓库关闭 Issue）归为 `GitHubValidationError`，403 / 429 按限流头区分）。
+- 纯逻辑：新增 `lib/issue-ops.ts`——`validateIssueTitle`（必填、≤256）、`parseIssueLabels` / `validateIssueLabels`（≤10 个、单个 ≤50、禁换行）、`createIssueDescriptor`（确认卡片与审计共用）、`describeCreateIssueFailure`。
+- 共享胶水：把 M3-2 路由里的失败映射抽到 `lib/operation-http.ts` 的 `mapOperationFailure(error, conflictCode)`，建分支 / 建 Issue 两个路由复用；`operations.ts` 新增通用 `describeOperationFailure(status, code, conflictMessage)`，`describeCreateBranchFailure` 改为委托（行为不变）。
+- Markdown：新增 `lib/markdown-lite.ts`（标题 1-3 / 段落 / 有序无序列表 / 代码块 + 行内加粗与行内代码）与 `markdown-preview.tsx`——先解析成数据结构再渲染，不使用 `dangerouslySetInnerHTML`。
+- 接口：新增 `POST /api/repos/[owner]/[name]/operations/create-issue`，body `{ title, body?, labels?(逗号字符串), confirmed }`；服务端复校验后走 `runOperation`，审计写入 `operationAudit`；成功 201、幂等回放 200。
+- UI：新增 `create-issue-panel.tsx`（标题 / 正文 + 预览 / 标签三段表单，状态内聚在组件内）；`timeline-view.tsx` 头部新增「新建 Issue」，成功后关闭面板、展示 `role="status"` 提示并 `router.refresh()`。
+- 测试：`issue-ops.test.ts`、`github-issues.test.ts`、`markdown-lite.test.ts`，累计 217；E2E 新增「创建 Issue」用例（成功 + 422 冲突），mock 上游补 `POST /repos/{owner}/{name}/issues`。
+
+**关键决策**
+
+| 编号     | 决策                                                               | 理由                                                                        | 备选与否决原因                                    |
+| -------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------- |
+| ADR-0074 | 正文预览**自写极简 Markdown 解析**，不用 `dangerouslySetInnerHTML` | Issue 正文是用户输入，注入 HTML 即 XSS 面；先解析成数据结构再渲染，天然安全 | 直接渲染 HTML：需引入消毒库，体积与审计成本都更高 |
+| ADR-0075 | 失败映射抽到 `operation-http.ts`，各操作只提供 `conflictCode`      | 写操作会持续增加，状态码映射复制三遍必然漂移                                | 每个路由各写一份：M3-4 / M3-5 还会继续复制        |
+| ADR-0076 | 标签用「逗号分隔」单输入框，服务端再切分                           | 免去标签选择器与上游标签查询，先打通最小写路径                              | 下拉多选：需先拉仓库标签，多一次上游请求与状态    |
+
+**问题与风险**
+
+- 上游写端点仍只有 E2E mock 覆盖（`POST /issues`），真实创建需登录后手动验收。
+- Markdown 支持刻意收敛（不含链接 / 图片 / 表格 / 嵌套列表），复杂正文仍建议到 GitHub 编辑；后续需要再换成熟解析器。
+- 创建成功后时间线不会出现新 Issue（时间线聚合的是提交），仅以提示给出编号，需到 GitHub 查看。
+- 标签不预校验是否已存在于仓库：未知标签由上游忽略或自动创建（取决于仓库设置），本轮不额外请求。
+
+**下一步**
+
+- M3-4：PR 合并流程（可合并性检查、冲突提示）。
+- 可选：把「新建 Issue」入口也放进提交详情面板（用提交信息预填标题 / 正文）。
 
 ## 2026-10-09 · M3-2 创建分支：首个写操作端到端
 
