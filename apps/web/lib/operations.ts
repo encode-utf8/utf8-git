@@ -1,6 +1,8 @@
 // M3-1 操作编排：所有写操作（建分支 / 建 Issue / 合并 PR / 删分支 / 恢复分支）走同一条管线。
 // 纯逻辑、无 IO：执行器与审计写入都通过参数注入，便于单测与后续替换持久化实现。
 
+import type { EnvLike } from "./shared-store";
+
 export type OperationKind =
   | "createBranch"
   | "createIssue"
@@ -75,6 +77,12 @@ export type OperationOutcome<T> = {
  * 误判成重放而静默不执行；限定窗口后，过期记录一律按新意图重新执行。
  */
 export const DEFAULT_REPLAY_WINDOW_MS = 10 * 60 * 1000;
+
+/** 回放窗口配置：`WRITE_OPERATION_REPLAY_WINDOW_MS`，非法或非正数回退默认。 */
+export function getReplayWindowMs(env: EnvLike = process.env): number {
+  const raw = Number(env.WRITE_OPERATION_REPLAY_WINDOW_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_REPLAY_WINDOW_MS;
+}
 
 /** 成功记录是否仍在回放窗口内（时间无法解析时视为不可回放）。 */
 export function isWithinReplayWindow(recordedAt: string, now: Date, windowMs: number): boolean {

@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { createPullRequest } from "@/lib/github-pulls";
 import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
-import { createIdempotencyKey, runOperation } from "@/lib/operations";
+import { createIdempotencyKey, getReplayWindowMs, runOperation } from "@/lib/operations";
 import {
   createPullRequestDescriptor,
   validatePullBody,
@@ -97,6 +97,7 @@ export async function POST(
       idempotencyKey: createIdempotencyKey(descriptor, userId),
       confirmed: true,
       audit: getDataStores().operationAudit,
+      replayWindowMs: getReplayWindowMs(),
       execute: () =>
         createPullRequest({
           token,

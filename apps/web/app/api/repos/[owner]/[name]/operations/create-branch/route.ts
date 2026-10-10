@@ -6,7 +6,7 @@ import { createBranchDescriptor, validateBranchName } from "@/lib/branch-ops";
 import { shortSha } from "@/lib/commit-format";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { createBranchRef } from "@/lib/github-branches";
-import { createIdempotencyKey, runOperation } from "@/lib/operations";
+import { createIdempotencyKey, getReplayWindowMs, runOperation } from "@/lib/operations";
 import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
 
 // 输入约束：只允许安全字符（异常参数不进入上游请求）
@@ -76,6 +76,7 @@ export async function POST(
       idempotencyKey: createIdempotencyKey(descriptor, userId),
       confirmed: true,
       audit: getDataStores().operationAudit,
+      replayWindowMs: getReplayWindowMs(),
       execute: () => createBranchRef({ token, owner, name, branch, fromSha: from }),
     });
     // 写操作已生效：失效该仓库的时间线缓存，让 router.refresh() 立即拿到新数据

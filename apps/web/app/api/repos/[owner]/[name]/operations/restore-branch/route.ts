@@ -11,7 +11,12 @@ import {
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { createBranchRef } from "@/lib/github-branches";
 import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
-import { createIdempotencyKey, repositorySlug, runOperation } from "@/lib/operations";
+import {
+  createIdempotencyKey,
+  getReplayWindowMs,
+  repositorySlug,
+  runOperation,
+} from "@/lib/operations";
 
 // 输入约束：只允许安全字符（异常参数不进入上游请求）
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-_.]{0,98})$/;
@@ -164,6 +169,7 @@ export async function POST(
       idempotencyKey: createIdempotencyKey(descriptor, userId),
       confirmed: true,
       audit,
+      replayWindowMs: getReplayWindowMs(),
       execute: () => createBranchRef({ token, owner, name, branch, fromSha: sha }),
     });
     // 写操作已生效：失效该仓库的时间线缓存，让 router.refresh() 立即拿到新数据

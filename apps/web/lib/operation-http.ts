@@ -70,12 +70,21 @@ export async function enforceWriteRateLimit(
   const config = getWriteRateLimitConfig(options.env);
   const now = options.now ?? new Date();
   const audit = options.audit ?? getDataStores().operationAudit;
-  const recent = await audit.count({
+  const query = {
     actor,
-    status: "started",
+    status: "started" as const,
     since: rateLimitWindowStart(now, config.windowMs).toISOString(),
+  };
+  const recent = await audit.count(query);
+  // 放行路径只查一次；要拒绝时再查最早一条记录，用来算精确的 Retry-After
+  const oldestRecordedAt = recent < config.limit ? null : await audit.oldestRecordedAt(query);
+  const decision = decideWriteRateLimit({
+    recent,
+    limit: config.limit,
+    windowMs: config.windowMs,
+    now: now.getTime(),
+    oldestRecordedAt,
   });
-  const decision = decideWriteRateLimit({ recent, limit: config.limit, windowMs: config.windowMs });
   if (decision.allowed) {
     return null;
   }

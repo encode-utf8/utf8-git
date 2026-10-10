@@ -59,4 +59,32 @@ describe("放行判定", () => {
     expect(decision.allowed).toBe(false);
     expect(decision.remaining).toBe(0);
   });
+
+  it("被拒时按最早一条记录算精确等待时间", () => {
+    const decision = decideWriteRateLimit({
+      recent: 5,
+      limit: 5,
+      windowMs: 60_000,
+      now: Date.parse("2026-10-10T00:01:00.000Z"),
+      oldestRecordedAt: "2026-10-10T00:00:30.000Z",
+    });
+    expect(decision.retryAfterMs).toBe(30_000);
+  });
+
+  it("最早记录缺失 / 时间非法时回退整窗口，且保留最小等待时间", () => {
+    const base = {
+      recent: 5,
+      limit: 5,
+      windowMs: 60_000,
+      now: Date.parse("2026-10-10T00:01:00.000Z"),
+    };
+    expect(decideWriteRateLimit({ ...base }).retryAfterMs).toBe(60_000);
+    expect(decideWriteRateLimit({ ...base, oldestRecordedAt: null }).retryAfterMs).toBe(60_000);
+    expect(decideWriteRateLimit({ ...base, oldestRecordedAt: "not-a-time" }).retryAfterMs).toBe(
+      60_000,
+    );
+    expect(
+      decideWriteRateLimit({ ...base, oldestRecordedAt: "2026-10-09T00:00:00.000Z" }).retryAfterMs,
+    ).toBe(1_000);
+  });
 });

@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { fetchPullRequest, mergePullRequest } from "@/lib/github-pulls";
 import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
-import { createIdempotencyKey, runOperation } from "@/lib/operations";
+import { createIdempotencyKey, getReplayWindowMs, runOperation } from "@/lib/operations";
 import {
   createMergePullRequestDescriptor,
   evaluateMergeability,
@@ -159,6 +159,7 @@ export async function POST(
       idempotencyKey: createIdempotencyKey(descriptor, userId),
       confirmed: true,
       audit: getDataStores().operationAudit,
+      replayWindowMs: getReplayWindowMs(),
       execute: () => mergePullRequest({ token, owner, name, number, method }),
     });
     // GitHub 正常合并返回 2xx；merged=false 属语义失败，按不可合并处理

@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  DEFAULT_REPLAY_WINDOW_MS,
   OperationError,
   confirmationView,
   createIdempotencyKey,
   describeOperationFailure,
+  getReplayWindowMs,
   isWithinReplayWindow,
   repositorySlug,
   runOperation,
@@ -225,6 +227,19 @@ describe("幂等回放窗口", () => {
     expect(isWithinReplayWindow("2026-10-09T00:05:00.000Z", now, 10 * 60 * 1000)).toBe(true);
     expect(isWithinReplayWindow("2026-10-08T00:00:00.000Z", now, 10 * 60 * 1000)).toBe(false);
     expect(isWithinReplayWindow("not-a-timestamp", now, 10 * 60 * 1000)).toBe(false);
+  });
+});
+
+describe("回放窗口配置", () => {
+  it("默认 10 分钟，可配置，非法或非正数回退默认", () => {
+    expect(getReplayWindowMs({})).toBe(DEFAULT_REPLAY_WINDOW_MS);
+    expect(getReplayWindowMs({ WRITE_OPERATION_REPLAY_WINDOW_MS: "60000" })).toBe(60_000);
+    expect(getReplayWindowMs({ WRITE_OPERATION_REPLAY_WINDOW_MS: "0" })).toBe(
+      DEFAULT_REPLAY_WINDOW_MS,
+    );
+    expect(getReplayWindowMs({ WRITE_OPERATION_REPLAY_WINDOW_MS: "abc" })).toBe(
+      DEFAULT_REPLAY_WINDOW_MS,
+    );
   });
 });
 

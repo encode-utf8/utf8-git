@@ -8,7 +8,7 @@ import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { fetchBranchDeletionContext } from "@/lib/github-branch-settings";
 import { deleteBranchRef } from "@/lib/github-branches";
 import { enforceWriteRateLimit, mapOperationFailure } from "@/lib/operation-http";
-import { createIdempotencyKey, runOperation } from "@/lib/operations";
+import { createIdempotencyKey, getReplayWindowMs, runOperation } from "@/lib/operations";
 
 // 输入约束：只允许安全字符（异常参数不进入上游请求）
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-_.]{0,98})$/;
@@ -165,6 +165,7 @@ export async function POST(
       idempotencyKey: createIdempotencyKey(descriptor, userId),
       confirmed: true,
       audit: getDataStores().operationAudit,
+      replayWindowMs: getReplayWindowMs(),
       execute: () => deleteBranchRef({ token, owner, name, branch }),
     });
     // 写操作已生效：失效该仓库的时间线缓存，让 router.refresh() 立即拿到新数据
