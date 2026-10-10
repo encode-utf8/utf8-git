@@ -60,6 +60,23 @@ describe("内存审计存储", () => {
     expect((await store.list({ actor: "u2" })).map((item) => item.idempotencyKey)).toEqual(["d"]);
     expect((await store.list({ limit: 2 })).map((item) => item.idempotencyKey)).toEqual(["d", "c"]);
   });
+
+  it("list 支持按操作类型与状态过滤（恢复入口只取成功的删除记录）", async () => {
+    const store = new MemoryOperationAuditStore();
+    await store.append(
+      record({ idempotencyKey: "del-1", kind: "deleteBranch", status: "started" }),
+    );
+    await store.append(
+      record({ idempotencyKey: "del-1", kind: "deleteBranch", status: "succeeded" }),
+    );
+    await store.append(record({ idempotencyKey: "del-2", kind: "deleteBranch", status: "failed" }));
+    await store.append(
+      record({ idempotencyKey: "create-1", kind: "createBranch", status: "succeeded" }),
+    );
+
+    const restorable = await store.list({ kind: "deleteBranch", status: "succeeded" });
+    expect(restorable.map((item) => item.idempotencyKey)).toEqual(["del-1"]);
+  });
 });
 
 describe("管线 + 审计存储联调", () => {

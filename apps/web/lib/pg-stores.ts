@@ -155,6 +155,8 @@ export class PgOperationAuditStore implements OperationAuditStoreLike {
       where: {
         ...(query.repo ? { repo: query.repo } : {}),
         ...(query.actor ? { actor: query.actor } : {}),
+        ...(query.kind ? { kind: query.kind } : {}),
+        ...(query.status ? { status: query.status } : {}),
       },
       orderBy: { id: "desc" },
       take: query.limit ?? DEFAULT_AUDIT_LIMIT,
