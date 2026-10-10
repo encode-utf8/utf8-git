@@ -6,6 +6,7 @@
 //       POST /graphql（时间线，两页）、GET /repos/{owner}/{name}/commits/{sha}（提交详情）、
 //       POST /repos/{owner}/{name}/git/refs（创建分支；已存在的分支返回 422）。
 //       POST /repos/{owner}/{name}/issues（创建 Issue；标题含「已存在」返回 422）
+//       POST /repos/{owner}/{name}/pulls（创建 PR；标题含「已存在」或 head=base 返回 422）
 //       GET /repos/{owner}/{name}/pulls/{number}（PR 详情：可合并 / 冲突 / 已合并）、
 //       PUT /repos/{owner}/{name}/pulls/{number}/merge（合并 PR；非法 merge_method 返回 422）。
 
@@ -125,6 +126,9 @@ const EXISTING_REFS = new Set(["refs/heads/main", "refs/heads/feature/e2e"]);
 // 创建 Issue 的递增编号（成功创建时自增，保证每次返回不同编号）
 let issueNumber = 100;
 
+// 创建 PR 的递增编号（成功创建时自增，保证每次返回不同编号）
+let createdPullNumber = 100;
+
 function createRefResult(owner, name, body) {
   const ref = typeof body.ref === "string" ? body.ref : "";
   const sha = typeof body.sha === "string" ? body.sha : "";
@@ -155,6 +159,35 @@ function createIssueResult(owner, name, body) {
       title,
       state: "open",
       html_url: `https://github.com/${owner}/${name}/issues/${issueNumber}`,
+    },
+  };
+}
+
+// 写操作 mock：创建 PR（标题含「已存在」或 head=base 时返回 422）
+function createPullRequestResult(owner, name, body) {
+  const title = typeof body.title === "string" ? body.title : "";
+  const head = typeof body.head === "string" ? body.head : "";
+  const base = typeof body.base === "string" ? body.base : "";
+  if (
+    title.trim() === "" ||
+    head === "" ||
+    base === "" ||
+    head === base ||
+    title.includes("已存在")
+  ) {
+    return { status: 422, body: { message: "Validation Failed" } };
+  }
+  createdPullNumber += 1;
+  return {
+    status: 201,
+    body: {
+      number: createdPullNumber,
+      title,
+      state: "open",
+      draft: body.draft === true,
+      html_url: `https://github.com/${owner}/${name}/pull/${createdPullNumber}`,
+      head: { ref: head },
+      base: { ref: base },
     },
   };
 }
@@ -306,6 +339,15 @@ const server = createServer(async (request, response) => {
     const body = await readJsonBody(request);
     const result = createIssueResult(owner, name, body);
     sendJson(response, result.status, result.body, { "x-ratelimit-remaining": "4995" });
+    return;
+  }
+
+  const createPullMatch = /^\/repos\/([^/]+)\/([^/]+)\/pulls$/.exec(url.pathname);
+  if (createPullMatch && request.method === "POST") {
+    const [, owner, name] = createPullMatch;
+    const body = await readJsonBody(request);
+    const result = createPullRequestResult(owner, name, body);
+    sendJson(response, result.status, result.body, { "x-ratelimit-remaining": "4992" });
     return;
   }
 

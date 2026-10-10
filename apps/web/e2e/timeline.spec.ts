@@ -156,3 +156,26 @@ test("合并 PR：可合并性检查 → 确认合并 → 冲突提示", async (
   await expect(detail.getByRole("alert")).toContainText("可合并性检查：存在合并冲突");
   await expect(detail.getByRole("button", { name: "合并 PR", exact: true })).toHaveCount(0);
 });
+
+test("创建 PR：确认卡片 → 选择 base/head → 调上游创建 → 成功与冲突提示", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+  await page.getByRole("button", { name: "新建 PR" }).click();
+  const dialog = page.getByRole("dialog", { name: /创建 PR/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("目标分支（base）")).toHaveValue("main");
+
+  await dialog.getByLabel("来源分支（head）").selectOption("feature/e2e");
+  await dialog.getByLabel("PR 标题").fill("feat: 合并时间线");
+  await dialog.getByLabel("PR 正文（Markdown）").fill("## 背景\n\n- 说明");
+  await expect(dialog.locator("p", { hasText: /^背景$/ })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "创建 PR", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已创建 PR");
+
+  // 冲突：标题含「已存在」→ 上游 422 → 卡片内提示
+  await page.getByRole("button", { name: "新建 PR" }).click();
+  await page.getByLabel("来源分支（head）").selectOption("feature/e2e");
+  await page.getByLabel("PR 标题").fill("已存在的 PR");
+  await page.getByRole("button", { name: "创建 PR", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("已存在");
+});
