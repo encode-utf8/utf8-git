@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { formatUtcDateTime, shortSha } from "@/lib/commit-format";
@@ -8,6 +9,8 @@ import { fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
 import type { CommitDetail } from "@/lib/github-commits";
 import { collectIssues, type TimelineCommit } from "@/lib/github-timeline";
+
+import { MergePullPanel } from "./merge-pull-panel";
 
 // 详情接口响应：归一化提交详情 + 缓存 / 降级元信息（与 commit-data.ts 对齐）
 type CommitDetailMeta = {
@@ -95,6 +98,8 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
     detail: null,
   });
   const [reloadKey, setReloadKey] = useState(0);
+  const [mergeTarget, setMergeTarget] = useState<number | null>(null);
+  const [mergeSuccess, setMergeSuccess] = useState<string | null>(null);
   const [copyHint, setCopyHint] = useState<{ sha: string; result: "copied" | "failed" } | null>(
     null,
   );
@@ -102,6 +107,8 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const copyTimerRef = useRef<number | null>(null);
+
+  const router = useRouter();
 
   const sha = commit?.oid ?? null;
   const issues = commit ? collectIssues(commit.pullRequests) : [];
@@ -187,6 +194,13 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
   }
 
   const githubUrl = `https://github.com/${owner}/${name}/commit/${commit.oid}`;
+
+  function handleMerged(message: string) {
+    setMergeTarget(null);
+    setMergeSuccess(message);
+    // 让服务端重新拉取时间线，PR 徽标状态随之更新
+    router.refresh();
+  }
 
   async function copySha() {
     if (!sha) {
@@ -300,19 +314,33 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-zinc-500 dark:text-zinc-400">关联 Pull Request</span>
                 {commit.pullRequests.map((pullRequest) => (
-                  <a
-                    key={pullRequest.number}
-                    href={
-                      pullRequest.url ??
-                      `https://github.com/${owner}/${name}/pull/${pullRequest.number}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={pullRequest.title}
-                    className={`rounded-full border px-2 py-0.5 underline-offset-4 hover:underline ${prStateClass(pullRequest.state)}`}
-                  >
-                    #{pullRequest.number} {PR_STATE_LABEL[pullRequest.state] ?? pullRequest.state}
-                  </a>
+                  <span key={pullRequest.number} className="flex items-center gap-1">
+                    <a
+                      href={
+                        pullRequest.url ??
+                        `https://github.com/${owner}/${name}/pull/${pullRequest.number}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={pullRequest.title}
+                      className={`rounded-full border px-2 py-0.5 underline-offset-4 hover:underline ${prStateClass(pullRequest.state)}`}
+                    >
+                      #{pullRequest.number} {PR_STATE_LABEL[pullRequest.state] ?? pullRequest.state}
+                    </a>
+                    {pullRequest.state === "OPEN" ? (
+                      <button
+                        type="button"
+                        aria-label={`合并 PR #${pullRequest.number}`}
+                        onClick={() => {
+                          setMergeSuccess(null);
+                          setMergeTarget(pullRequest.number);
+                        }}
+                        className="h-6 rounded-full border border-black/[.08] px-2 text-[11px] text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-white/[.08]"
+                      >
+                        合并
+                      </button>
+                    ) : null}
+                  </span>
                 ))}
               </div>
             ) : null}
@@ -333,6 +361,25 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                   </a>
                 ))}
               </div>
+            ) : null}
+            {mergeSuccess ? (
+              <p
+                role="status"
+                className="rounded-lg border border-green-300 bg-green-50 p-3 text-xs text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200"
+              >
+                {mergeSuccess}
+              </p>
+            ) : null}
+
+            {mergeTarget !== null ? (
+              <MergePullPanel
+                key={mergeTarget}
+                owner={owner}
+                name={name}
+                number={mergeTarget}
+                onMerged={handleMerged}
+                onCancel={() => setMergeTarget(null)}
+              />
             ) : null}
           </section>
 
