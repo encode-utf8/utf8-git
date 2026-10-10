@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createDeleteBranchDescriptor, describeDeleteBranchFailure } from "@/lib/branch-delete-ops";
-import { fetchWithRetry } from "@/lib/client-fetch";
+import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
 import type { TimelineBranch } from "@/lib/github-timeline";
 import { confirmationView } from "@/lib/operations";
@@ -120,9 +120,7 @@ export function DeleteBranchPanel({
     setPending(true);
     setError(null);
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      const response = await fetchJsonWithRetry(endpoint, {
         body: JSON.stringify({
           branch,
           current: currentBranch ?? undefined,

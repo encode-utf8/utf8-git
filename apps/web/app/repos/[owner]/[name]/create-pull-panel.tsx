@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import { fetchJsonWithRetry } from "@/lib/client-fetch";
 import {
   PR_TITLE_MAX_LENGTH,
   createPullRequestDescriptor,
@@ -104,11 +105,9 @@ export function CreatePullPanel({
     setPending(true);
     setError(null);
     try {
-      const response = await fetch(
+      const response = await fetchJsonWithRetry(
         `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/operations/create-pull-request`,
         {
-          method: "POST",
-          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             head: head.trim(),
             base: base.trim(),
@@ -132,6 +131,8 @@ export function CreatePullPanel({
       const numberLabel =
         typeof data.number === "number" && data.number > 0 ? `#${data.number} ` : "";
       onCreated(`已创建 PR ${numberLabel}${data.title || title.trim()}`);
+    } catch {
+      setError("网络异常，未能创建 PR，请稍后重试。");
     } finally {
       setPending(false);
     }

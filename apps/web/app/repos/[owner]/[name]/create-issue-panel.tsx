@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import { fetchJsonWithRetry } from "@/lib/client-fetch";
 import {
   createIssueDescriptor,
   describeCreateIssueFailure,
@@ -68,11 +69,9 @@ export function CreateIssuePanel({ owner, name, onCreated, onCancel }: CreateIss
     setPending(true);
     setError(null);
     try {
-      const response = await fetch(
+      const response = await fetchJsonWithRetry(
         `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/operations/create-issue`,
         {
-          method: "POST",
-          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             title: title.trim(),
             body,
@@ -94,6 +93,8 @@ export function CreateIssuePanel({ owner, name, onCreated, onCancel }: CreateIss
       const numberLabel =
         typeof data.number === "number" && data.number > 0 ? `#${data.number} ` : "";
       onCreated(`已创建 Issue ${numberLabel}${data.title || title.trim()}`);
+    } catch {
+      setError("网络异常，未能创建 Issue，请稍后重试。");
     } finally {
       setPending(false);
     }

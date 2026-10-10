@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fetchWithRetry } from "./client-fetch";
+import { fetchJsonWithRetry, fetchWithRetry } from "./client-fetch";
 import { OnlineRequestError } from "./error-state";
 
 function jsonResponse(body: unknown, init: { status?: number } = {}): Response {
@@ -163,6 +163,84 @@ describe("fetchWithRetry", () => {
     }).catch((value: unknown) => value);
 
     expect((error as OnlineRequestError).kind).toBe("timeout");
+    expect(calls).toBe(0);
+  });
+});
+
+describe("fetchJsonWithRetry", () => {
+  it("网络失败重试后成功，POST 方法与请求体保持不变", async () => {
+    let calls = 0;
+    const seen: Array<{ method?: string; body?: unknown }> = [];
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      calls += 1;
+      seen.push({ method: init.method, body: init.body });
+      if (calls < 2) {
+        throw new TypeError("fetch failed");
+      }
+      return jsonResponse({ status: "succeeded" });
+    }) as unknown as typeof fetch;
+
+    const response = await fetchJsonWithRetry("/api/x", {
+      body: JSON.stringify({ confirmed: true }),
+      fetchImpl,
+      sleep: noSleep,
+      isOnline: () => true,
+    });
+
+    expect(response.status).toBe(200);
+    expect(calls).toBe(2);
+    expect(seen[0]).toEqual({ method: "POST", body: '{"confirmed":true}' });
+    expect(seen[1]).toEqual(seen[0]);
+  });
+
+  it("4xx / 5xx 响应原样返回给调用方，不自动重试", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return jsonResponse({ error: "too_many_requests" }, { status: 429 });
+    }) as unknown as typeof fetch;
+
+    const response = await fetchJsonWithRetry("/api/x", {
+      fetchImpl,
+      sleep: noSleep,
+      isOnline: () => true,
+    });
+
+    expect(response.status).toBe(429);
+    expect(calls).toBe(1);
+  });
+
+  it("网络失败重试耗尽 → OnlineRequestError", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+
+    const error = await fetchJsonWithRetry("/api/x", {
+      fetchImpl,
+      retries: 1,
+      sleep: noSleep,
+      isOnline: () => true,
+    }).catch((value: unknown) => value);
+
+    expect(error).toBeInstanceOf(OnlineRequestError);
+    expect(calls).toBe(2);
+  });
+
+  it("离线短路：不发请求", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return jsonResponse({});
+    }) as unknown as typeof fetch;
+
+    const error = await fetchJsonWithRetry("/api/x", {
+      fetchImpl,
+      isOnline: () => false,
+    }).catch((value: unknown) => value);
+
+    expect((error as OnlineRequestError).kind).toBe("offline");
     expect(calls).toBe(0);
   });
 });

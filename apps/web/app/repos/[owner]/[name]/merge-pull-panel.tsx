@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { fetchWithRetry } from "@/lib/client-fetch";
+import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
 import { confirmationView } from "@/lib/operations";
 import {
@@ -102,9 +102,7 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
     setPending(true);
     setError(null);
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      const response = await fetchJsonWithRetry(endpoint, {
         body: JSON.stringify({ number, method, confirmed: true }),
       });
       const data = (await response.json().catch(() => ({}))) as {

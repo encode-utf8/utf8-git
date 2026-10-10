@@ -13,7 +13,7 @@ import {
 } from "@/lib/branch-ops";
 import { formatRelativeTime, formatUtcDateTime, shortSha } from "@/lib/commit-format";
 import { mergeCommits } from "@/lib/commit-list";
-import { fetchWithRetry } from "@/lib/client-fetch";
+import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/lib/error-state";
 import { collectIssues, type TimelineBranch, type TimelineCommit } from "@/lib/github-timeline";
 import { EXPLAIN_MODES, isExplainMode, type ExplainMode } from "@/lib/glossary";
@@ -338,11 +338,9 @@ export function TimelineView({
     setCreating(true);
     setCreateError(null);
     try {
-      const response = await fetch(
+      const response = await fetchJsonWithRetry(
         `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/operations/create-branch`,
         {
-          method: "POST",
-          headers: { "content-type": "application/json" },
           body: JSON.stringify({ branch: trimmed, from: branchStart.oid, confirmed: true }),
         },
       );
@@ -356,6 +354,8 @@ export function TimelineView({
       setNewBranchName("");
       // 重新拉取服务端数据，让分支选择器立即包含新分支
       router.refresh();
+    } catch {
+      setCreateError("网络异常，未能创建分支，请稍后重试。");
     } finally {
       setCreating(false);
     }

@@ -8,7 +8,7 @@ import {
   describeRestoreRemaining,
   evaluateBranchRestore,
 } from "@/lib/branch-restore-ops";
-import { fetchWithRetry } from "@/lib/client-fetch";
+import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
 import { confirmationView } from "@/lib/operations";
 
@@ -113,9 +113,7 @@ export function RestoreBranchPanel({ owner, name, onRestored, onCancel }: Restor
     setPending(true);
     setError(null);
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      const response = await fetchJsonWithRetry(endpoint, {
         body: JSON.stringify({ idempotencyKey: selected.idempotencyKey, confirmed: true }),
       });
       const data = (await response.json().catch(() => ({}))) as {

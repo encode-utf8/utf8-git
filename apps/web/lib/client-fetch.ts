@@ -106,3 +106,63 @@ export async function fetchWithRetry(
 
   throw new OnlineRequestError(lastInfo ?? describeApiFailure(500, null));
 }
+
+export type JsonRequestOptions = FetchWithRetryOptions & {
+  method?: "POST" | "PUT" | "PATCH" | "DELETE";
+  body?: string;
+  contentType?: string;
+};
+
+/**
+ * 带重试的写请求（M3-8）：写操作在服务端是幂等的（同参数命中审计回放），
+ * 所以「请求根本没拿到响应」的网络失败可以安全重试。
+ * 与 GET 不同，这里只重试网络层失败：任何 HTTP 响应（含 4xx / 5xx）都原样返回，
+ * 交给调用方按状态码展示文案（429 限流、422 冲突等），避免重试放大上游影响。
+ */
+export async function fetchJsonWithRetry(
+  url: string,
+  options: JsonRequestOptions = {},
+): Promise<Response> {
+  const {
+    method = "POST",
+    body,
+    contentType = "application/json",
+    retries = 2,
+    baseDelayMs = 400,
+    signal = null,
+    isOnline = defaultIsOnline,
+    sleep = defaultSleep,
+    fetchImpl = fetch,
+    headers = {},
+  } = options;
+
+  let lastInfo: OnlineErrorInfo | null = null;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (signal?.aborted) {
+      throw new OnlineRequestError(describeFetchRejection({ name: "AbortError" }, true));
+    }
+    if (!isOnline()) {
+      throw new OnlineRequestError(describeFetchRejection(null, false));
+    }
+
+    try {
+      return await fetchImpl(url, {
+        method,
+        headers: { "content-type": contentType, Accept: "application/json", ...headers },
+        body,
+        signal: signal ?? undefined,
+        cache: "no-store",
+      });
+    } catch (error) {
+      const info = describeFetchRejection(error, isOnline());
+      lastInfo = info;
+      if (!isRetryableKind(info.kind) || attempt === retries) {
+        throw new OnlineRequestError(info);
+      }
+      await sleep(retryDelayMs(attempt, baseDelayMs));
+    }
+  }
+
+  throw new OnlineRequestError(lastInfo ?? describeApiFailure(500, null));
+}
