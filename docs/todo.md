@@ -93,7 +93,7 @@
 - [x] TODO-224 PR 流程（M3-4：建 PR + 合并。`POST .../operations/create-pull-request`（base / head + 标题 + 正文 + 草稿；标题必填、分支须合法且不能相同）与 `GET/POST .../operations/merge-pull-request`（只读可合并性检查 + 确认合并）都走统一写管线；`lib/pull-ops.ts` 按「已合并 / 已关闭 / 草稿 / 冲突 / 保护规则 / 计算中」判定并给出原因；时间线「新建 PR」面板（分支选择 + Markdown 预览 + 草稿开关），提交详情对 OPEN 的关联 PR 提供「合并 PR」入口与合并方式选择，不可合并时只解释原因、不提供执行入口）
 - [x] TODO-225 删除分支（M3-5：`GET/POST .../operations/delete-branch`（分支选择 → 服务端预检默认 / 保护 / 当前分支 → 影响预览 → 确认删除）；`lib/branch-delete-ops.ts` 按「默认分支 > 受保护分支 > 当前查看的分支」判定并给出原因；`lib/github-branch-settings.ts` 读仓库默认分支与 `branches/{branch}` 的 `protected`（不用需 admin 权限的 protection 端点）；`github-branches.ts` 的 `deleteBranchRef` 走 `DELETE /git/refs/heads/{branch}`；时间线「删除分支」面板，不可删除时只解释原因、不提供执行入口）
 - [x] TODO-226 24h 撤销 / 分支恢复（M3-6：`GET/POST .../operations/restore-branch`——GET 从写操作审计列出近 24h 内本用户成功删除、且保存了分支头 SHA 的记录；POST 以删除记录的幂等键为凭据（服务端校验归属 / 类型 / 状态 / 时间窗）用 `createBranchRef` 重建引用；`lib/branch-restore-ops.ts` 负责窗口判定与剩余时间文案；`operationAudit.list` 支持按 `kind` / `status` 过滤；时间线「恢复分支」面板展示候选与限制说明，恢复后 `router.refresh()`，打开任写操作面板会清掉上一次的成功提示）
-- [ ] TODO-227 操作历史与等价 Git 命令展示
+- [x] TODO-227 操作历史与等价 Git 命令展示（M3-7：新增只读页 `/repos/[owner]/[name]/operations`，按时间倒序列出本用户在该仓库的写操作审计（`latestPerIdempotencyKey` 把 started / 终态收敛为一条，含失败记录），每条给出操作类型 / 状态 / 时间 / 摘要 / 失败原因 / 等价 Git 或 gh 命令 / 结果链接；`lib/git-commands.ts` 负责命令与链接映射，`operations.ts` 导出 `OPERATION_KIND_LABEL` 共用文案；时间线头部新增「操作历史」入口）
 
 ### 3.4 安全与合规
 
