@@ -35,6 +35,7 @@ import { CommitDetailPanel } from "./commit-detail";
 import { ConfirmCard } from "./confirm-card";
 import { CreateIssuePanel } from "./create-issue-panel";
 import { CreatePullPanel } from "./create-pull-panel";
+import { DeleteBranchPanel } from "./delete-branch-panel";
 import { GlossaryHint } from "./glossary-hint";
 import { LaneGraph } from "./lane-graph";
 
@@ -54,6 +55,7 @@ type TimelineViewProps = {
   initialHasNextPage: boolean;
   initialBranch: string | null;
   branches: TimelineBranch[];
+  defaultBranch: string | null;
 };
 
 const PR_STATE_LABEL: Record<string, string> = {
@@ -193,6 +195,7 @@ export function TimelineView({
   initialHasNextPage,
   initialBranch,
   branches,
+  defaultBranch,
 }: TimelineViewProps) {
   const [commits, setCommits] = useState(initialCommits);
   const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
@@ -219,6 +222,8 @@ export function TimelineView({
   const [issueSuccess, setIssueSuccess] = useState<string | null>(null);
   const [pullOpen, setPullOpen] = useState(false);
   const [pullSuccess, setPullSuccess] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
 
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -359,6 +364,16 @@ export function TimelineView({
     (message: string) => {
       setPullOpen(false);
       setPullSuccess(message);
+      router.refresh();
+    },
+    [router],
+  );
+
+  // 删除分支（M3-5）：成功后关闭面板、展示提示并刷新服务端数据（分支选择器立即去掉该分支）。
+  const handleBranchDeleted = useCallback(
+    (message: string) => {
+      setDeleteOpen(false);
+      setDeleteSuccess(message);
       router.refresh();
     },
     [router],
@@ -558,6 +573,16 @@ export function TimelineView({
               >
                 新建 PR
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteOpen(true);
+                  setDeleteSuccess(null);
+                }}
+                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+              >
+                删除分支
+              </button>
             </>
           ) : null}
           <span className="flex items-center gap-2">
@@ -580,12 +605,12 @@ export function TimelineView({
         </div>
       </div>
 
-      {createSuccess || issueSuccess || pullSuccess ? (
+      {createSuccess || issueSuccess || pullSuccess || deleteSuccess ? (
         <p
           role="status"
           className="mt-3 rounded-lg border border-green-300 bg-green-50 p-3 text-xs text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200"
         >
-          {createSuccess ?? issueSuccess ?? pullSuccess}
+          {createSuccess ?? issueSuccess ?? pullSuccess ?? deleteSuccess}
         </p>
       ) : null}
 
@@ -638,6 +663,20 @@ export function TimelineView({
             defaultBase={initialBranch}
             onCreated={handlePullCreated}
             onCancel={() => setPullOpen(false)}
+          />
+        </div>
+      ) : null}
+
+      {deleteOpen ? (
+        <div className="mt-3">
+          <DeleteBranchPanel
+            owner={owner}
+            name={name}
+            branches={branches}
+            defaultBranch={defaultBranch}
+            currentBranch={branch}
+            onDeleted={handleBranchDeleted}
+            onCancel={() => setDeleteOpen(false)}
           />
         </div>
       ) : null}

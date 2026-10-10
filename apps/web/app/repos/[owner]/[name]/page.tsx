@@ -281,6 +281,7 @@ export default async function RepoTimelinePage({
           initialHasNextPage={timeline.pageInfo.hasNextPage}
           initialBranch={timeline.branch}
           branches={timeline.branches}
+          defaultBranch={timeline.repo.defaultBranch}
         />
       </div>
     </PageShell>
