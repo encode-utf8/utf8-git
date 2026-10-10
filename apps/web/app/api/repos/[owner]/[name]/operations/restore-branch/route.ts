@@ -8,7 +8,7 @@ import {
   evaluateBranchRestore,
   restoreDeadline,
 } from "@/lib/branch-restore-ops";
-import { getDataStores } from "@/lib/data-stores";
+import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { createBranchRef } from "@/lib/github-branches";
 import { mapOperationFailure } from "@/lib/operation-http";
 import { createIdempotencyKey, repositorySlug, runOperation } from "@/lib/operations";
@@ -162,6 +162,8 @@ export async function POST(
       audit,
       execute: () => createBranchRef({ token, owner, name, branch, fromSha: sha }),
     });
+    // 写操作已生效：失效该仓库的时间线缓存，让 router.refresh() 立即拿到新数据
+    await invalidateTimelineCache({ userId, owner, name });
     return NextResponse.json(
       { status: outcome.status, branch: outcome.value.branch, sha: outcome.value.sha },
       {

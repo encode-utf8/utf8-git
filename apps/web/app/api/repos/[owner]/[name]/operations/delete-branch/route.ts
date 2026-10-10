@@ -4,7 +4,7 @@ import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { validateBranchName } from "@/lib/branch-ops";
 import { createDeleteBranchDescriptor, evaluateBranchDeletion } from "@/lib/branch-delete-ops";
-import { getDataStores } from "@/lib/data-stores";
+import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { fetchBranchDeletionContext } from "@/lib/github-branch-settings";
 import { deleteBranchRef } from "@/lib/github-branches";
 import { mapOperationFailure } from "@/lib/operation-http";
@@ -162,6 +162,8 @@ export async function POST(
       audit: getDataStores().operationAudit,
       execute: () => deleteBranchRef({ token, owner, name, branch }),
     });
+    // 写操作已生效：失效该仓库的时间线缓存，让 router.refresh() 立即拿到新数据
+    await invalidateTimelineCache({ userId, owner, name });
     return NextResponse.json(
       { status: outcome.status, branch: outcome.value.branch },
       {

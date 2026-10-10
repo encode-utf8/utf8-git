@@ -12,6 +12,8 @@ export interface TtlCacheLike<V> {
   get(key: string): MaybePromise<CacheLookup<V> | null>;
   set(key: string, value: V): MaybePromise<void>;
   delete(key: string): MaybePromise<void>;
+  /** 按前缀失效：写操作成功后清掉该仓库的分支列表 / PR 状态等派生缓存。 */
+  deleteByPrefix(prefix: string): MaybePromise<void>;
 }
 
 export interface RateLimitStoreLike {

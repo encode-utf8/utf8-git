@@ -4,7 +4,7 @@ import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { createBranchDescriptor, validateBranchName } from "@/lib/branch-ops";
 import { shortSha } from "@/lib/commit-format";
-import { getDataStores } from "@/lib/data-stores";
+import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { createBranchRef } from "@/lib/github-branches";
 import { createIdempotencyKey, runOperation } from "@/lib/operations";
 import { mapOperationFailure } from "@/lib/operation-http";
@@ -74,6 +74,8 @@ export async function POST(
       audit: getDataStores().operationAudit,
       execute: () => createBranchRef({ token, owner, name, branch, fromSha: from }),
     });
+    // 写操作已生效：失效该仓库的时间线缓存，让 router.refresh() 立即拿到新数据
+    await invalidateTimelineCache({ userId, owner, name });
     return NextResponse.json(
       {
         status: outcome.status,

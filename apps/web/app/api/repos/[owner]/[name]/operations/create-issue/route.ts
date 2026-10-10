@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
-import { getDataStores } from "@/lib/data-stores";
+import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { createIssue } from "@/lib/github-issues";
 import {
   createIssueDescriptor,
@@ -97,6 +97,8 @@ export async function POST(
           labels,
         }),
     });
+    // 写操作已生效：失效该仓库的时间线缓存，让 router.refresh() 立即拿到新数据
+    await invalidateTimelineCache({ userId, owner, name });
     return NextResponse.json(
       {
         status: outcome.status,

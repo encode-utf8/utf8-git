@@ -9,7 +9,7 @@ import { MemoryOperationAuditStore, type OperationAuditStoreLike } from "./opera
 import { PgOperationAuditStore, PgRateLimitStore, PgTtlCache } from "./pg-stores";
 import { getPrismaClient } from "./prisma";
 import { RateLimitStore } from "./rate-limit-store";
-import { TtlCache } from "./server-cache";
+import { TtlCache, cacheKey } from "./server-cache";
 import {
   resolveStoreBackend,
   type RateLimitStoreLike,
@@ -110,4 +110,18 @@ export function getDataStores(): DataStores {
 export function getRateLimitThreshold(): number {
   const raw = Number(process.env.GITHUB_RATE_LIMIT_DEGRADE_THRESHOLD);
   return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_RATE_LIMIT_THRESHOLD;
+}
+
+/**
+ * 写操作成功后失效该用户在此仓库的时间线缓存（含分支列表 / PR 状态等派生数据）。
+ * 不失效时，写操作后的 router.refresh() 会命中旧缓存——M3-6 发现「新建分支后选择器不更新」
+ * 就是这个原因。只失效时间线缓存、不动游标分页链：提交本身没有变化，游标链仍然有效。
+ */
+export async function invalidateTimelineCache(params: {
+  userId: string;
+  owner: string;
+  name: string;
+}): Promise<void> {
+  const prefix = `${cacheKey("timeline", params.userId, params.owner, params.name)}\u001f`;
+  await getDataStores().timelineCache.deleteByPrefix(prefix);
 }

@@ -54,6 +54,15 @@ export class TtlCache<V> {
     this.entries.delete(key);
   }
 
+  // 按前缀失效（如某个用户在某仓库下的全部时间线条目）
+  deleteByPrefix(prefix: string): void {
+    for (const key of [...this.entries.keys()]) {
+      if (key.startsWith(prefix)) {
+        this.entries.delete(key);
+      }
+    }
+  }
+
   clear(): void {
     this.entries.clear();
   }

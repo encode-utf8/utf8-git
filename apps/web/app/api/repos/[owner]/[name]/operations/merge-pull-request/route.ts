@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
-import { getDataStores } from "@/lib/data-stores";
+import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
 import { fetchPullRequest, mergePullRequest } from "@/lib/github-pulls";
 import { mapOperationFailure } from "@/lib/operation-http";
 import { createIdempotencyKey, runOperation } from "@/lib/operations";
@@ -163,6 +163,8 @@ export async function POST(
         { status: 409 },
       );
     }
+    // 写操作已生效：失效该仓库的时间线缓存，让 router.refresh() 立即拿到新数据
+    await invalidateTimelineCache({ userId, owner, name });
     return NextResponse.json(
       {
         status: outcome.status,

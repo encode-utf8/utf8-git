@@ -65,6 +65,10 @@ export class PgTtlCache<V> implements TtlCacheLike<V> {
     await this.prisma.sharedCacheEntry.deleteMany({ where: { key } });
   }
 
+  async deleteByPrefix(prefix: string): Promise<void> {
+    await this.prisma.sharedCacheEntry.deleteMany({ where: { key: { startsWith: prefix } } });
+  }
+
   // 清理已过期条目（按需调用，避免表无限增长）
   async purgeExpired(now: number = this.now()): Promise<number> {
     const result = await this.prisma.sharedCacheEntry.deleteMany({
