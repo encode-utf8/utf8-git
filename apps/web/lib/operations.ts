@@ -203,6 +203,7 @@ export function describeOperationFailure(
       return "请先在确认卡片中确认本次操作。";
     case "branch_conflict":
     case "issue_invalid":
+    case "pull_not_mergeable":
       return conflictMessage;
     default:
       break;
