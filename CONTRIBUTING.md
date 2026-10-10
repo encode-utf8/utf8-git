@@ -35,7 +35,7 @@ pnpm --filter @utf8-git/web exec prisma migrate dev
 
 - `apps/web/.env` 已被 gitignore，请勿提交。
 - 需要 GitHub OAuth 本地联调时，按 `apps/web/.env.example` 注释创建 OAuth App 并填写 `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`。
-- 登录、数据层与部署细节见 [README.md](README.md) 的「本地开发」与 [docs/deployment.md](docs/deployment.md)。
+- 登录与本地调试细节见 [README.md](README.md) 的「本地开发」，部署与多实例细节见 [docs/deployment.md](docs/deployment.md)。
 
 ## 2. 常用命令
 
