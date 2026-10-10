@@ -129,8 +129,10 @@ const EXISTING_REFS = new Set([
   "refs/heads/junk/delete-me",
 ]);
 
-// 分支列表（时间线选择器）：与 EXISTING_REFS 联动，删除分支后刷新页面即消失
-const REF_NAMES = ["main", "feature/e2e", "junk/delete-me"];
+// 分支列表（时间线选择器）：直接由 EXISTING_REFS 派生，创建 / 删除 / 恢复分支后刷新页面即同步
+function branchNames() {
+  return [...EXISTING_REFS].map((ref) => ref.replace(/^refs\/heads\//, ""));
+}
 
 // 创建 Issue 的递增编号（成功创建时自增，保证每次返回不同编号）
 let issueNumber = 100;
@@ -301,12 +303,10 @@ function timelinePayload(variables, secondPage) {
         isPrivate: false,
         defaultBranchRef: { name: "main" },
         refs: {
-          nodes: REF_NAMES.filter((name) => EXISTING_REFS.has(`refs/heads/${name}`)).map(
-            (name) => ({
-              name,
-              target: { oid: head.oid, committedDate: head.committedDate },
-            }),
-          ),
+          nodes: branchNames().map((name) => ({
+            name,
+            target: { oid: head.oid, committedDate: head.committedDate },
+          })),
         },
         object: {
           history: {

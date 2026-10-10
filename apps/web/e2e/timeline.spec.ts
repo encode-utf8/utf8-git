@@ -202,3 +202,26 @@ test("删除分支：保护规则 → 影响预览 → 删除执行", async ({ p
   await dialog.getByRole("button", { name: "删除分支", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("已删除分支 junk/delete-me");
 });
+
+test("恢复分支：24h 窗口内撤销删除", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  // 删除 feature/e2e（审计记录会保存删除前的分支头 SHA，作为恢复依据）
+  await page.getByRole("button", { name: "删除分支" }).click();
+  await expect(page.getByLabel("要删除的分支")).toHaveValue("feature/e2e");
+  const deleteDialog = page.getByRole("dialog", { name: /删除分支/ });
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog.getByRole("button", { name: "删除分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已删除分支 feature/e2e");
+
+  // 恢复入口：列出近 24h 的删除记录 → 选回该分支 → 重建引用
+  await page.getByRole("button", { name: "恢复分支" }).click();
+  const candidate = page.getByRole("radio", { name: /^恢复 feature\/e2e（/ });
+  await expect(candidate).toBeVisible();
+  await candidate.check();
+  await page
+    .getByRole("dialog", { name: /恢复分支/ })
+    .getByRole("button", { name: "恢复分支", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("已恢复分支 feature/e2e");
+});
