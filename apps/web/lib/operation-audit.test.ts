@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { MemoryOperationAuditStore } from "./operation-audit";
+import { MemoryOperationAuditStore, latestPerIdempotencyKey } from "./operation-audit";
 import {
   createIdempotencyKey,
   runOperation,
@@ -76,6 +76,28 @@ describe("内存审计存储", () => {
 
     const restorable = await store.list({ kind: "deleteBranch", status: "succeeded" });
     expect(restorable.map((item) => item.idempotencyKey)).toEqual(["del-1"]);
+  });
+});
+
+describe("操作历史收敛", () => {
+  it("同一幂等键只保留最新一条（started 被终态覆盖）", () => {
+    const records = [
+      record({ idempotencyKey: "k1", status: "succeeded" }),
+      record({ idempotencyKey: "k1", status: "started" }),
+      record({ idempotencyKey: "k2", status: "failed" }),
+      record({ idempotencyKey: "k2", status: "started" }),
+    ];
+    const latest = latestPerIdempotencyKey(records);
+    expect(latest.map((item) => `${item.idempotencyKey}:${item.status}`)).toEqual([
+      "k1:succeeded",
+      "k2:failed",
+    ]);
+  });
+
+  it("只有 started 的记录仍然保留（进行中）", () => {
+    expect(
+      latestPerIdempotencyKey([record({ idempotencyKey: "k3", status: "started" })]),
+    ).toHaveLength(1);
   });
 });
 

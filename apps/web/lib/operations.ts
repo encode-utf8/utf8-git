@@ -69,7 +69,8 @@ export type OperationOutcome<T> = {
   value: T;
 };
 
-const CONFIRM_LABEL: Record<OperationKind, string> = {
+/** 操作类型的中文名：确认卡片按钮、操作历史页共用同一份文案。 */
+export const OPERATION_KIND_LABEL: Record<OperationKind, string> = {
   createBranch: "创建分支",
   createIssue: "创建 Issue",
   createPullRequest: "创建 PR",
@@ -96,7 +97,7 @@ export function confirmationView(descriptor: OperationDescriptor): ConfirmationV
   return {
     title: descriptor.summary,
     impacts: descriptor.impacts,
-    confirmLabel: CONFIRM_LABEL[descriptor.kind],
+    confirmLabel: OPERATION_KIND_LABEL[descriptor.kind],
     danger: DANGER_KINDS.has(descriptor.kind),
   };
 }

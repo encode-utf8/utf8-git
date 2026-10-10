@@ -240,6 +240,12 @@ export default async function RepoTimelinePage({
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
+          <Link
+            href={`/repos/${owner}/${name}/operations`}
+            className="h-9 rounded-full border border-black/[.08] px-4 text-sm leading-8 text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+          >
+            操作历史
+          </Link>
           <a
             href={`https://github.com/${owner}/${name}`}
             target="_blank"

@@ -25,6 +25,23 @@ export interface OperationAuditStoreLike extends OperationAuditSink {
 
 export const DEFAULT_AUDIT_LIMIT = 50;
 
+/**
+ * 同一幂等键只保留最新一条记录：写管线会先写 started、成功 / 失败再写一条终态，
+ * 操作历史页按此收敛后每条操作只出现一次。入参需为「最新优先」（list 的返回顺序）。
+ */
+export function latestPerIdempotencyKey(records: OperationAuditRecord[]): OperationAuditRecord[] {
+  const seen = new Set<string>();
+  const latest: OperationAuditRecord[] = [];
+  for (const record of records) {
+    if (seen.has(record.idempotencyKey)) {
+      continue;
+    }
+    seen.add(record.idempotencyKey);
+    latest.push(record);
+  }
+  return latest;
+}
+
 /** 内存审计存储：按写入顺序保留；find 返回该幂等键最近的一条。 */
 export class MemoryOperationAuditStore implements OperationAuditStoreLike {
   private readonly records: OperationAuditRecord[] = [];
