@@ -34,6 +34,7 @@ import { computeVirtualWindow } from "@/lib/virtual-window";
 import { CommitDetailPanel } from "./commit-detail";
 import { ConfirmCard } from "./confirm-card";
 import { CreateIssuePanel } from "./create-issue-panel";
+import { CreatePullPanel } from "./create-pull-panel";
 import { GlossaryHint } from "./glossary-hint";
 import { LaneGraph } from "./lane-graph";
 
@@ -216,6 +217,8 @@ export function TimelineView({
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
   const [issueOpen, setIssueOpen] = useState(false);
   const [issueSuccess, setIssueSuccess] = useState<string | null>(null);
+  const [pullOpen, setPullOpen] = useState(false);
+  const [pullSuccess, setPullSuccess] = useState<string | null>(null);
 
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -346,6 +349,16 @@ export function TimelineView({
     (message: string) => {
       setIssueOpen(false);
       setIssueSuccess(message);
+      router.refresh();
+    },
+    [router],
+  );
+
+  // 创建 PR（M3-4）：成功后关闭面板、展示提示并刷新服务端数据。
+  const handlePullCreated = useCallback(
+    (message: string) => {
+      setPullOpen(false);
+      setPullSuccess(message);
       router.refresh();
     },
     [router],
@@ -535,6 +548,16 @@ export function TimelineView({
               >
                 新建 Issue
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPullOpen(true);
+                  setPullSuccess(null);
+                }}
+                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+              >
+                新建 PR
+              </button>
             </>
           ) : null}
           <span className="flex items-center gap-2">
@@ -557,12 +580,12 @@ export function TimelineView({
         </div>
       </div>
 
-      {createSuccess || issueSuccess ? (
+      {createSuccess || issueSuccess || pullSuccess ? (
         <p
           role="status"
           className="mt-3 rounded-lg border border-green-300 bg-green-50 p-3 text-xs text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200"
         >
-          {createSuccess ?? issueSuccess}
+          {createSuccess ?? issueSuccess ?? pullSuccess}
         </p>
       ) : null}
 
@@ -602,6 +625,19 @@ export function TimelineView({
             name={name}
             onCreated={handleIssueCreated}
             onCancel={() => setIssueOpen(false)}
+          />
+        </div>
+      ) : null}
+
+      {pullOpen ? (
+        <div className="mt-3">
+          <CreatePullPanel
+            owner={owner}
+            name={name}
+            branches={branches.map((branch) => branch.name)}
+            defaultBase={initialBranch}
+            onCreated={handlePullCreated}
+            onCancel={() => setPullOpen(false)}
           />
         </div>
       ) : null}
