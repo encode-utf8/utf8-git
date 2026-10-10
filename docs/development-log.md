@@ -11,6 +11,37 @@
 
 ---
 
+## 2026-10-10 · M3-4 收尾：创建 PR（建 PR → 可合并性检查 → 合并 闭环）
+
+**目标**：补齐路线图 M3-4 的前半段「建 PR」，让「建 PR → 可合并性检查 → 合并」在时间线内闭环。
+
+**完成内容**
+
+- 纯逻辑：`lib/pull-ops.ts` 扩展创建 PR 部分——`validatePullTitle`（必填、≤256）、`validatePullBody`（≤65536）、`validatePullBranches`（复用 `validateBranchName` 的 git 引用规则，且要求来源 ≠ 目标）、`createPullRequestDescriptor`、`describeCreatePullRequestFailure`；`operations.ts` 新增操作类型 `createPullRequest`（确认文案「创建 PR」）与冲突码 `pull_invalid`。
+- 上游客户端：`lib/github-pulls.ts` 新增 `createPullRequest`（POST `/repos/{owner}/{repo}/pulls`，body `title` / `head` / `base` / `draft`，正文为空则不带该字段）与 `normalizeCreatedPullRequest`；错误分类与既有客户端一致（422 → `GitHubValidationError`）。
+- 接口：新增 `POST /api/repos/[owner]/[name]/operations/create-pull-request`，body `{ head, base, title, body?, draft?, confirmed }`；服务端按「标题 → 分支 → 正文」顺序复校验后走 `runOperation`（幂等 + 审计）；成功 201、幂等回放 200。
+- UI：新增 `create-pull-panel.tsx`（目标 / 来源分支下拉 + 标题 + 正文 Markdown 预览 + 草稿开关；分支不足两个时只提示不可创建）；`timeline-view.tsx` 头部新增「新建 PR」，成功后关闭面板、展示 `role="status"` 提示并 `router.refresh()`。
+- 测试：`pull-ops.test.ts` / `github-pulls.test.ts` 补创建 PR 用例，累计 247；E2E 新增「创建 PR」用例（成功 + 422 冲突），mock 上游补 `POST /repos/{owner}/{name}/pulls`。
+
+**关键决策**
+
+| 编号     | 决策                                                          | 理由                                                                                | 备选与否决原因                                       |
+| -------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| ADR-0080 | 创建 PR 入口放在**时间线头部**                                | base / head 需要分支列表，头部已持有 `branches`，无需为选择器新增上游查询           | 放进提交详情：只知当前提交，选分支要多一次请求       |
+| ADR-0081 | 分支校验**复用 `validateBranchName`**，并额外要求 head ≠ base | 与 M3-2 同一套 git 引用规则，避免两处校验漂移；head = base 上游必然 422，本地先拦下 | 各写一份：规则漂移；不校验：白跑一次注定失败的写请求 |
+| ADR-0082 | 正文为空时**不发送 `body` 字段**，`draft` 始终显式发送        | 与创建 Issue 保持一致（空字段不带）；显式 `draft: false` 表达「非草稿」             | 全部发送：上游会把空字符串当成正文                   |
+
+**问题与风险**
+
+- 选择器的分支列表来自时间线已加载的 refs（GraphQL 只取前若干条），分支很多的仓库可能不全，完整列表需要额外的分页查询。
+- 未预检「仓库是否禁用 PR / 合并」，由上游 403 / 405 兜底。
+- 上游写端点仍只有 E2E mock 覆盖（`POST /pulls`），真实建 PR 需登录后手动验收。
+- 创建成功后时间线不会立刻出现新 PR（时间线聚合提交，PR 由 GraphQL 关联），仅以提示给出编号。
+
+**下一步**
+
+- M3-5：删除分支（保护规则 + 影响预览），复用「前置检查 → 不可执行只解释原因」的模式。
+
 ## 2026-10-10 · M3-4 合并 PR：可合并性检查 + 冲突提示
 
 **目标**：在时间线上完成「PR 合并」写操作，并把「能不能合」的结论前置到执行之前——冲突 / 草稿 / 已合并都要给出明确原因。
