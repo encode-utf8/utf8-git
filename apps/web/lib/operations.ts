@@ -1,8 +1,13 @@
-// M3-1 操作编排：所有写操作（建分支 / 建 Issue / 合并 PR / 删分支）走同一条管线。
+// M3-1 操作编排：所有写操作（建分支 / 建 Issue / 合并 PR / 删分支 / 恢复分支）走同一条管线。
 // 纯逻辑、无 IO：执行器与审计写入都通过参数注入，便于单测与后续替换持久化实现。
 
 export type OperationKind =
-  "createBranch" | "createIssue" | "createPullRequest" | "mergePullRequest" | "deleteBranch";
+  | "createBranch"
+  | "createIssue"
+  | "createPullRequest"
+  | "mergePullRequest"
+  | "deleteBranch"
+  | "restoreBranch";
 
 export type RepositoryRef = { owner: string; name: string };
 
@@ -70,6 +75,7 @@ const CONFIRM_LABEL: Record<OperationKind, string> = {
   createPullRequest: "创建 PR",
   mergePullRequest: "合并 PR",
   deleteBranch: "删除分支",
+  restoreBranch: "恢复分支",
 };
 
 const DANGER_KINDS: ReadonlySet<OperationKind> = new Set<OperationKind>(["deleteBranch"]);
