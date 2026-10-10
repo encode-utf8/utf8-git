@@ -11,6 +11,39 @@
 
 ---
 
+## 2026-10-10 · M3-4 合并 PR：可合并性检查 + 冲突提示
+
+**目标**：在时间线上完成「PR 合并」写操作，并把「能不能合」的结论前置到执行之前——冲突 / 草稿 / 已合并都要给出明确原因。
+
+**完成内容**
+
+- 上游客户端：新增 `lib/github-pulls.ts`——`fetchPullRequest`（GET `/repos/{owner}/{repo}/pulls/{number}`，归一化 `mergeable` / `mergeable_state` / head / base）与 `mergePullRequest`（PUT `/pulls/{number}/merge`，body `merge_method`）；405 / 409 / 422 归为 `GitHubValidationError`，410 归 `GitHubNotFoundError`，错误分类与既有客户端一致。
+- 纯逻辑：新增 `lib/pull-ops.ts`——`parsePullNumber`、`isMergeMethod` / `MERGE_METHODS`、`evaluateMergeability`（按「已合并 > 已关闭 > 草稿 > 冲突 / 保护规则 > 计算中」顺序给出 `canMerge` + 原因）、`createMergePullRequestDescriptor`、`describeMergePullRequestFailure`；`operations.ts` 的失败文案表新增 `pull_not_mergeable`。
+- 接口：新增 `GET/POST /api/repos/[owner]/[name]/operations/merge-pull-request`——GET 为只读可合并性检查（不写审计）；POST 先复检可合并性（不可合并直接 409 + 原因，不进入写管线），再走 `runOperation`（确认 + 幂等 + 审计）；`merged=false` 也按不可合并处理。
+- UI：新增 `merge-pull-panel.tsx`（检查中 → 可合并给确认卡片 + 合并方式选择；不可合并只解释原因、不提供执行入口）；`commit-detail.tsx` 的「关联 Pull Request」徽标旁对 `OPEN` 的 PR 提供「合并 PR」按钮，成功后展示 `role="status"` 并 `router.refresh()`。
+- 测试：`pull-ops.test.ts`、`github-pulls.test.ts`，累计 236；E2E 新增「合并 PR」用例（可合并成功 + 冲突提示），mock 上游补 `GET /pulls/{number}` 与 `PUT /pulls/{number}/merge`，并给最新提交挂上 #61（可合并）/ #62（冲突）两个开放 PR。
+
+**关键决策**
+
+| 编号     | 决策                                                       | 理由                                                                                  | 备选与否决原因                                           |
+| -------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| ADR-0077 | 可合并性检查做成**独立只读 GET**，POST 合并前再复检一次    | 用户要先看到结论才愿意确认；服务端复检可避免检查与执行之间的竞态直接落到上游 405      | 只在 POST 里检查：用户看不到原因；只信前端检查：可被绕过 |
+| ADR-0078 | 合并入口放在**提交详情面板的 PR 徽标旁**，仅对 `OPEN` 显示 | 时间线行本身是 `<button>`，行内再加按钮属非法嵌套交互元素；详情面板已集中承载 PR 徽标 | 行内按钮：非法 / 事件冲突；独立页面：多一层导航          |
+| ADR-0079 | 不可合并时**不渲染确认按钮**，只展示原因                   | 把结论前置，避免「点了合并才被拒」；服务端仍以 409 兜底                               | 允许点确认再由上游报错：多一次注定失败的写请求与审计     |
+
+**问题与风险**
+
+- GitHub 的 `mergeable` 是异步计算的，首次查询可能为 `null`（本轮文案为「尚未完成可合并性计算，请稍后重试」），未做自动轮询。
+- 上游写端点仍只有 E2E mock 覆盖（`GET/PUT /pulls/{number}[/merge]`），真实合并需登录后手动验收。
+- 合并方式只影响上游 `merge_method`，未预检仓库默认合并方式与分支保护规则；被保护分支会由 GitHub 返回 403 / 405，按通用文案提示。
+- 路线图 M3-4 含「建 PR → 可合并性检查 → 合并」，本轮只完成后两步，「建 PR」仍待补。
+- 合并后 PR 徽标不会立刻变化：只 `router.refresh()`，需上游数据刷新后才显示「已合并」。
+
+**下一步**
+
+- 补齐 M3-4 的「建 PR」（从分支创建 PR：base 选择 + 标题 / 正文）。
+- M3-5：删除分支（保护规则 + 影响预览），复用同一套「前置检查 + 不可执行时只解释原因」的模式。
+
 ## 2026-10-10 · M3-3 创建 Issue：Markdown 预览 + 标签
 
 **目标**：在时间线上直接创建 Issue，复用 M3-1 的确认卡片 + 统一写管线 + 审计；正文提供轻量 Markdown 预览，标签以逗号输入。
