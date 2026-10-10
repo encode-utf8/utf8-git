@@ -69,6 +69,22 @@ export type OperationOutcome<T> = {
   value: T;
 };
 
+/**
+ * 幂等回放窗口（M3-8 防重放）：只有窗口内的成功记录才回放。
+ * 幂等键由「操作人 + 类型 + 仓库 + 参数」稳定派生，长期有效会把「参数完全相同的新意图」
+ * 误判成重放而静默不执行；限定窗口后，过期记录一律按新意图重新执行。
+ */
+export const DEFAULT_REPLAY_WINDOW_MS = 10 * 60 * 1000;
+
+/** 成功记录是否仍在回放窗口内（时间无法解析时视为不可回放）。 */
+export function isWithinReplayWindow(recordedAt: string, now: Date, windowMs: number): boolean {
+  const recorded = Date.parse(recordedAt);
+  if (!Number.isFinite(recorded)) {
+    return false;
+  }
+  return now.getTime() - recorded <= windowMs;
+}
+
 /** 操作类型的中文名：确认卡片按钮、操作历史页共用同一份文案。 */
 export const OPERATION_KIND_LABEL: Record<OperationKind, string> = {
   createBranch: "创建分支",
@@ -119,12 +135,14 @@ export type RunOperationOptions<T> = {
   execute: () => Promise<T>;
   audit: OperationAuditSink;
   now?: () => Date;
+  /** 幂等回放窗口（毫秒）；成功记录超出窗口后不再回放，按新意图重新执行。 */
+  replayWindowMs?: number;
 };
 
 /**
  * 统一写操作管线：
  * 1) 必须显式确认，否则拒绝执行；
- * 2) 幂等键命中「已成功」记录时直接回放结果，不重复执行；
+ * 2) 幂等键命中「窗口内已成功」记录时直接回放结果，不重复执行；
  * 3) 执行前后各写一条审计（started → succeeded / failed）。
  */
 export async function runOperation<T>({
@@ -135,13 +153,17 @@ export async function runOperation<T>({
   execute,
   audit,
   now = () => new Date(),
+  replayWindowMs = DEFAULT_REPLAY_WINDOW_MS,
 }: RunOperationOptions<T>): Promise<OperationOutcome<T>> {
   if (!confirmed) {
     throw new OperationError("confirmation_required", "写操作需要用户确认后才能执行。");
   }
 
   const existing = await audit.find(idempotencyKey);
-  if (existing?.status === "succeeded") {
+  if (
+    existing?.status === "succeeded" &&
+    isWithinReplayWindow(existing.recordedAt, now(), replayWindowMs)
+  ) {
     return { status: "replayed", value: existing.result as T };
   }
 
@@ -210,6 +232,8 @@ export function describeOperationFailure(
       return "GitHub 请求超时，请重试。";
     case "confirmation_required":
       return "请先在确认卡片中确认本次操作。";
+    case "too_many_requests":
+      return "操作过于频繁，请稍后再试。";
     case "branch_conflict":
     case "issue_invalid":
     case "pull_invalid":

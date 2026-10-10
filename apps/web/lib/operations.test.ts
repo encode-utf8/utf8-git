@@ -4,6 +4,8 @@ import {
   OperationError,
   confirmationView,
   createIdempotencyKey,
+  describeOperationFailure,
+  isWithinReplayWindow,
   repositorySlug,
   runOperation,
   type OperationAuditRecord,
@@ -147,9 +149,92 @@ describe("写操作管线", () => {
       confirmed: true,
       execute,
       audit: sink,
+      now: () => new Date("2026-10-09T00:05:00.000Z"),
     });
     expect(outcome).toEqual({ status: "replayed", value: { ref: "refs/heads/feature/demo" } });
     expect(execute).not.toHaveBeenCalled();
     expect(records).toHaveLength(1);
+  });
+
+  it("成功记录超出回放窗口后按新意图重新执行（M3-8 防重放）", async () => {
+    const seed: OperationAuditRecord[] = [
+      {
+        idempotencyKey: "k1",
+        kind: "createBranch",
+        repo: "encode-utf8/utf8-git",
+        actor: "u1",
+        status: "succeeded",
+        summary: "基于 main 创建 feature/demo 分支",
+        payload: { branch: "feature/demo", from: "main" },
+        result: { ref: "refs/heads/feature/demo" },
+        error: null,
+        recordedAt: "2026-10-09T00:00:00.000Z",
+      },
+    ];
+    const { sink, records } = memorySink(seed);
+    const execute = vi.fn(async () => ({ ref: "refs/heads/feature/demo" }));
+    const outcome = await runOperation({
+      descriptor: descriptor(),
+      actor: "u1",
+      idempotencyKey: "k1",
+      confirmed: true,
+      execute,
+      audit: sink,
+      now: () => new Date("2026-10-09T01:00:00.000Z"),
+    });
+    expect(outcome.status).toBe("succeeded");
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(records.map((record) => record.status)).toEqual(["succeeded", "started", "succeeded"]);
+  });
+
+  it("回放窗口可由调用方覆盖（replayWindowMs）", async () => {
+    const seed: OperationAuditRecord[] = [
+      {
+        idempotencyKey: "k1",
+        kind: "createBranch",
+        repo: "encode-utf8/utf8-git",
+        actor: "u1",
+        status: "succeeded",
+        summary: "基于 main 创建 feature/demo 分支",
+        payload: { branch: "feature/demo", from: "main" },
+        result: { ref: "refs/heads/feature/demo" },
+        error: null,
+        recordedAt: "2026-10-09T00:00:00.000Z",
+      },
+    ];
+    const { sink } = memorySink(seed);
+    const execute = vi.fn(async () => ({ ref: "refs/heads/feature/demo" }));
+    const outcome = await runOperation({
+      descriptor: descriptor(),
+      actor: "u1",
+      idempotencyKey: "k1",
+      confirmed: true,
+      execute,
+      audit: sink,
+      now: () => new Date("2026-10-09T00:05:00.000Z"),
+      replayWindowMs: 60 * 1000,
+    });
+    expect(outcome.status).toBe("succeeded");
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("幂等回放窗口", () => {
+  it("窗口内为真，窗口外与非法时间为假", () => {
+    const now = new Date("2026-10-09T00:10:00.000Z");
+    expect(isWithinReplayWindow("2026-10-09T00:05:00.000Z", now, 10 * 60 * 1000)).toBe(true);
+    expect(isWithinReplayWindow("2026-10-08T00:00:00.000Z", now, 10 * 60 * 1000)).toBe(false);
+    expect(isWithinReplayWindow("not-a-timestamp", now, 10 * 60 * 1000)).toBe(false);
+  });
+});
+
+describe("失败文案", () => {
+  it("频率限制与冲突码各自给出可读提示", () => {
+    expect(describeOperationFailure(429, "too_many_requests", "冲突")).toBe(
+      "操作过于频繁，请稍后再试。",
+    );
+    expect(describeOperationFailure(422, "branch_conflict", "分支已存在或名称不被接受。")).toBe(
+      "分支已存在或名称不被接受。",
+    );
   });
 });
