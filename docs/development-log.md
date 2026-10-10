@@ -11,6 +11,37 @@
 
 ---
 
+## 2026-10-10 · M3-5 删除分支：保护规则 + 影响预览 + 删除执行
+
+**目标**：补齐路线图 M3-5，让「选分支 → 预检可否删除 → 影响预览 → 执行删除」在时间线内闭环，并保证默认 / 受保护分支不会被误删。
+
+**完成内容**
+
+- 纯逻辑：新增 `lib/branch-delete-ops.ts`——`evaluateBranchDeletion`（按「默认分支 > 受保护分支 > 当前查看的分支」顺序给出 `canDelete` + 原因）、`isProtectedBranch`、`createDeleteBranchDescriptor`（影响预览强调「不删除任何提交」并提示记录 SHA；payload `{ branch, sha? }` 供审计与后续恢复）、`describeDeleteBranchFailure`。
+- 上游客户端：新增 `lib/github-branch-settings.ts` 的 `fetchBranchDeletionContext`（并发读取 `GET /repos/{owner}/{repo}` 的 `default_branch` 与 `GET /repos/{owner}/{repo}/branches/{branch}` 的 `protected`；分支 404 归一为 `exists:false`）；`lib/github-branches.ts` 新增 `deleteBranchRef`（`DELETE /repos/{owner}/{repo}/git/refs/heads/{branch}`，成功 204，422 → `GitHubValidationError`）。
+- 接口：新增 `GET/POST /api/repos/[owner]/[name]/operations/delete-branch`——GET 为只读可删除性预检（不写审计）；POST 在服务端复查默认 / 保护 / 当前分支（不可删除直接 409 + 原因，不进入写管线），可删除则走 `runOperation`（幂等 + 审计）；成功 201、幂等回放 200。
+- UI：新增 `delete-branch-panel.tsx`（分支下拉（默认分支带「（默认）」标记）→ 服务端预检 → 确认卡片或不可删除原因）；`timeline-view.tsx` 头部新增「删除分支」按钮，页面透传 `defaultBranch`，成功后展示 `role="status"` 并 `router.refresh()`。
+- 测试：新增 `branch-delete-ops.test.ts` / `github-branch-settings.test.ts`，`github-branches.test.ts` 补 `deleteBranchRef` 用例，累计 269；E2E 新增「删除分支」用例（默认分支只给原因、无确认入口 + 可删分支成功），mock 上游补 `GET /repos/{owner}/{name}`、`GET .../branches/{branch}`、`DELETE .../git/refs/heads/{branch}`，并让时间线 refs 随删除联动。
+
+**关键决策**
+
+| 编号     | 决策                                                    | 理由                                                                                                                 | 备选与否决原因                                      |
+| -------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| ADR-0083 | 保护状态取 `GET /branches/{branch}` 的 `protected` 字段 | `/branches/{branch}/protection` 对权限不足的令牌直接 403，会让公开仓库场景也失败；`protected` 已足够支撑删除前置判断 | 调用 protection 端点：需 admin 权限，普通令牌不可用 |
+| ADR-0084 | 预检做成**独立只读 GET**，POST 前再复查一次             | 与 M3-4 合并 PR 一致：用户先看到结论才愿意确认；服务端复查避免结论被绕过或过期                                       | 仅前端判定：可被绕过；仅 POST 判定：用户看不到原因  |
+| ADR-0085 | 删除分支的幂等 payload 含 `sha`（分支头）               | 审计记录保留删除前的提交 SHA，为 M3-6 的恢复窗口提供依据                                                             | 只记分支名：审计无法定位恢复点                      |
+
+**问题与风险**
+
+- 「当前正在查看的分支」不可删除是产品侧约定（避免浏览上下文被抽走），GitHub 本身允许；要放开只需调整 `evaluateBranchDeletion` 的顺序与文案。
+- 只读 `protected` 布尔值，不读保护规则的细分项（审查人数 / 必需检查）；更精细的提示需要额外权限。
+- 删除只移除引用：被删分支的提交若没有其他引用将成为不可达对象并最终被 GitHub GC；影响预览已明确「不会删除任何提交」并提示记录 SHA。
+- 一键撤销 / 恢复仍是 M3-6，当前只保证「删除前有 SHA 记录 + 风险提示」。
+
+**下一步**
+
+- M3-6：撤销与恢复（24h 恢复窗口、SHA 记录与恢复入口）。
+
 ## 2026-10-10 · M3-4 收尾：创建 PR（建 PR → 可合并性检查 → 合并 闭环）
 
 **目标**：补齐路线图 M3-4 的前半段「建 PR」，让「建 PR → 可合并性检查 → 合并」在时间线内闭环。

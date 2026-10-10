@@ -91,7 +91,7 @@
 - [x] TODO-222 创建分支（M3-2：`POST /api/repos/[owner]/[name]/operations/create-branch` 走统一管线；分支名校验 + 提交 SHA 起点；时间线「新建分支」确认卡片，成功后 `router.refresh()` 即时更新分支列表）
 - [x] TODO-223 创建 Issue（M3-3：`POST /api/repos/[owner]/[name]/operations/create-issue` 走统一写管线；标题 / 标签校验 + 正文长度上限；时间线「新建 Issue」面板含标题 / 正文 / 标签三段表单与 Markdown 预览（先解析成结构再渲染，不注入 HTML），成功后刷新并提示编号）
 - [x] TODO-224 PR 流程（M3-4：建 PR + 合并。`POST .../operations/create-pull-request`（base / head + 标题 + 正文 + 草稿；标题必填、分支须合法且不能相同）与 `GET/POST .../operations/merge-pull-request`（只读可合并性检查 + 确认合并）都走统一写管线；`lib/pull-ops.ts` 按「已合并 / 已关闭 / 草稿 / 冲突 / 保护规则 / 计算中」判定并给出原因；时间线「新建 PR」面板（分支选择 + Markdown 预览 + 草稿开关），提交详情对 OPEN 的关联 PR 提供「合并 PR」入口与合并方式选择，不可合并时只解释原因、不提供执行入口）
-- [ ] TODO-225 删除分支（保护规则 + 影响预览）
+- [x] TODO-225 删除分支（M3-5：`GET/POST .../operations/delete-branch`（分支选择 → 服务端预检默认 / 保护 / 当前分支 → 影响预览 → 确认删除）；`lib/branch-delete-ops.ts` 按「默认分支 > 受保护分支 > 当前查看的分支」判定并给出原因；`lib/github-branch-settings.ts` 读仓库默认分支与 `branches/{branch}` 的 `protected`（不用需 admin 权限的 protection 端点）；`github-branches.ts` 的 `deleteBranchRef` 走 `DELETE /git/refs/heads/{branch}`；时间线「删除分支」面板，不可删除时只解释原因、不提供执行入口）
 - [ ] TODO-226 24h 撤销 / 分支恢复
 - [ ] TODO-227 操作历史与等价 Git 命令展示
 
