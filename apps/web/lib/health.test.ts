@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   REQUIRED_TABLES,
@@ -75,6 +75,28 @@ describe("runHealthChecks", () => {
     expect(report.warnings).toHaveLength(1);
     expect(report.warnings[0]).toContain("iad1");
     expect(report.warnings[0]).toContain("sin1");
+  });
+
+  it("冷启动建连耗时不计入跨区判定：预热后取稳态往返", async () => {
+    let calls = 0;
+    let now = 0;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const report = await runHealthChecks({
+        env: makeEnv({ VERCEL_REGION: "sin1" }),
+        listTables: healthyDeps.listTables,
+        pingDatabase: async () => {
+          calls += 1;
+          // 第 1 次是预热（建立连接）很慢，之后是稳态查询
+          now += calls === 1 ? SLOW_DATABASE_RTT_MS * 5 : 5;
+        },
+      });
+      expect(findCheck(report, "database_reachable")?.detail).toContain("稳态往返 5 ms");
+      expect(report.warnings).toHaveLength(0);
+      expect(calls).toBeGreaterThan(1);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("数据库往返正常时无告警，未注入 region 时为 null", async () => {

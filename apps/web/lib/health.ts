@@ -29,8 +29,12 @@ export const REQUIRED_SECRET_ENV = [
 export const TOKEN_ENC_KEY_BYTES = 32;
 
 // 函数与数据库跨区域时，每次查询都要走一趟跨洋 RTT；超过该值基本可判定未同区部署。
+// 比较的是**预热后的稳态往返**（见 measureDatabaseRtt），不含冷启动建连开销。
 // 参考：一次登录后的页面 / 接口请求会串行执行 4~6 次数据库查询（会话 + 令牌 + 缓存 + 限流 + 游标）。
 export const SLOW_DATABASE_RTT_MS = 150;
+
+// 稳态取样次数：预热建连后多测几次取最小值，避免偶发抖动把读数带偏
+export const RTT_SAMPLES = 3;
 
 export type HealthCheck = {
   name: string;
@@ -68,6 +72,22 @@ export function redactConnectionInfo(text: string): string {
 
 async function defaultPingDatabase(): Promise<void> {
   await getPrismaClient().$queryRaw`SELECT 1`;
+}
+
+/**
+ * 测「稳态」数据库往返（毫秒）。冷启动时第一次查询会把 TCP / TLS 握手与认证也算进去，
+ * 读数可达数百毫秒却与跨区无关——直接拿它判「跨区」会误报。因此先预热一次（不计时），
+ * 再取随后若干次查询的最小值作为网络往返估计。
+ */
+async function measureDatabaseRtt(pingDatabase: () => Promise<void>): Promise<number> {
+  await pingDatabase();
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < RTT_SAMPLES; index += 1) {
+    const startedAt = Date.now();
+    await pingDatabase();
+    best = Math.min(best, Date.now() - startedAt);
+  }
+  return best;
 }
 
 async function defaultListTables(): Promise<string[]> {
@@ -143,18 +163,16 @@ export async function runHealthChecks(deps: HealthDeps = {}): Promise<HealthRepo
   const warnings: string[] = [];
 
   let databaseReachable = true;
-  const pingStartedAt = Date.now();
   try {
-    await pingDatabase();
-    const rtt = Date.now() - pingStartedAt;
+    const rtt = await measureDatabaseRtt(pingDatabase);
     checks.push({
       name: "database_reachable",
       ok: true,
-      detail: `数据库连接正常（往返 ${rtt} ms）`,
+      detail: `数据库连接正常（稳态往返 ${rtt} ms）`,
     });
     if (rtt > SLOW_DATABASE_RTT_MS) {
       warnings.push(
-        `数据库往返 ${rtt} ms（阈值 ${SLOW_DATABASE_RTT_MS} ms）：函数区 ${functionRegion ?? "未知"} 与数据库区大概率不一致。` +
+        `数据库稳态往返 ${rtt} ms（阈值 ${SLOW_DATABASE_RTT_MS} ms）：函数区 ${functionRegion ?? "未知"} 与数据库区大概率不一致。` +
           "登录后的每次页面 / 接口请求会串行执行 4~6 次数据库查询，跨区往返会直接放大成秒级延迟；" +
           '建议把函数部署到数据库同区（如 Neon 在 ap-southeast-1 时用 vercel.json 的 regions: ["sin1"]），或把数据库建在函数同区。',
       );
