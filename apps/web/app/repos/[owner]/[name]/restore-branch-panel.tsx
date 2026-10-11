@@ -10,8 +10,10 @@ import {
 } from "@/lib/branch-restore-ops";
 import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
+import type { ExplainMode } from "@/lib/glossary";
 import { confirmationView } from "@/lib/operations";
 
+import { ConceptNote } from "./concept-note";
 import { ConfirmCard } from "./confirm-card";
 
 // 可恢复的删除记录（来自本应用写操作审计，含删除前的分支头 SHA）
@@ -28,6 +30,8 @@ type RestoreListResponse = { candidates: RestoreCandidate[] };
 type RestoreBranchPanelProps = {
   owner: string;
   name: string;
+  /** 术语解释模式（新手 / 进阶时在面板上方内联说明分支与恢复是什么）。 */
+  mode: ExplainMode;
   /** 恢复成功后由父组件展示提示并关闭面板。 */
   onRestored: (message: string) => void;
   onCancel: () => void;
@@ -39,7 +43,13 @@ const NOTICE_CLASS = "rounded-xl border p-3 text-xs leading-5";
  * 恢复分支面板（M3-6）：列出 24h 内本仓库的删除记录 → 选择 → 确认恢复。
  * 恢复靠审计里保存的分支头 SHA 重建引用；窗口过期或记录缺少 SHA 时只解释原因。
  */
-export function RestoreBranchPanel({ owner, name, onRestored, onCancel }: RestoreBranchPanelProps) {
+export function RestoreBranchPanel({
+  owner,
+  name,
+  mode,
+  onRestored,
+  onCancel,
+}: RestoreBranchPanelProps) {
   const [candidates, setCandidates] = useState<RestoreCandidate[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -187,6 +197,7 @@ export function RestoreBranchPanel({ owner, name, onRestored, onCancel }: Restor
 
   return (
     <div className="rounded-xl border border-black/[.08] p-4 dark:border-white/[.145]">
+      <ConceptNote id="branch" mode={mode} className="mb-3" />
       <fieldset>
         <legend className="text-xs text-zinc-600 dark:text-zinc-300">选择要恢复的删除记录</legend>
         <div className="mt-2 space-y-1">

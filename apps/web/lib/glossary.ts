@@ -1,7 +1,8 @@
 // 概念解释层（M2-6）的术语词条与展示规则。
 // 解释层默认关闭，只有用户主动开启后才渲染，避免干扰熟悉 Git 的使用者。
 
-export type GlossaryTermId = "author" | "sha" | "merge" | "pull-request" | "issue" | "lane";
+export type GlossaryTermId =
+  "author" | "sha" | "merge" | "branch" | "pull-request" | "issue" | "lane";
 
 /** 术语难度：basic 面向新手，deep 面向进阶阅读。 */
 export type GlossaryLevel = "basic" | "deep";
@@ -47,19 +48,27 @@ const TERMS: readonly GlossaryTerm[] = [
     level: "basic",
   },
   {
+    id: "branch",
+    term: "分支",
+    summary: "从某个提交分出来的一条独立开发线，可以在上面改动而不影响主线。",
+    detail:
+      "新建分支只是从某个提交拉出一条新引用，不会改动任何现有分支或提交；改动提交到分支后，再通过 PR 合并回主线。",
+    level: "basic",
+  },
+  {
     id: "pull-request",
     term: "拉取请求（Pull Request）",
-    summary: "请求把一条分支的改动并入另一条分支的讨论与评审流程。",
+    summary: "请求把一条分支的改动合并进另一条分支，并附带讨论与评审流程。",
     detail:
-      "PR 合并后会产生合并提交（或线性历史）；时间线上的 #编号 徽标可跳转到 GitHub 上对应的 PR。",
+      "未合并前主线不受影响；合并 PR 会把来源分支的提交并入目标分支，通常不可撤销。时间线上的 #编号 徽标可跳转到 GitHub 上对应的 PR。",
     level: "deep",
   },
   {
     id: "issue",
     term: "议题（Issue）",
-    summary: "仓库里用于记录问题、需求或讨论的条目。",
+    summary: "仓库里用来记录问题、需求或讨论的条目，不包含代码改动。",
     detail:
-      "当 PR 描述里写上「fixes #123」之类关键字时，该 Issue 会与这次提交关联，并在时间线上一并展示。",
+      "新建 Issue 不会改动任何代码、分支或提交；当提交信息或 PR 描述里写上「fixes #123」时，它才会与对应改动关联并在时间线上一并展示。",
     level: "deep",
   },
   {

@@ -32,6 +32,7 @@ import {
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { CommitDetailPanel } from "./commit-detail";
+import { ConceptNote } from "./concept-note";
 import { ConfirmCard } from "./confirm-card";
 import { CreateIssuePanel } from "./create-issue-panel";
 import { CreatePullPanel } from "./create-pull-panel";
@@ -537,7 +538,10 @@ export function TimelineView({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-          <label htmlFor="branch-select">分支</label>
+          <span className="flex items-center gap-1">
+            <label htmlFor="branch-select">分支</label>
+            <GlossaryHint id="branch" mode={explainMode} />
+          </span>
           <select
             id="branch-select"
             value={branch ?? ""}
@@ -564,57 +568,72 @@ export function TimelineView({
           )}
           {commits.length > 0 ? (
             <>
-              <button
-                type="button"
-                onClick={() => {
-                  resetOperationAlerts();
-                  setCreateOpen(true);
-                  setCreateError(null);
-                }}
-                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
-              >
-                新建分支
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  resetOperationAlerts();
-                  setIssueOpen(true);
-                }}
-                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
-              >
-                新建 Issue
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  resetOperationAlerts();
-                  setPullOpen(true);
-                }}
-                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
-              >
-                新建 PR
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  resetOperationAlerts();
-                  setDeleteOpen(true);
-                }}
-                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
-              >
-                删除分支
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  resetOperationAlerts();
-                  setRestoreOpen(true);
-                }}
-                className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
-              >
-                恢复分支
-              </button>
+              <span className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetOperationAlerts();
+                    setCreateOpen(true);
+                    setCreateError(null);
+                  }}
+                  className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+                >
+                  新建分支
+                </button>
+                <GlossaryHint id="branch" mode={explainMode} />
+              </span>
+              <span className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetOperationAlerts();
+                    setIssueOpen(true);
+                  }}
+                  className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+                >
+                  新建 Issue
+                </button>
+                <GlossaryHint id="issue" mode={explainMode} />
+              </span>
+              <span className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetOperationAlerts();
+                    setPullOpen(true);
+                  }}
+                  className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+                >
+                  新建 PR
+                </button>
+                <GlossaryHint id="pull-request" mode={explainMode} />
+              </span>
+              <span className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetOperationAlerts();
+                    setDeleteOpen(true);
+                  }}
+                  className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+                >
+                  删除分支
+                </button>
+                <GlossaryHint id="branch" mode={explainMode} />
+              </span>
+              <span className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetOperationAlerts();
+                    setRestoreOpen(true);
+                  }}
+                  className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+                >
+                  恢复分支
+                </button>
+                <GlossaryHint id="branch" mode={explainMode} />
+              </span>
             </>
           ) : null}
           <span className="flex items-center gap-2">
@@ -655,8 +674,9 @@ export function TimelineView({
             onConfirm={() => void submitCreateBranch()}
             onCancel={closeCreateBranch}
           >
+            <ConceptNote id="branch" mode={explainMode} className="mt-3" />
             <label
-              className="mt-3 block text-xs text-zinc-600 dark:text-zinc-300"
+              className="mt-1 block text-xs text-zinc-600 dark:text-zinc-300"
               htmlFor="new-branch-name"
             >
               新分支名称
@@ -680,6 +700,7 @@ export function TimelineView({
           <CreateIssuePanel
             owner={owner}
             name={name}
+            mode={explainMode}
             onCreated={handleIssueCreated}
             onCancel={() => setIssueOpen(false)}
           />
@@ -691,6 +712,7 @@ export function TimelineView({
           <CreatePullPanel
             owner={owner}
             name={name}
+            mode={explainMode}
             branches={branches.map((branch) => branch.name)}
             defaultBase={initialBranch}
             onCreated={handlePullCreated}
@@ -704,6 +726,7 @@ export function TimelineView({
           <DeleteBranchPanel
             owner={owner}
             name={name}
+            mode={explainMode}
             branches={branches}
             defaultBranch={defaultBranch}
             currentBranch={branch}
@@ -718,6 +741,7 @@ export function TimelineView({
           <RestoreBranchPanel
             owner={owner}
             name={name}
+            mode={explainMode}
             onRestored={handleBranchRestored}
             onCancel={() => setRestoreOpen(false)}
           />

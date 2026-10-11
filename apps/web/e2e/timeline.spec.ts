@@ -81,6 +81,18 @@ test("概念解释层：默认关闭，切换模式后显示术语悬浮卡片",
   await shaHint.hover();
   await expect(page.getByRole("tooltip")).toContainText("提交哈希");
 
+  // 新手模式：操作入口（分支选择器 / 新建分支 / 新建 Issue / 新建 PR）也给出概念说明
+  await expect(page.getByRole("button", { name: "解释：分支" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "解释：议题（Issue）" }).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "解释：拉取请求（Pull Request）" }).first(),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "新建分支" }).click();
+  await expect(page.getByText("从某个提交分出来的一条独立开发线")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
   // 进阶模式：基础术语隐藏，进阶术语保留
   await modeSelect.selectOption("advanced");
   await expect(page.getByRole("button", { name: "解释：提交哈希（SHA）" })).toHaveCount(0);

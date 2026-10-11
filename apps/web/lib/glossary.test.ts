@@ -25,6 +25,21 @@ describe("术语词条", () => {
     expect(termById("sha").term).toContain("哈希");
     expect(() => termById("missing" as GlossaryTermId)).toThrow(/未知术语/);
   });
+
+  it("分支 / PR / Issue 都说明「是什么」与「会产生什么作用」", () => {
+    const branch = termById("branch");
+    expect(branch.term).toBe("分支");
+    expect(branch.summary).toContain("独立开发线");
+    expect(branch.detail).toContain("不会改动任何现有分支");
+
+    const pullRequest = termById("pull-request");
+    expect(pullRequest.summary).toContain("合并");
+    expect(pullRequest.detail).toContain("不可撤销");
+
+    const issue = termById("issue");
+    expect(issue.summary).toContain("不包含代码改动");
+    expect(issue.detail).toContain("不会改动任何代码");
+  });
 });
 
 describe("展示规则", () => {

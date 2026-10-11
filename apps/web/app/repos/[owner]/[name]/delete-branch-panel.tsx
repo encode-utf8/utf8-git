@@ -5,9 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createDeleteBranchDescriptor, describeDeleteBranchFailure } from "@/lib/branch-delete-ops";
 import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
+import type { ExplainMode } from "@/lib/glossary";
 import type { TimelineBranch } from "@/lib/github-timeline";
 import { confirmationView } from "@/lib/operations";
 
+import { ConceptNote } from "./concept-note";
 import { ConfirmCard } from "./confirm-card";
 
 // 可删除性预检响应（GET 只读，不改动任何数据）
@@ -30,6 +32,8 @@ type DeleteBranchPanelProps = {
   defaultBranch: string | null;
   /** 时间线当前正在查看的分支（删除它会丢失浏览上下文） */
   currentBranch: string | null;
+  /** 术语解释模式（新手 / 进阶时在面板上方内联说明分支是什么）。 */
+  mode: ExplainMode;
   /** 删除成功后由父组件展示提示并关闭面板。 */
   onDeleted: (message: string) => void;
   onCancel: () => void;
@@ -62,6 +66,7 @@ export function DeleteBranchPanel({
   branches,
   defaultBranch,
   currentBranch,
+  mode,
   onDeleted,
   onCancel,
 }: DeleteBranchPanelProps) {
@@ -147,6 +152,7 @@ export function DeleteBranchPanel({
 
   return (
     <div className="rounded-xl border border-black/[.08] p-4 dark:border-white/[.145]">
+      <ConceptNote id="branch" mode={mode} className="mb-3" />
       <div className="space-y-1">
         <label
           className="block text-xs text-zinc-600 dark:text-zinc-300"

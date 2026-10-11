@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { fetchJsonWithRetry } from "@/lib/client-fetch";
+import type { ExplainMode } from "@/lib/glossary";
 import {
   createIssueDescriptor,
   describeCreateIssueFailure,
@@ -12,12 +13,15 @@ import {
 } from "@/lib/issue-ops";
 import { confirmationView } from "@/lib/operations";
 
+import { ConceptNote } from "./concept-note";
 import { ConfirmCard } from "./confirm-card";
 import { MarkdownPreview } from "./markdown-preview";
 
 type CreateIssuePanelProps = {
   owner: string;
   name: string;
+  /** 术语解释模式（新手 / 进阶时在表单上方内联说明 Issue 是什么）。 */
+  mode: ExplainMode;
   /** 创建成功后由父组件展示提示并关闭面板（携带 Issue 编号文案）。 */
   onCreated: (message: string) => void;
   onCancel: () => void;
@@ -30,7 +34,13 @@ const FIELD_CLASS =
  * 创建 Issue 面板（M3-3）：标题 / 正文（Markdown 预览）/ 标签三段表单，
  * 复用确认卡片与统一写管线。状态内聚在此，父组件只负责开关与成功提示。
  */
-export function CreateIssuePanel({ owner, name, onCreated, onCancel }: CreateIssuePanelProps) {
+export function CreateIssuePanel({
+  owner,
+  name,
+  mode,
+  onCreated,
+  onCancel,
+}: CreateIssuePanelProps) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [labels, setLabels] = useState("");
@@ -108,6 +118,7 @@ export function CreateIssuePanel({ owner, name, onCreated, onCancel }: CreateIss
       onConfirm={() => void submit()}
       onCancel={onCancel}
     >
+      <ConceptNote id="issue" mode={mode} className="mt-3" />
       <div className="mt-3 space-y-1">
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="new-issue-title">
           Issue 标题

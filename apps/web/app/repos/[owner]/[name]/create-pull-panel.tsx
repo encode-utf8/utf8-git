@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { fetchJsonWithRetry } from "@/lib/client-fetch";
+import type { ExplainMode } from "@/lib/glossary";
 import {
   PR_TITLE_MAX_LENGTH,
   createPullRequestDescriptor,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/pull-ops";
 import { confirmationView } from "@/lib/operations";
 
+import { ConceptNote } from "./concept-note";
 import { ConfirmCard } from "./confirm-card";
 import { MarkdownPreview } from "./markdown-preview";
 
@@ -23,6 +25,8 @@ type CreatePullPanelProps = {
   branches: string[];
   /** 默认目标分支（通常是仓库默认分支）。 */
   defaultBase: string | null;
+  /** 术语解释模式（新手 / 进阶时在表单上方内联说明 PR 是什么）。 */
+  mode: ExplainMode;
   /** 创建成功后由父组件展示提示并关闭面板。 */
   onCreated: (message: string) => void;
   onCancel: () => void;
@@ -51,6 +55,7 @@ export function CreatePullPanel({
   name,
   branches,
   defaultBase,
+  mode,
   onCreated,
   onCancel,
 }: CreatePullPanelProps) {
@@ -167,6 +172,7 @@ export function CreatePullPanel({
       onConfirm={() => void submit()}
       onCancel={onCancel}
     >
+      <ConceptNote id="pull-request" mode={mode} className="mt-3" />
       <div className="mt-3 space-y-1">
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="pr-base">
           目标分支（base）
