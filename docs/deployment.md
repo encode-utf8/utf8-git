@@ -54,6 +54,10 @@
    - `installCommand`：`pnpm install --frozen-lockfile --registry=https://registry.npmjs.org`（绕过仓库 `.npmrc` 的国内镜像，见 §3.1）
 6. 在本地执行迁移（指向生产库**直连串**）：`pnpm --filter @utf8-git/web exec prisma migrate deploy`。
    刻意不放进构建命令：预览环境每次构建都会跑，若与生产共用库会造成误迁移。
+   ⚠️ 执行前务必确认该 `DATABASE_URL` 指向的**就是线上应用使用的那个库**：打错库时命令会全部成功（甚至显示
+   `No pending migrations`），而线上依旧报缺表。核对方法：对比目标库主机**区域**与线上是否一致——`GET /api/health`
+   的 `functionRegion` 与 `database_reachable` 往返可辅助判断（同区通常 < 50 ms，跨区 200 ms+）；
+   并确保「本地 `apps/web/.env`、Vercel `DATABASE_URL`、本文档记录」三处指向同一个库。
 7. 注入 §2 环境变量后 Redeploy；确认 `/`、`/login`、`/repos` 可访问。
 
 > 后台的 Build Command / Install Command / Output Directory 必须保持**空白**：后台设置优先级高于 `vercel.json`，
