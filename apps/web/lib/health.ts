@@ -2,7 +2,11 @@
 // 只返回布尔与说明文字，绝不返回密钥内容或连接串。
 
 import { getPrismaClient } from "./prisma";
+import { redactConnectionInfo } from "./redact";
 import { resolveStoreBackend, type StoreBackend } from "./shared-store";
+
+// 与日志 / 错误上报共用同一套脱敏规则（实现见 lib/redact.ts）
+export { redactConnectionInfo };
 
 // 生产库必须具备的表；缺表说明迁移未执行，或 DATABASE_URL 指向了错误的库。
 // 新增迁移后必须把新表同步进本清单，否则缺表不会在 /api/health 暴露
@@ -59,16 +63,6 @@ export type HealthDeps = {
   listTables?: () => Promise<string[]>;
   pingDatabase?: () => Promise<void>;
 };
-
-// 错误信息里可能带出连接串，对外输出前统一抹掉
-export function redactConnectionInfo(text: string): string {
-  // 抹掉连接串，并把多行错误压成一行，便于在自检输出里对齐展示
-  return text
-    .replace(/postgres(?:ql)?:\/\/\S+/gi, "postgresql://***")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 300);
-}
 
 async function defaultPingDatabase(): Promise<void> {
   await getPrismaClient().$queryRaw`SELECT 1`;
