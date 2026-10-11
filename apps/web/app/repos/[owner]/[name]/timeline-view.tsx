@@ -17,6 +17,8 @@ import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/lib/error-state";
 import { collectIssues, type TimelineBranch, type TimelineCommit } from "@/lib/github-timeline";
 import { EXPLAIN_MODES, isExplainMode, type ExplainMode } from "@/lib/glossary";
+import { useTranslator } from "@/lib/i18n/client";
+import type { MessageKey, Translate } from "@/lib/i18n/translate";
 import { computeLaneMetrics } from "@/lib/lane-geometry";
 import { confirmationView } from "@/lib/operations";
 import {
@@ -60,11 +62,16 @@ type TimelineViewProps = {
   defaultBranch: string | null;
 };
 
-const PR_STATE_LABEL: Record<string, string> = {
-  OPEN: "开放",
-  MERGED: "已合并",
-  CLOSED: "已关闭",
+const PR_STATE_LABEL: Record<string, MessageKey> = {
+  OPEN: "timeline.prState.open",
+  MERGED: "timeline.prState.merged",
+  CLOSED: "timeline.prState.closed",
 };
+
+function prStateLabel(state: string, t: Translate): string {
+  const key = PR_STATE_LABEL[state];
+  return key ? t(key) : state;
+}
 
 function prBadgeClass(state: string): string {
   if (state === "MERGED") {
@@ -76,10 +83,15 @@ function prBadgeClass(state: string): string {
   return "border-zinc-300 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
 }
 
-const ISSUE_STATE_LABEL: Record<string, string> = {
-  OPEN: "开放",
-  CLOSED: "已关闭",
+const ISSUE_STATE_LABEL: Record<string, MessageKey> = {
+  OPEN: "timeline.issueState.open",
+  CLOSED: "timeline.issueState.closed",
 };
+
+function issueStateLabel(state: string, t: Translate): string {
+  const key = ISSUE_STATE_LABEL[state];
+  return key ? t(key) : state;
+}
 
 function issueBadgeClass(state: string): string {
   if (state === "OPEN") {
@@ -101,7 +113,8 @@ function CommitRow({
   repoUrl: string;
   onSelect: (commit: TimelineCommit) => void;
 }) {
-  const authorLabel = commit.author.login ?? commit.author.name ?? "未知作者";
+  const { t } = useTranslator();
+  const authorLabel = commit.author.login ?? commit.author.name ?? t("timeline.unknownAuthor");
   const issues = collectIssues(commit.pullRequests);
   return (
     <div className="relative h-full w-full border-b border-black/[.06] dark:border-white/[.08]">
@@ -109,7 +122,7 @@ function CommitRow({
       <button
         type="button"
         onClick={() => onSelect(commit)}
-        aria-label={`查看提交 ${shortSha(commit.oid)} 详情`}
+        aria-label={t("timeline.viewCommitDetail", { sha: shortSha(commit.oid) })}
         className="absolute inset-0 z-0 transition-colors hover:bg-black/[.03] focus-visible:bg-black/[.04] focus-visible:outline-none dark:hover:bg-white/[.05]"
       />
       <div className="pointer-events-none relative z-10 flex h-full w-full items-start gap-3 px-4 py-3">
@@ -129,7 +142,7 @@ function CommitRow({
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-              {commit.headline || "（无提交信息）"}
+              {commit.headline || t("timeline.noHeadline")}
             </span>
             {commit.parents.length > 1 ? (
               <>
@@ -148,7 +161,7 @@ function CommitRow({
                 title={pullRequest.title}
                 className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${prBadgeClass(pullRequest.state)}`}
               >
-                #{pullRequest.number} {PR_STATE_LABEL[pullRequest.state] ?? pullRequest.state}
+                #{pullRequest.number} {prStateLabel(pullRequest.state, t)}
               </a>
             ))}
             {issues.map((issue) => (
@@ -157,10 +170,10 @@ function CommitRow({
                 href={issue.url ?? `${repoUrl}/issues/${issue.number}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={`Issue：${issue.title}`}
+                title={t("timeline.issueLinkTitle", { title: issue.title })}
                 className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${issueBadgeClass(issue.state)}`}
               >
-                #{issue.number} {ISSUE_STATE_LABEL[issue.state] ?? issue.state}
+                #{issue.number} {issueStateLabel(issue.state, t)}
               </a>
             ))}
             {commit.pullRequests.length > 0 ? <GlossaryHint id="pull-request" mode={mode} /> : null}
@@ -199,6 +212,7 @@ export function TimelineView({
   branches,
   defaultBranch,
 }: TimelineViewProps) {
+  const { t } = useTranslator();
   const [commits, setCommits] = useState(initialCommits);
   const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
   const [page, setPage] = useState(1);
@@ -312,10 +326,10 @@ export function TimelineView({
             name,
             branch: newBranchName.trim(),
             fromSha: branchStart.oid,
-            fromLabel: `提交 ${shortSha(branchStart.oid)}`,
+            fromLabel: t("timeline.commitLabel", { sha: shortSha(branchStart.oid) }),
           })
         : null,
-    [branchStart, name, newBranchName, owner],
+    [branchStart, name, newBranchName, owner, t],
   );
 
   const closeCreateBranch = useCallback(() => {
@@ -350,17 +364,17 @@ export function TimelineView({
         setCreateError(describeCreateBranchFailure(response.status, data.error));
         return;
       }
-      setCreateSuccess(`已创建分支 ${data.branch ?? trimmed}`);
+      setCreateSuccess(t("timeline.branchCreated", { branch: data.branch ?? trimmed }));
       setCreateOpen(false);
       setNewBranchName("");
       // 重新拉取服务端数据，让分支选择器立即包含新分支
       router.refresh();
     } catch {
-      setCreateError("网络异常，未能创建分支，请稍后重试。");
+      setCreateError(t("timeline.createBranchNetworkError"));
     } finally {
       setCreating(false);
     }
-  }, [branchStart, creating, name, newBranchName, owner, router]);
+  }, [branchStart, creating, name, newBranchName, owner, router, t]);
 
   // 创建 Issue（M3-3）：成功后关闭面板、展示提示并刷新服务端数据（沿用创建分支的约定）。
   const handleIssueCreated = useCallback(
@@ -539,7 +553,7 @@ export function TimelineView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
           <span className="flex items-center gap-1">
-            <label htmlFor="branch-select">分支</label>
+            <label htmlFor="branch-select">{t("timeline.branchLabel")}</label>
             <GlossaryHint id="branch" mode={explainMode} />
           </span>
           <select
@@ -562,7 +576,7 @@ export function TimelineView({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400">
           {explainMode === "off" ? null : (
             <span className="flex items-center gap-1">
-              泳道
+              {t("timeline.lane")}
               <GlossaryHint id="lane" mode={explainMode} />
             </span>
           )}
@@ -578,7 +592,7 @@ export function TimelineView({
                   }}
                   className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
                 >
-                  新建分支
+                  {t("timeline.actions.createBranch")}
                 </button>
                 <GlossaryHint id="branch" mode={explainMode} />
               </span>
@@ -591,7 +605,7 @@ export function TimelineView({
                   }}
                   className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
                 >
-                  新建 Issue
+                  {t("timeline.actions.createIssue")}
                 </button>
                 <GlossaryHint id="issue" mode={explainMode} />
               </span>
@@ -604,7 +618,7 @@ export function TimelineView({
                   }}
                   className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
                 >
-                  新建 PR
+                  {t("timeline.actions.createPull")}
                 </button>
                 <GlossaryHint id="pull-request" mode={explainMode} />
               </span>
@@ -617,7 +631,7 @@ export function TimelineView({
                   }}
                   className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
                 >
-                  删除分支
+                  {t("timeline.actions.deleteBranch")}
                 </button>
                 <GlossaryHint id="branch" mode={explainMode} />
               </span>
@@ -630,17 +644,17 @@ export function TimelineView({
                   }}
                   className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
                 >
-                  恢复分支
+                  {t("timeline.actions.restoreBranch")}
                 </button>
                 <GlossaryHint id="branch" mode={explainMode} />
               </span>
             </>
           ) : null}
           <span className="flex items-center gap-2">
-            <label htmlFor="explain-mode">术语解释</label>
+            <label htmlFor="explain-mode">{t("timeline.explainLabel")}</label>
             <select
               id="explain-mode"
-              aria-label="术语解释模式"
+              aria-label={t("timeline.explainModeLabel")}
               value={explainMode}
               onChange={(event) => changeExplainMode(event.target.value as ExplainMode)}
               className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-xs text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
@@ -652,7 +666,7 @@ export function TimelineView({
               ))}
             </select>
           </span>
-          <p>已加载 {commits.length} 条提交</p>
+          <p>{t("timeline.loadedCommits", { count: commits.length })}</p>
         </div>
       </div>
 
@@ -679,7 +693,7 @@ export function TimelineView({
               className="mt-1 block text-xs text-zinc-600 dark:text-zinc-300"
               htmlFor="new-branch-name"
             >
-              新分支名称
+              {t("timeline.newBranchName")}
             </label>
             <input
               id="new-branch-name"
@@ -689,7 +703,8 @@ export function TimelineView({
               className="mt-1 h-9 w-full max-w-sm rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-400 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
             />
             <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-              {branchNameError ?? `起点：提交 ${shortSha(branchStart?.oid ?? "")}`}
+              {branchNameError ??
+                t("timeline.branchStart", { sha: shortSha(branchStart?.oid ?? "") })}
             </p>
           </ConfirmCard>
         </div>
@@ -753,17 +768,17 @@ export function TimelineView({
           type="search"
           value={filters.query}
           onChange={(event) => applyFilterPatch({ query: event.target.value })}
-          placeholder="搜索提交 / SHA / 作者"
-          aria-label="搜索提交"
+          placeholder={t("timeline.searchPlaceholder")}
+          aria-label={t("timeline.searchLabel")}
           className="h-9 w-56 rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-400 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
         />
         <select
           value={filters.author}
           onChange={(event) => applyFilterPatch({ author: event.target.value })}
-          aria-label="按作者过滤"
+          aria-label={t("timeline.filterByAuthor")}
           className="h-9 max-w-[12rem] rounded-lg border border-black/[.08] bg-white px-2 text-xs text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
         >
-          <option value="">全部作者</option>
+          <option value="">{t("timeline.allAuthors")}</option>
           {authors.map((author) => (
             <option key={author} value={author}>
               {author}
@@ -773,35 +788,38 @@ export function TimelineView({
         <select
           value={filters.kind}
           onChange={(event) => applyFilterPatch({ kind: event.target.value as TimelineEventKind })}
-          aria-label="按事件类型过滤"
+          aria-label={t("timeline.filterByKind")}
           className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-xs text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
         >
-          <option value="all">全部事件</option>
-          <option value="merge">仅合并提交</option>
-          <option value="pullRequest">仅关联 PR</option>
-          <option value="issue">仅关联 Issue</option>
+          <option value="all">{t("timeline.kindAll")}</option>
+          <option value="merge">{t("timeline.kindMerge")}</option>
+          <option value="pullRequest">{t("timeline.kindPull")}</option>
+          <option value="issue">{t("timeline.kindIssue")}</option>
         </select>
         <select
           value={filters.range}
           onChange={(event) => applyFilterPatch({ range: event.target.value as TimelineRange })}
-          aria-label="时间范围"
+          aria-label={t("timeline.rangeLabel")}
           className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-xs text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
         >
-          <option value="all">全部时间</option>
-          <option value="week">近一周</option>
-          <option value="month">近一月</option>
+          <option value="all">{t("timeline.rangeAll")}</option>
+          <option value="week">{t("timeline.rangeWeek")}</option>
+          <option value="month">{t("timeline.rangeMonth")}</option>
         </select>
         {activeFilters ? (
           <>
             <span className="text-zinc-500 dark:text-zinc-400">
-              筛选后 {filteredCommits.length} / {commits.length} 条
+              {t("timeline.filteredCount", {
+                filtered: filteredCommits.length,
+                total: commits.length,
+              })}
             </span>
             <button
               type="button"
               onClick={() => applyFilterPatch(EMPTY_TIMELINE_FILTER)}
               className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
             >
-              清除筛选
+              {t("timeline.clearFilters")}
             </button>
           </>
         ) : null}
@@ -809,19 +827,19 @@ export function TimelineView({
 
       {commits.length === 0 ? (
         <div className="mt-3 rounded-xl border border-black/[.08] bg-white p-6 text-sm text-zinc-600 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-300">
-          该分支暂无提交（空仓库或分支没有历史）。
+          {t("timeline.emptyBranch")}
         </div>
       ) : (
         <>
           {filteredCommits.length === 0 ? (
             <div className="mt-3 rounded-xl border border-black/[.08] bg-white p-6 text-sm text-zinc-600 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-300">
-              <p>没有匹配的提交（已加载 {commits.length} 条）。</p>
+              <p>{t("timeline.noMatches", { count: commits.length })}</p>
               <button
                 type="button"
                 onClick={() => applyFilterPatch(EMPTY_TIMELINE_FILTER)}
                 className="mt-2 underline underline-offset-4 hover:text-zinc-900 dark:hover:text-zinc-100"
               >
-                清除筛选
+                {t("timeline.clearFilters")}
               </button>
             </div>
           ) : (
@@ -829,7 +847,7 @@ export function TimelineView({
               ref={containerRef}
               onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
               role="list"
-              aria-label="提交时间线"
+              aria-label={t("timeline.listLabel")}
               className="mt-3 h-[65vh] overflow-y-auto overscroll-contain rounded-xl border border-black/[.08] bg-white dark:border-white/[.145] dark:bg-zinc-950"
             >
               <div style={{ height: windowRange.totalHeight, position: "relative" }}>
@@ -871,7 +889,11 @@ export function TimelineView({
 
           <div className="mt-3 flex items-center justify-between gap-3 text-xs">
             <span className="text-zinc-500 dark:text-zinc-400">
-              {loading ? "加载中…" : hasNextPage ? "滚动到底部自动加载更多" : "已到最底部"}
+              {loading
+                ? t("common.loading")
+                : hasNextPage
+                  ? t("timeline.autoLoadHint")
+                  : t("timeline.reachedEnd")}
             </span>
             {hasNextPage ? (
               <button
@@ -880,7 +902,7 @@ export function TimelineView({
                 disabled={loading}
                 className="h-9 rounded-full border border-black/[.08] px-4 text-xs font-medium text-zinc-900 transition-colors hover:bg-black/[.04] disabled:opacity-60 dark:border-white/[.145] dark:text-zinc-50 dark:hover:bg-white/[.08]"
               >
-                {loading ? "加载中…" : "加载更多"}
+                {loading ? t("common.loading") : t("timeline.loadMore")}
               </button>
             ) : null}
           </div>

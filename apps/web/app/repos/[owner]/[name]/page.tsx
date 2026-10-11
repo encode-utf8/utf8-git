@@ -14,6 +14,8 @@ import {
   GitHubUnauthorizedError,
 } from "@/lib/github-errors";
 import { describeGithubError } from "@/lib/error-state";
+import { getTranslator } from "@/lib/i18n/server";
+import type { Translate } from "@/lib/i18n/translate";
 import { loadTimelinePage } from "@/lib/timeline-data";
 
 import { TimelineView } from "./timeline-view";
@@ -40,13 +42,7 @@ function Notice({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function ReauthButton({
-  action,
-  label = "重新授权 GitHub",
-}: {
-  action: () => Promise<void>;
-  label?: string;
-}) {
+function ReauthButton({ action, label }: { action: () => Promise<void>; label: string }) {
   return (
     <form action={action}>
       <button
@@ -59,8 +55,10 @@ function ReauthButton({
   );
 }
 
-function formatUtc(iso: string | null): string {
-  return iso ? `${iso.slice(0, 16).replace("T", " ")}（UTC）` : "未知时间";
+function formatUtc(iso: string | null, t: Translate): string {
+  return iso
+    ? `${iso.slice(0, 16).replace("T", " ")}${t("common.utcSuffix")}`
+    : t("common.unknownTime");
 }
 
 export default async function RepoTimelinePage({
@@ -69,6 +67,7 @@ export default async function RepoTimelinePage({
   params: Promise<{ owner: string; name: string }>;
 }) {
   const { owner, name } = await params;
+  const { t } = await getTranslator();
 
   const session = await auth();
   const userId = session?.user?.id;
@@ -85,13 +84,13 @@ export default async function RepoTimelinePage({
   if (!OWNER_PATTERN.test(owner) || !REPO_PATTERN.test(name)) {
     return (
       <PageShell>
-        <Notice title="仓库地址不合法">
+        <Notice title={t("timeline.invalidPath.title")}>
           <p>
-            请从
+            {t("timeline.invalidPath.before")}
             <Link href="/repos" className="font-medium underline underline-offset-4">
-              仓库列表
+              {t("timeline.invalidPath.link")}
             </Link>
-            重新进入。
+            {t("timeline.invalidPath.after")}
           </p>
         </Notice>
       </PageShell>
@@ -102,9 +101,9 @@ export default async function RepoTimelinePage({
   if (!token) {
     return (
       <PageShell>
-        <Notice title="尚未完成 GitHub 授权">
-          <p>当前账号没有可用的 GitHub 令牌，可能是授权已被撤销。请重新授权后继续。</p>
-          <ReauthButton action={reauthorize} />
+        <Notice title={t("repos.noToken.title")}>
+          <p>{t("repos.noToken.body")}</p>
+          <ReauthButton action={reauthorize} label={t("repos.reauth")} />
         </Notice>
       </PageShell>
     );
@@ -117,9 +116,9 @@ export default async function RepoTimelinePage({
     if (error instanceof GitHubUnauthorizedError) {
       return (
         <PageShell>
-          <Notice title="GitHub 授权已失效">
-            <p>令牌可能已被撤销或过期。重新授权后即可继续浏览时间线。</p>
-            <ReauthButton action={reauthorize} />
+          <Notice title={t("repos.tokenInvalid.title")}>
+            <p>{t("timeline.tokenInvalidBody")}</p>
+            <ReauthButton action={reauthorize} label={t("repos.reauth")} />
           </Notice>
         </PageShell>
       );
@@ -127,13 +126,13 @@ export default async function RepoTimelinePage({
     if (error instanceof GitHubNotFoundError) {
       return (
         <PageShell>
-          <Notice title="仓库不存在或无权访问">
-            <p>可能原因：仓库已被删除、改名，或当前授权不包含该私有仓库。</p>
+          <Notice title={t("timeline.notFound.title")}>
+            <p>{t("timeline.notFound.body")}</p>
             <Link
               href="/repos"
               className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
             >
-              返回我的仓库
+              {t("timeline.notFound.link")}
             </Link>
           </Notice>
         </PageShell>
@@ -142,17 +141,19 @@ export default async function RepoTimelinePage({
     if (error instanceof GitHubRateLimitError) {
       return (
         <PageShell>
-          <Notice title="GitHub API 访问频率超限">
+          <Notice title={t("repos.rateLimit.title")}>
             <p>
-              请求次数暂时超出 GitHub 配额
-              {error.resetAt ? `，预计于 ${formatUtc(error.resetAt.toISOString())} 恢复` : ""}
-              。当前没有可展示的缓存数据，请在配额恢复后重试。
+              {t("repos.rateLimit.before")}
+              {error.resetAt
+                ? t("repos.rateLimit.reset", { time: formatUtc(error.resetAt.toISOString(), t) })
+                : ""}
+              {t("repos.rateLimit.after")}
             </p>
             <Link
               href={`/repos/${owner}/${name}`}
               className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
             >
-              重试
+              {t("common.retry")}
             </Link>
           </Notice>
         </PageShell>
@@ -161,9 +162,9 @@ export default async function RepoTimelinePage({
     if (error instanceof GitHubForbiddenError) {
       return (
         <PageShell>
-          <Notice title="访问被 GitHub 拒绝（403）">
-            <p>可能原因：组织开启了 SAML SSO 且本应用尚未获批，或当前授权的权限不足。</p>
-            <ReauthButton action={reauthorize} label="重新授权" />
+          <Notice title={t("repos.forbidden.title")}>
+            <p>{t("repos.forbidden.body")}</p>
+            <ReauthButton action={reauthorize} label={t("repos.reauthShort")} />
           </Notice>
         </PageShell>
       );
@@ -178,7 +179,7 @@ export default async function RepoTimelinePage({
               href={`/repos/${owner}/${name}`}
               className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
             >
-              重试
+              {t("common.retry")}
             </Link>
           </Notice>
         </PageShell>
@@ -187,13 +188,13 @@ export default async function RepoTimelinePage({
     if (error instanceof GitHubApiError) {
       return (
         <PageShell>
-          <Notice title="GitHub 服务暂时不可用">
-            <p>GitHub 返回了服务端错误（{error.status}）。请稍后重试。</p>
+          <Notice title={t("repos.api.title")}>
+            <p>{t("repos.api.body", { status: error.status })}</p>
             <Link
               href={`/repos/${owner}/${name}`}
               className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
             >
-              重试
+              {t("common.retry")}
             </Link>
           </Notice>
         </PageShell>
@@ -211,7 +212,7 @@ export default async function RepoTimelinePage({
         <div className="min-w-0">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             <Link href="/repos" className="underline-offset-4 hover:underline">
-              我的仓库
+              {t("repos.title")}
             </Link>
             <span className="mx-1">/</span>
             {owner}
@@ -222,15 +223,15 @@ export default async function RepoTimelinePage({
           <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-600 dark:text-zinc-400">
             {timeline.repo.isPrivate ? (
               <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-                私有
+                {t("common.private")}
               </span>
             ) : (
               <span className="rounded-full border border-zinc-300 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                公开
+                {t("common.public")}
               </span>
             )}
             {timeline.repo.defaultBranch ? (
-              <span>默认分支 {timeline.repo.defaultBranch}</span>
+              <span>{t("repoList.defaultBranch", { branch: timeline.repo.defaultBranch })}</span>
             ) : null}
             {timeline.repo.description ? (
               <span className="basis-full text-zinc-500 dark:text-zinc-400">
@@ -244,7 +245,7 @@ export default async function RepoTimelinePage({
             href={`/repos/${owner}/${name}/operations`}
             className="h-9 rounded-full border border-black/[.08] px-4 text-sm leading-8 text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
           >
-            操作历史
+            {t("timeline.operations")}
           </Link>
           <a
             href={`https://github.com/${owner}/${name}`}
@@ -252,30 +253,34 @@ export default async function RepoTimelinePage({
             rel="noopener noreferrer"
             className="h-9 rounded-full border border-black/[.08] px-4 text-sm leading-8 text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
           >
-            在 GitHub 打开
+            {t("timeline.openOnGithub")}
           </a>
           <Link
             href="/repos"
             className="h-9 rounded-full border border-black/[.08] px-4 text-sm leading-8 text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
           >
-            返回列表
+            {t("timeline.backToList")}
           </Link>
         </div>
       </header>
 
       {result.meta.degraded ? (
         <div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
-          <p className="font-medium">GitHub 配额不足，当前展示缓存数据</p>
+          <p className="font-medium">{t("repos.degraded.title")}</p>
           <p className="mt-1">
-            数据获取于 {formatUtc(result.meta.fetchedAt)}
-            {result.meta.resetAt ? `，预计 ${formatUtc(result.meta.resetAt)} 恢复实时数据` : ""}。
+            {t("repos.degraded.before", { time: formatUtc(result.meta.fetchedAt, t) })}
+            {result.meta.resetAt
+              ? t("repos.degraded.reset", { time: formatUtc(result.meta.resetAt, t) })
+              : ""}
+            {t("repos.degraded.after")}
           </p>
         </div>
       ) : null}
 
       {result.meta.warnings.length > 0 ? (
         <div className="mt-4 rounded-xl border border-zinc-300 bg-white p-3 text-xs leading-5 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
-          部分关联数据未能取回：{result.meta.warnings.join("；")}
+          {t("timeline.warningsBefore")}
+          {result.meta.warnings.join(t("timeline.warningSeparator"))}
         </div>
       ) : null}
 
