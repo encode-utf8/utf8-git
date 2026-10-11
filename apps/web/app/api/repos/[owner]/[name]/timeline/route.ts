@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import {
@@ -21,7 +22,7 @@ const MAX_PAGE = 50;
 
 // 时间线分页接口：/api/repos/{owner}/{name}/timeline?branch=&page=N
 // 服务端持有令牌；响应为归一化元数据（含缓存 / 降级标记），不含令牌。
-export async function GET(
+async function handleGET(
   request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
@@ -90,3 +91,5 @@ export async function GET(
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 }
+
+export const GET = withObservability("timeline.page", handleGET);

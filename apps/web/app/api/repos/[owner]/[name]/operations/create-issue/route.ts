@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
@@ -20,7 +21,7 @@ const ISSUE_BODY_MAX_LENGTH = 65536;
 
 // 创建 Issue：POST /api/repos/{owner}/{name}/operations/create-issue
 // body: { title: string; body?: string; labels?: string; confirmed: true }
-export async function POST(
+async function handlePOST(
   request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
@@ -121,3 +122,5 @@ export async function POST(
     return mapOperationFailure(error, "issue_invalid");
   }
 }
+
+export const POST = withObservability("operations.create-issue", handlePOST);

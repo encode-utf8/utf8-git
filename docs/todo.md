@@ -103,7 +103,7 @@
 
 ### 3.5 工程化
 
-- [ ] TODO-241 可观测性（结构化日志 + 错误上报）
+- [x] TODO-241 可观测性（M4-1：`lib/redact.ts` 统一脱敏（连接串 / GitHub 令牌 / 敏感键名），`lib/health.ts` 的 `redactConnectionInfo` 改为复用；`lib/logger.ts` 一行一条 JSON 的结构化日志（`LOG_LEVEL` 控制级别，字段先脱敏再落盘，sink 抛错不影响主流程）；`lib/observability.ts` 提供请求关联 id（复用 `x-request-id` 或生成并随响应头回写）、`reportError`（结构化错误日志 + 可选 POST 到 `ERROR_REPORT_ENDPOINT`）与 `withObservability` 路由包裹器（记录 `route` / `method` / `path` / `status` / `durationMs`，抛错转 500 并上报一次，5xx 也上报）；`instrumentation.ts` 的 `onRequestError` 兜住服务端组件 / Server Action 的未捕获异常；12 个 API 路由（除 Auth.js `[...nextauth]`）统一接入）
 - [ ] TODO-242 性能基准测试（1000/10000 节点）
 - [ ] TODO-243 国际化框架（zh-CN / en）
 - [ ] TODO-244 可访问性审查（键盘可达、对比度）

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { clearAuthorizationData } from "@/lib/account-data";
 import { createRevokeAuthorizationDescriptor } from "@/lib/account-ops";
 import { getGitHubAccessToken } from "@/lib/access-token";
@@ -12,7 +13,7 @@ import { createIdempotencyKey, runOperation } from "@/lib/operations";
 // 撤销 GitHub 授权：POST /api/account/revoke
 // body: { confirmed: true }
 // 走统一写管线（确认 + 审计 + 频率限制）：先让 GitHub 撤销令牌，再清掉本地令牌 / 会话 / 缓存。
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -76,3 +77,5 @@ export async function POST(request: Request) {
     return mapOperationFailure(error, "revoke_failed");
   }
 }
+
+export const POST = withObservability("account.revoke", handlePOST);

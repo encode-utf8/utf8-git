@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import {
   AUDIT_EXPORT_MAX_OPERATIONS,
   AUDIT_EXPORT_SCAN_LIMIT,
@@ -13,7 +14,7 @@ import { latestPerIdempotencyKey } from "@/lib/operation-audit";
 // 审计日志导出：GET /api/account/audit/export?format=csv|json
 // 导出当前用户在全部仓库的写操作审计（与操作历史页同一份数据、同一收敛口径），
 // 供用户自行留存或作为合规数据导出；只读，不写审计、不计入写操作频率限制。
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -41,3 +42,5 @@ export async function GET(request: Request) {
     },
   });
 }
+
+export const GET = withObservability("account.audit-export", handleGET);

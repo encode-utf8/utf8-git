@@ -11,6 +11,37 @@
 
 ---
 
+## 2026-10-11 · M4-1 可观测性：结构化日志 + 错误上报
+
+**目标**：补上「线上出问题看不到现场」这一课——统一结构化日志与未捕获错误的集中上报，同时不改变任何业务行为。
+
+**完成内容**
+
+- 脱敏：新增 `lib/redact.ts`（连接串 / GitHub 令牌 / `Authorization` 头 / 敏感键名），`lib/health.ts` 的 `redactConnectionInfo` 改为复用（对外签名不变，自检文案不动）。
+- 日志：新增 `lib/logger.ts`——一行一条 JSON（`time` / `level` / `event` + 字段），`LOG_LEVEL`（默认 `info`，支持 `silent`）控制级别，字段先脱敏再落盘，sink 抛错一律吞掉；单测可注入 sink 捕获输出。
+- 关联与包裹：新增 `lib/observability.ts`——`resolveRequestId`（复用 `x-request-id` 或生成，随响应头回写）、`describeError`（消息 / 堆栈脱敏并截断）、`reportError`（结构化错误日志 + 可选 POST 到 `ERROR_REPORT_ENDPOINT`，失败只记 warn）、`withObservability`（记录 `route` / `method` / `path` / `status` / `durationMs`；抛出的异常转 500 并上报一次，5xx 响应也上报）。
+- 兜底：新增 `instrumentation.ts` 的 `onRequestError`，覆盖服务端组件 / Server Action 的未捕获异常（不改变请求结果）。
+- 接入：12 个 API 路由（除 Auth.js 的 `[...nextauth]`）统一改用 `withObservability` 导出；操作历史页读库失败改用 `reportError`（原先只 `console.error`）。
+- 顺带修既有问题：`delete-branch` / `merge-pull-request` / `restore-branch` 的 `authorize` 返回联合会被推断出 `error?: undefined`，使处理函数返回类型无端带上 `| undefined`；改为显式判别联合（`{ ok: false; error } | { ok: true; … }`）。
+- 测试：`redact.test.ts`（7 例）、`logger.test.ts`（4 例）、`observability.test.ts`（10 例）。
+
+**关键决策**
+
+| 编号     | 决策                                                     | 理由                                                                           | 备选与否决原因                                   |
+| -------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------ |
+| ADR-0110 | 不引第三方 SDK，自建薄层（JSON 行日志 + 可选 HTTP 上报） | 无外部可观测性厂商；Vercel 日志按行采集，JSON 即可检索；零依赖、可脱离平台运行 | 直接接 Sentry：引入 SDK 与账号依赖，当前收益不足 |
+| ADR-0111 | 脱敏在写入前统一做（键名 + 值特征双保险）                | 令牌 / 连接串一旦进日志即等同泄露，且日志常被转发到第三方                      | 靠调用方自觉不传敏感字段：不可靠                 |
+| ADR-0112 | 请求日志包裹在 API 路由边界，不改各路由内部              | 一处接入覆盖全部接口；业务代码无需感知日志                                     | 每个路由手写日志：重复且易漏                     |
+
+**问题与风险**
+
+- 默认 `info` 即每个 API 请求一行，日志量随流量线性增长（必要时调 `LOG_LEVEL=warn` 降噪）。
+- 未设置 `ERROR_REPORT_ENDPOINT` 时只有日志、没有聚合看板；「限流与操作成功率看板」仍待排期。
+
+**下一步**
+
+- M4-2 性能基准（TODO-242）：1000 / 10000 节点的时间线渲染与泳道预计算基准。
+
 ## 2026-10-11 · 修复「操作历史」生产 500：health 缺表清单漏 `operation_audit`
 
 **目标**：排查并修复生产环境打开「操作历史」（`/repos/[owner]/[name]/operations`）显示「服务器错误 / 页面无法加载」的问题。

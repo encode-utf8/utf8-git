@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
@@ -20,31 +21,39 @@ const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 
 const NO_STORE = { "cache-control": "no-store" } as const;
 
-async function authorize(context: { params: Promise<{ owner: string; name: string }> }) {
+// 鉴权结果用显式判别字段：否则「有 error」与「无 error」的联合会被推断出
+// `error?: undefined`，让调用方（与路由包裹器）的返回类型无端带上 undefined。
+type AuthorizeResult =
+  | { ok: false; error: NextResponse }
+  | { ok: true; userId: string; owner: string; name: string; token: string };
+
+async function authorize(context: {
+  params: Promise<{ owner: string; name: string }>;
+}): Promise<AuthorizeResult> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
-    return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
+    return { ok: false, error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
   }
   const { owner, name } = await context.params;
   if (!OWNER_PATTERN.test(owner) || !REPO_PATTERN.test(name)) {
-    return { error: NextResponse.json({ error: "invalid_repo" }, { status: 400 }) };
+    return { ok: false, error: NextResponse.json({ error: "invalid_repo" }, { status: 400 }) };
   }
   const token = await getGitHubAccessToken(userId);
   if (!token) {
-    return { error: NextResponse.json({ error: "no_token" }, { status: 401 }) };
+    return { ok: false, error: NextResponse.json({ error: "no_token" }, { status: 401 }) };
   }
-  return { userId, owner, name, token };
+  return { ok: true, userId, owner, name, token };
 }
 
 // 可合并性检查：GET /api/repos/{owner}/{name}/operations/merge-pull-request?number=61
 // 只读上游状态，不改动任何数据，因此不写审计。
-export async function GET(
+async function handleGET(
   request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
   const authorized = await authorize(context);
-  if ("error" in authorized) {
+  if (!authorized.ok) {
     return authorized.error;
   }
   const { owner, name, token } = authorized;
@@ -88,12 +97,12 @@ export async function GET(
 // 合并 PR：POST /api/repos/{owner}/{name}/operations/merge-pull-request
 // body: { number: number; method?: "merge" | "squash" | "rebase"; confirmed: true }
 // 合并前先做一次可合并性检查（冲突 / 草稿 / 已合并直接 409，不进入写管线）。
-export async function POST(
+async function handlePOST(
   request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
   const authorized = await authorize(context);
-  if ("error" in authorized) {
+  if (!authorized.ok) {
     return authorized.error;
   }
   const { userId, owner, name, token } = authorized;
@@ -189,3 +198,6 @@ export async function POST(
     return mapOperationFailure(error, "pull_not_mergeable");
   }
 }
+
+export const GET = withObservability("operations.merge-pull-request", handleGET);
+export const POST = withObservability("operations.merge-pull-request", handlePOST);

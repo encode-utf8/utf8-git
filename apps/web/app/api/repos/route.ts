@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import {
@@ -13,7 +14,7 @@ import {
 import { loadReposPage } from "@/lib/repos-data";
 
 // 仓库列表分页接口：/api/repos?page=N（服务端持有令牌，响应中不含令牌）
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -56,3 +57,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 }
+
+export const GET = withObservability("repos.list", handleGET);

@@ -16,25 +16,27 @@
 
 ## 2. 环境变量清单
 
-| 变量                                  | 必填 | 作用                                                      | 生产取值建议                                   |
-| ------------------------------------- | ---- | --------------------------------------------------------- | ---------------------------------------------- |
-| `DATABASE_URL`                        | 是   | Prisma 连接串（会话 / 令牌 / 共享状态）                   | Neon **pooled** 连接串，见 §4                  |
-| `AUTH_SECRET`                         | 是   | Auth.js 会话签名密钥                                      | `openssl rand -base64 32` 生成，与预览环境分开 |
-| `AUTH_TOKEN_ENC_KEY`                  | 是   | 令牌密文 AES-256-GCM 密钥（`v1.<iv>.<tag>.<ciphertext>`） | 32 字节 base64；**轮换需迁移旧密文**           |
-| `AUTH_GITHUB_ID`                      | 是   | GitHub OAuth App Client ID                                | 生产与预览可共用，或各建一个                   |
-| `AUTH_GITHUB_SECRET`                  | 是   | GitHub OAuth App Client Secret                            | 同上                                           |
-| `STORE_BACKEND`                       | 否   | `memory`（默认）/ `postgres`                              | 多实例、Serverless 必须设 `postgres`           |
-| `GITHUB_API_BASE_URL`                 | 否   | 上游 REST 基址（默认官方 API）                            | 仅 E2E / 自建指向本地 mock                     |
-| `GITHUB_GRAPHQL_ENDPOINT`             | 否   | 上游 GraphQL 地址（默认官方 API）                         | 同上                                           |
-| `GITHUB_TOKEN_ENDPOINT`               | 否   | 上游令牌地址（默认 GitHub）                               | 同上                                           |
-| `GITHUB_RATE_LIMIT_DEGRADE_THRESHOLD` | 否   | 剩余配额低于该值时进入「只读缓存」降级                    | 默认 `100`                                     |
-| `WRITE_OPERATION_LIMIT`               | 否   | 单个用户在一个窗口内允许的写操作次数上限                  | 默认 `20`                                      |
-| `WRITE_OPERATION_WINDOW_MS`           | 否   | 写操作频率限制的滑动窗口（毫秒）                          | 默认 `60000`                                   |
-| `WRITE_OPERATION_REPLAY_WINDOW_MS`    | 否   | 幂等回放窗口（毫秒）：同参数的新操作超过该窗口会重新执行  | 默认 `600000`                                  |
-| `OPERATION_AUDIT_RETENTION_DAYS`      | 否   | 写操作审计保留天数（写入时按概率清理更早的记录）          | 默认 `90`                                      |
-| `AUTH_TRUST_HOST`                     | 否   | 非 Vercel 自建部署时信任 `Host` 头                        | 自建填 `true`；Vercel 自动识别无需设置         |
-| `AUTH_URL`                            | 否   | 显式指定外部地址（自建 / 反代场景）                       | `https://<域名>`                               |
-| `NODE_USE_ENV_PROXY` + `HTTPS_PROXY`  | 否   | 仅本地开发在受限网络下访问 `github.com` 用                | 生产不需要                                     |
+| 变量                                  | 必填 | 作用                                                                  | 生产取值建议                                   |
+| ------------------------------------- | ---- | --------------------------------------------------------------------- | ---------------------------------------------- |
+| `DATABASE_URL`                        | 是   | Prisma 连接串（会话 / 令牌 / 共享状态）                               | Neon **pooled** 连接串，见 §4                  |
+| `AUTH_SECRET`                         | 是   | Auth.js 会话签名密钥                                                  | `openssl rand -base64 32` 生成，与预览环境分开 |
+| `AUTH_TOKEN_ENC_KEY`                  | 是   | 令牌密文 AES-256-GCM 密钥（`v1.<iv>.<tag>.<ciphertext>`）             | 32 字节 base64；**轮换需迁移旧密文**           |
+| `AUTH_GITHUB_ID`                      | 是   | GitHub OAuth App Client ID                                            | 生产与预览可共用，或各建一个                   |
+| `AUTH_GITHUB_SECRET`                  | 是   | GitHub OAuth App Client Secret                                        | 同上                                           |
+| `STORE_BACKEND`                       | 否   | `memory`（默认）/ `postgres`                                          | 多实例、Serverless 必须设 `postgres`           |
+| `GITHUB_API_BASE_URL`                 | 否   | 上游 REST 基址（默认官方 API）                                        | 仅 E2E / 自建指向本地 mock                     |
+| `GITHUB_GRAPHQL_ENDPOINT`             | 否   | 上游 GraphQL 地址（默认官方 API）                                     | 同上                                           |
+| `GITHUB_TOKEN_ENDPOINT`               | 否   | 上游令牌地址（默认 GitHub）                                           | 同上                                           |
+| `GITHUB_RATE_LIMIT_DEGRADE_THRESHOLD` | 否   | 剩余配额低于该值时进入「只读缓存」降级                                | 默认 `100`                                     |
+| `WRITE_OPERATION_LIMIT`               | 否   | 单个用户在一个窗口内允许的写操作次数上限                              | 默认 `20`                                      |
+| `WRITE_OPERATION_WINDOW_MS`           | 否   | 写操作频率限制的滑动窗口（毫秒）                                      | 默认 `60000`                                   |
+| `WRITE_OPERATION_REPLAY_WINDOW_MS`    | 否   | 幂等回放窗口（毫秒）：同参数的新操作超过该窗口会重新执行              | 默认 `600000`                                  |
+| `OPERATION_AUDIT_RETENTION_DAYS`      | 否   | 写操作审计保留天数（写入时按概率清理更早的记录）                      | 默认 `90`                                      |
+| `LOG_LEVEL`                           | 否   | 结构化日志级别：`debug` / `info`（默认）/ `warn` / `error` / `silent` | 生产用默认 `info`；排查时临时设 `debug`        |
+| `ERROR_REPORT_ENDPOINT`               | 否   | 未捕获错误的上报地址（POST JSON）；不设则只写结构化日志               | 自建收集器；留空即只记日志                     |
+| `AUTH_TRUST_HOST`                     | 否   | 非 Vercel 自建部署时信任 `Host` 头                                    | 自建填 `true`；Vercel 自动识别无需设置         |
+| `AUTH_URL`                            | 否   | 显式指定外部地址（自建 / 反代场景）                                   | `https://<域名>`                               |
+| `NODE_USE_ENV_PROXY` + `HTTPS_PROXY`  | 否   | 仅本地开发在受限网络下访问 `github.com` 用                            | 生产不需要                                     |
 
 > `RUN_DB_TESTS` 只用于本地数据库用例开关，不是部署变量。
 > **不要手动设置 `NODE_ENV`**：Vercel 会按环境自动注入 `production`，手动设置（尤其带引号或空值）会触发

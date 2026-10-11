@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import {
@@ -35,32 +36,40 @@ function readDeletePayload(payload: Record<string, string>): {
   return { branch, sha };
 }
 
-async function authorize(context: { params: Promise<{ owner: string; name: string }> }) {
+// 鉴权结果用显式判别字段：否则「有 error」与「无 error」的联合会被推断出
+// `error?: undefined`，让调用方（与路由包裹器）的返回类型无端带上 undefined。
+type AuthorizeResult =
+  | { ok: false; error: NextResponse }
+  | { ok: true; userId: string; owner: string; name: string; token: string };
+
+async function authorize(context: {
+  params: Promise<{ owner: string; name: string }>;
+}): Promise<AuthorizeResult> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
-    return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
+    return { ok: false, error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
   }
   const { owner, name } = await context.params;
   if (!OWNER_PATTERN.test(owner) || !REPO_PATTERN.test(name)) {
-    return { error: NextResponse.json({ error: "invalid_repo" }, { status: 400 }) };
+    return { ok: false, error: NextResponse.json({ error: "invalid_repo" }, { status: 400 }) };
   }
   const token = await getGitHubAccessToken(userId);
   if (!token) {
-    return { error: NextResponse.json({ error: "no_token" }, { status: 401 }) };
+    return { ok: false, error: NextResponse.json({ error: "no_token" }, { status: 401 }) };
   }
-  return { userId, owner, name, token };
+  return { ok: true, userId, owner, name, token };
 }
 
 // 可恢复列表：GET /api/repos/{owner}/{name}/operations/restore-branch
 // 数据来自本应用自己的写操作审计（仅当前用户、成功的删除分支、且仍在 24h 窗口内），
 // 不访问上游，因此不写审计。
-export async function GET(
+async function handleGET(
   _request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
   const authorized = await authorize(context);
-  if ("error" in authorized) {
+  if (!authorized.ok) {
     return authorized.error;
   }
   const { userId, owner, name } = authorized;
@@ -97,12 +106,12 @@ export async function GET(
 // 恢复分支：POST /api/repos/{owner}/{name}/operations/restore-branch
 // body: { idempotencyKey: string; confirmed: true }
 // 以删除记录的幂等键为凭据（服务端校验归属 / 类型 / 状态 / 时间窗），不让客户端直接传 SHA。
-export async function POST(
+async function handlePOST(
   request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
   const authorized = await authorize(context);
-  if ("error" in authorized) {
+  if (!authorized.ok) {
     return authorized.error;
   }
   const { userId, owner, name, token } = authorized;
@@ -185,3 +194,6 @@ export async function POST(
     return mapOperationFailure(error, "branch_conflict");
   }
 }
+
+export const GET = withObservability("operations.restore-branch", handleGET);
+export const POST = withObservability("operations.restore-branch", handlePOST);

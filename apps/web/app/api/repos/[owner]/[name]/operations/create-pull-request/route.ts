@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { getDataStores, invalidateTimelineCache } from "@/lib/data-stores";
@@ -19,7 +20,7 @@ const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 
 // 创建 PR：POST /api/repos/{owner}/{name}/operations/create-pull-request
 // body: { head: string; base: string; title: string; body?: string; draft?: boolean; confirmed: true }
-export async function POST(
+async function handlePOST(
   request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
@@ -130,3 +131,5 @@ export async function POST(
     return mapOperationFailure(error, "pull_invalid");
   }
 }
+
+export const POST = withObservability("operations.create-pull-request", handlePOST);

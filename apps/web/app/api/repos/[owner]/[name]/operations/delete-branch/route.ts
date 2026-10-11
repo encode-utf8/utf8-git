@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { validateBranchName } from "@/lib/branch-ops";
@@ -17,31 +18,39 @@ const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
 
 const NO_STORE = { "cache-control": "no-store" } as const;
 
-async function authorize(context: { params: Promise<{ owner: string; name: string }> }) {
+// 鉴权结果用显式判别字段：否则「有 error」与「无 error」的联合会被推断出
+// `error?: undefined`，让调用方（与路由包裹器）的返回类型无端带上 undefined。
+type AuthorizeResult =
+  | { ok: false; error: NextResponse }
+  | { ok: true; userId: string; owner: string; name: string; token: string };
+
+async function authorize(context: {
+  params: Promise<{ owner: string; name: string }>;
+}): Promise<AuthorizeResult> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
-    return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
+    return { ok: false, error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
   }
   const { owner, name } = await context.params;
   if (!OWNER_PATTERN.test(owner) || !REPO_PATTERN.test(name)) {
-    return { error: NextResponse.json({ error: "invalid_repo" }, { status: 400 }) };
+    return { ok: false, error: NextResponse.json({ error: "invalid_repo" }, { status: 400 }) };
   }
   const token = await getGitHubAccessToken(userId);
   if (!token) {
-    return { error: NextResponse.json({ error: "no_token" }, { status: 401 }) };
+    return { ok: false, error: NextResponse.json({ error: "no_token" }, { status: 401 }) };
   }
-  return { userId, owner, name, token };
+  return { ok: true, userId, owner, name, token };
 }
 
 // 可删除性预检：GET /api/repos/{owner}/{name}/operations/delete-branch?branch=x&current=main
 // 只读上游状态（默认分支 + 保护规则），不改动任何数据，因此不写审计。
-export async function GET(
+async function handleGET(
   request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
   const authorized = await authorize(context);
-  if ("error" in authorized) {
+  if (!authorized.ok) {
     return authorized.error;
   }
   const { owner, name, token } = authorized;
@@ -92,12 +101,12 @@ export async function GET(
 // 删除分支：POST /api/repos/{owner}/{name}/operations/delete-branch
 // body: { branch: string; current?: string; sha?: string; confirmed: true }
 // 服务端复查默认分支 / 保护规则（不可删除 → 409，不进入写管线），再走统一写管线。
-export async function POST(
+async function handlePOST(
   request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
   const authorized = await authorize(context);
-  if ("error" in authorized) {
+  if (!authorized.ok) {
     return authorized.error;
   }
   const { userId, owner, name, token } = authorized;
@@ -181,3 +190,6 @@ export async function POST(
     return mapOperationFailure(error, "branch_conflict");
   }
 }
+
+export const GET = withObservability("operations.delete-branch", handleGET);
+export const POST = withObservability("operations.delete-branch", handlePOST);

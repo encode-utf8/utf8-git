@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { purgeAccountData } from "@/lib/account-data";
 import { createPurgeAccountDataDescriptor } from "@/lib/account-ops";
 import { getGitHubAccessToken } from "@/lib/access-token";
@@ -12,7 +13,7 @@ import { createIdempotencyKey, runOperation } from "@/lib/operations";
 // 清除本应用内的账号数据（GDPR 友好）：POST /api/account/purge
 // body: { confirmed: true }
 // 先尽力撤销 GitHub 授权（失败不阻塞），再删除审计 / 缓存 / 账号 / 会话 / 用户记录。
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -83,3 +84,5 @@ export async function POST(request: Request) {
     return mapOperationFailure(error, "purge_failed");
   }
 }
+
+export const POST = withObservability("account.purge", handlePOST);

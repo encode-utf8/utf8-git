@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { formatUtcDateTime } from "@/lib/commit-format";
 import { getDataStores } from "@/lib/data-stores";
 import { operationGitCommand, operationResultLink } from "@/lib/git-commands";
+import { reportError } from "@/lib/observability";
 import {
   OPERATION_KIND_LABEL,
   OPERATION_STATUS_LABEL,
@@ -110,7 +111,7 @@ export default async function RepoOperationsPage({
       });
     } catch (error) {
       loadFailed = true;
-      console.error(`[operations] 读取操作历史失败 repo=${repo}`, error);
+      await reportError(error, { source: "page", page: "repos.operations", repo });
     }
   }
   const hasNext = records.length === PAGE_SIZE;

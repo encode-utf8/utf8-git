@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { createBranchDescriptor, validateBranchName } from "@/lib/branch-ops";
@@ -17,7 +18,7 @@ const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
 // 创建分支：POST /api/repos/{owner}/{name}/operations/create-branch
 // body: { branch: string; from: string(sha); confirmed: true }
 // 服务端统一走 runOperation（确认 + 幂等 + 审计），幂等键由 (actor, 描述) 派生。
-export async function POST(
+async function handlePOST(
   request: Request,
   context: { params: Promise<{ owner: string; name: string }> },
 ) {
@@ -98,3 +99,5 @@ export async function POST(
     return mapOperationFailure(error, "branch_conflict");
   }
 }
+
+export const POST = withObservability("operations.create-branch", handlePOST);

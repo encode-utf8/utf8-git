@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
 import { loadCommitDetail } from "@/lib/commit-data";
@@ -20,7 +21,7 @@ const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
 
 // 提交详情接口：/api/repos/{owner}/{name}/commits/{sha}
 // 服务端持有令牌；响应为归一化提交详情（含缓存 / 降级标记），不含令牌。
-export async function GET(
+async function handleGET(
   _request: Request,
   context: { params: Promise<{ owner: string; name: string; sha: string }> },
 ) {
@@ -77,3 +78,5 @@ export async function GET(
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 }
+
+export const GET = withObservability("commit.detail", handleGET);
