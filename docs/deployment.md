@@ -117,6 +117,9 @@ pnpm --filter @utf8-git/web exec prisma migrate deploy
   若某迁移的表并不存在，就不要 resolve，交给 `migrate deploy` 正常建表。
 - `migrate resolve` 只写迁移历史表、不动业务表；执行完用 `prisma migrate status` 确认
   `Database schema is up to date!`。
+- PowerShell 里给串加引号（URL 含 `?` / `&`，不加引号会被 `&` 截断，赋值静默失败）；Shell 变量**优先于** `.env`。
+  赋值后先跑 `prisma migrate status`，确认它打印的 `Datasource "db": ... at "<主机>"` 是**目标库**再继续——
+  否则命令会照常成功，却打在了 `.env` 里的旧库上。
 
 ## 4. 连接池
 
