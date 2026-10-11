@@ -9,6 +9,8 @@ import { fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
 import type { CommitDetail } from "@/lib/github-commits";
 import { collectIssues, type TimelineCommit } from "@/lib/github-timeline";
+import { useTranslator } from "@/lib/i18n/client";
+import type { MessageKey, Translate } from "@/lib/i18n/translate";
 
 import { MergePullPanel } from "./merge-pull-panel";
 
@@ -30,21 +32,45 @@ type CommitDetailPanelProps = {
   onClose: () => void;
 };
 
-const FILE_STATUS_LABEL: Record<string, string> = {
-  added: "新增",
-  removed: "删除",
-  modified: "修改",
-  renamed: "重命名",
-  copied: "复制",
-  changed: "变更",
-  unchanged: "未变",
+// GitHub 单次文件变更响应上限（与上游一致），截断提示里要说明这个数字
+const FILE_LIMIT = 300;
+
+// 文件变更状态在消息目录中的键：文案随界面语言切换，未知状态回退原始值
+const FILE_STATUS_KEY: Record<string, MessageKey> = {
+  added: "commitDetail.fileStatus.added",
+  removed: "commitDetail.fileStatus.removed",
+  modified: "commitDetail.fileStatus.modified",
+  renamed: "commitDetail.fileStatus.renamed",
+  copied: "commitDetail.fileStatus.copied",
+  changed: "commitDetail.fileStatus.changed",
+  unchanged: "commitDetail.fileStatus.unchanged",
 };
 
-const PR_STATE_LABEL: Record<string, string> = {
-  OPEN: "开放",
-  MERGED: "已合并",
-  CLOSED: "已关闭",
+const PR_STATE_KEY: Record<string, MessageKey> = {
+  OPEN: "timeline.prState.open",
+  MERGED: "timeline.prState.merged",
+  CLOSED: "timeline.prState.closed",
 };
+
+const ISSUE_STATE_KEY: Record<string, MessageKey> = {
+  OPEN: "timeline.issueState.open",
+  CLOSED: "timeline.issueState.closed",
+};
+
+function fileStatusLabel(status: string, t: Translate): string {
+  const key = FILE_STATUS_KEY[status];
+  return key ? t(key) : status;
+}
+
+function prStateLabel(state: string, t: Translate): string {
+  const key = PR_STATE_KEY[state];
+  return key ? t(key) : state;
+}
+
+function issueStateLabel(state: string, t: Translate): string {
+  const key = ISSUE_STATE_KEY[state];
+  return key ? t(key) : state;
+}
 
 function fileStatusClass(status: string): string {
   if (status === "added") {
@@ -58,11 +84,6 @@ function fileStatusClass(status: string): string {
   }
   return "border-zinc-300 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
 }
-
-const ISSUE_STATE_LABEL: Record<string, string> = {
-  OPEN: "开放",
-  CLOSED: "已关闭",
-};
 
 function issueStateClass(state: string): string {
   if (state === "OPEN") {
@@ -91,6 +112,7 @@ type CommitDetailState = {
 // 右侧滑出式详情面板：点击遮罩 / 关闭按钮 / Esc 均可关闭
 // 状态只由异步回调 / 事件处理器更新，避免在 effect 内同步 setState（React 纯净性约束）
 export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetailPanelProps) {
+  const { t } = useTranslator();
   const [state, setState] = useState<CommitDetailState>({
     sha: null,
     loading: false,
@@ -129,7 +151,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
       try {
         const response = await fetchWithRetry(
           `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${encodeURIComponent(sha)}`,
-          { signal: controller.signal },
+          { signal: controller.signal, t },
         );
         if (controller.signal.aborted) {
           return;
@@ -143,18 +165,18 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
           return;
         }
         const info =
-          error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null);
+          error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null, t);
         setState({
           sha,
           loading: false,
-          error: `${info.title}：${info.message}`,
+          error: `${info.title}${t("common.titleSeparator")}${info.message}`,
           detail: null,
         });
       }
     })();
 
     return () => controller.abort();
-  }, [owner, name, sha, reloadKey]);
+  }, [owner, name, sha, reloadKey, t]);
 
   // Esc 关闭
   useEffect(() => {
@@ -225,21 +247,21 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
       <aside
         role="dialog"
         aria-modal="true"
-        aria-label="提交详情"
+        aria-label={t("commitDetail.label")}
         className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-zinc-950"
       >
         <header className="flex items-start justify-between gap-3 border-b border-black/[.08] px-5 py-4 dark:border-white/[.145]">
           <div className="min-w-0">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">提交详情</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("commitDetail.label")}</p>
             <h2 className="mt-1 break-words text-base font-semibold text-zinc-900 dark:text-zinc-50">
-              {commit.headline || "（无提交信息）"}
+              {commit.headline || t("commitDetail.noHeadline")}
             </h2>
           </div>
           <button
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            aria-label="关闭详情"
+            aria-label={t("commitDetail.close")}
             className="h-8 w-8 shrink-0 rounded-full border border-black/[.08] text-sm text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-white/[.08]"
           >
             ✕
@@ -258,10 +280,10 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                 className="h-7 rounded-full border border-black/[.08] px-3 text-xs text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-white/[.08]"
               >
                 {copyState === "copied"
-                  ? "已复制"
+                  ? t("commitDetail.copied")
                   : copyState === "failed"
-                    ? "复制失败"
-                    : "复制 SHA"}
+                    ? t("commitDetail.copyFailed")
+                    : t("commitDetail.copySha")}
               </button>
               <a
                 href={githubUrl}
@@ -269,7 +291,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                 rel="noopener noreferrer"
                 className="h-7 rounded-full border border-black/[.08] px-3 text-xs leading-6 text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-white/[.08]"
               >
-                在 GitHub 打开
+                {t("commitDetail.openOnGithub")}
               </a>
             </div>
 
@@ -285,17 +307,19 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
               ) : null}
               <div className="min-w-0">
                 <p className="truncate text-zinc-900 dark:text-zinc-100">
-                  {commit.author.login ?? commit.author.name ?? "未知作者"}
+                  {commit.author.login ?? commit.author.name ?? t("commitDetail.unknownAuthor")}
                 </p>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  提交时间 {formatUtcDateTime(commit.committedDate)}（UTC）
+                  {t("commitDetail.committedAt", {
+                    time: `${formatUtcDateTime(commit.committedDate)}${t("common.utcSuffix")}`,
+                  })}
                 </p>
               </div>
             </div>
 
             {commit.parents.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                <span>父提交</span>
+                <span>{t("commitDetail.parents")}</span>
                 {commit.parents.map((parent) => (
                   <a
                     key={parent}
@@ -312,7 +336,9 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
 
             {commit.pullRequests.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-zinc-500 dark:text-zinc-400">关联 Pull Request</span>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  {t("commitDetail.pullRequests")}
+                </span>
                 {commit.pullRequests.map((pullRequest) => (
                   <span key={pullRequest.number} className="flex items-center gap-1">
                     <a
@@ -325,19 +351,19 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                       title={pullRequest.title}
                       className={`rounded-full border px-2 py-0.5 underline-offset-4 hover:underline ${prStateClass(pullRequest.state)}`}
                     >
-                      #{pullRequest.number} {PR_STATE_LABEL[pullRequest.state] ?? pullRequest.state}
+                      #{pullRequest.number} {prStateLabel(pullRequest.state, t)}
                     </a>
                     {pullRequest.state === "OPEN" ? (
                       <button
                         type="button"
-                        aria-label={`合并 PR #${pullRequest.number}`}
+                        aria-label={t("commitDetail.mergePullAria", { number: pullRequest.number })}
                         onClick={() => {
                           setMergeSuccess(null);
                           setMergeTarget(pullRequest.number);
                         }}
                         className="h-6 rounded-full border border-black/[.08] px-2 text-[11px] text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-white/[.08]"
                       >
-                        合并
+                        {t("commitDetail.merge")}
                       </button>
                     ) : null}
                   </span>
@@ -347,7 +373,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
 
             {issues.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-zinc-500 dark:text-zinc-400">关联 Issue</span>
+                <span className="text-zinc-500 dark:text-zinc-400">{t("commitDetail.issues")}</span>
                 {issues.map((issue) => (
                   <a
                     key={issue.number}
@@ -357,7 +383,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                     title={issue.title}
                     className={`rounded-full border px-2 py-0.5 underline-offset-4 hover:underline ${issueStateClass(issue.state)}`}
                   >
-                    #{issue.number} {ISSUE_STATE_LABEL[issue.state] ?? issue.state}
+                    #{issue.number} {issueStateLabel(issue.state, t)}
                   </a>
                 ))}
               </div>
@@ -385,7 +411,9 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
 
           <section className="mt-5 border-t border-black/[.08] pt-4 dark:border-white/[.145]">
             {loading ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">正在加载文件变更…</p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                {t("commitDetail.loadingFiles")}
+              </p>
             ) : error ? (
               <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-200">
                 <p>{error}</p>
@@ -397,29 +425,35 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                   }}
                   className="mt-3 h-8 rounded-full border border-red-400 px-4 text-xs font-medium transition-colors hover:bg-red-100 dark:border-red-600 dark:hover:bg-red-900"
                 >
-                  重试
+                  {t("common.retry")}
                 </button>
               </div>
             ) : detail ? (
               <>
                 {detail.meta.degraded ? (
                   <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
-                    GitHub 配额不足，当前展示缓存数据
+                    {t("commitDetail.degraded.before")}
                     {detail.meta.fetchedAt
-                      ? `（获取于 ${formatUtcDateTime(detail.meta.fetchedAt)} UTC）`
+                      ? t("commitDetail.degraded.fetched", {
+                          time: formatUtcDateTime(detail.meta.fetchedAt),
+                        })
                       : ""}
                     {detail.meta.resetAt
-                      ? `，预计 ${formatUtcDateTime(detail.meta.resetAt)}（UTC）恢复`
+                      ? t("commitDetail.degraded.reset", {
+                          time: formatUtcDateTime(detail.meta.resetAt),
+                        })
                       : ""}
-                    。
+                    {t("commitDetail.degraded.after")}
                   </div>
                 ) : null}
 
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
                     {detail.files.length > 0
-                      ? `文件变更（${detail.files.length}${detail.filesTruncated ? "+" : ""}）`
-                      : "文件变更"}
+                      ? t("commitDetail.filesChangedCount", {
+                          count: `${detail.files.length}${detail.filesTruncated ? "+" : ""}`,
+                        })
+                      : t("commitDetail.filesChanged")}
                   </h3>
                   {detail.stats ? (
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -429,14 +463,14 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                       <span className="text-red-700 dark:text-red-400">
                         −{detail.stats.deletions}
                       </span>{" "}
-                      / 共 {detail.stats.total} 行
+                      {t("commitDetail.statsTotal", { total: detail.stats.total })}
                     </p>
                   ) : null}
                 </div>
 
                 {detail.files.length === 0 ? (
                   <p className="mt-3 rounded-xl border border-black/[.08] bg-zinc-50 p-4 text-sm text-zinc-600 dark:border-white/[.145] dark:bg-zinc-900 dark:text-zinc-300">
-                    本次提交没有文件变更（例如合并提交或空提交）。
+                    {t("commitDetail.noFiles")}
                   </p>
                 ) : (
                   <ul className="mt-3 space-y-2">
@@ -452,7 +486,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                           <span
                             className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${fileStatusClass(file.status)}`}
                           >
-                            {FILE_STATUS_LABEL[file.status] ?? file.status}
+                            {fileStatusLabel(file.status, t)}
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -468,14 +502,18 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
 
                 {detail.filesTruncated ? (
                   <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                    仅展示前 {detail.files.length} 个文件（GitHub 单次响应最多 300
-                    个），完整变更请在 GitHub 查看。
+                    {t("commitDetail.truncated", {
+                      shown: detail.files.length,
+                      max: FILE_LIMIT,
+                    })}
                   </p>
                 ) : null}
 
                 <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500">
-                  数据获取于 {formatUtcDateTime(detail.meta.fetchedAt)}（UTC）
-                  {detail.meta.cached ? "，命中 30 分钟缓存" : ""}
+                  {t("commitDetail.fetchedAt", {
+                    time: `${formatUtcDateTime(detail.meta.fetchedAt)}${t("common.utcSuffix")}`,
+                  })}
+                  {detail.meta.cached ? t("commitDetail.cachedSuffix") : ""}
                 </p>
               </>
             ) : null}
