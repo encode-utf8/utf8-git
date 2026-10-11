@@ -9,6 +9,7 @@ import {
   retryDelayMs,
   type OnlineErrorInfo,
 } from "./error-state";
+import { sourceTranslate, type Translate } from "./i18n/translate";
 
 export type FetchWithRetryOptions = {
   retries?: number;
@@ -18,6 +19,8 @@ export type FetchWithRetryOptions = {
   sleep?: (ms: number) => Promise<void>;
   fetchImpl?: typeof fetch;
   headers?: Record<string, string>;
+  /** 当前界面语言的翻译函数：错误文案随语言切换；缺省为中文源文案。 */
+  t?: Translate;
 };
 
 function defaultSleep(ms: number): Promise<void> {
@@ -59,6 +62,7 @@ export async function fetchWithRetry(
     sleep = defaultSleep,
     fetchImpl = fetch,
     headers = {},
+    t = sourceTranslate,
   } = options;
 
   let lastInfo: OnlineErrorInfo | null = null;
@@ -66,11 +70,11 @@ export async function fetchWithRetry(
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     if (signal?.aborted) {
       // 调用方主动取消（组件卸载 / 分支切换），按「超时」呈现即可
-      throw new OnlineRequestError(describeFetchRejection({ name: "AbortError" }, true));
+      throw new OnlineRequestError(describeFetchRejection({ name: "AbortError" }, true, t));
     }
     // 离线时直接短路：不发起必然失败的请求，也不做无意义重试
     if (!isOnline()) {
-      throw new OnlineRequestError(describeFetchRejection(null, false));
+      throw new OnlineRequestError(describeFetchRejection(null, false, t));
     }
 
     let response: Response;
@@ -82,7 +86,7 @@ export async function fetchWithRetry(
         cache: "no-store",
       });
     } catch (error) {
-      const info = describeFetchRejection(error, isOnline());
+      const info = describeFetchRejection(error, isOnline(), t);
       lastInfo = info;
       if (!isRetryableKind(info.kind) || attempt === retries) {
         throw new OnlineRequestError(info);
@@ -96,7 +100,7 @@ export async function fetchWithRetry(
     }
 
     const payload = await readErrorPayload(response);
-    const info = describeApiFailure(response.status, payload);
+    const info = describeApiFailure(response.status, payload, t);
     lastInfo = info;
     if (!isRetryableKind(info.kind) || attempt === retries) {
       throw new OnlineRequestError(info);
@@ -104,7 +108,7 @@ export async function fetchWithRetry(
     await sleep(retryDelayMs(attempt, baseDelayMs));
   }
 
-  throw new OnlineRequestError(lastInfo ?? describeApiFailure(500, null));
+  throw new OnlineRequestError(lastInfo ?? describeApiFailure(500, null, t));
 }
 
 export type JsonRequestOptions = FetchWithRetryOptions & {
@@ -134,16 +138,17 @@ export async function fetchJsonWithRetry(
     sleep = defaultSleep,
     fetchImpl = fetch,
     headers = {},
+    t = sourceTranslate,
   } = options;
 
   let lastInfo: OnlineErrorInfo | null = null;
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     if (signal?.aborted) {
-      throw new OnlineRequestError(describeFetchRejection({ name: "AbortError" }, true));
+      throw new OnlineRequestError(describeFetchRejection({ name: "AbortError" }, true, t));
     }
     if (!isOnline()) {
-      throw new OnlineRequestError(describeFetchRejection(null, false));
+      throw new OnlineRequestError(describeFetchRejection(null, false, t));
     }
 
     try {
@@ -155,7 +160,7 @@ export async function fetchJsonWithRetry(
         cache: "no-store",
       });
     } catch (error) {
-      const info = describeFetchRejection(error, isOnline());
+      const info = describeFetchRejection(error, isOnline(), t);
       lastInfo = info;
       if (!isRetryableKind(info.kind) || attempt === retries) {
         throw new OnlineRequestError(info);
@@ -164,5 +169,5 @@ export async function fetchJsonWithRetry(
     }
   }
 
-  throw new OnlineRequestError(lastInfo ?? describeApiFailure(500, null));
+  throw new OnlineRequestError(lastInfo ?? describeApiFailure(500, null, t));
 }

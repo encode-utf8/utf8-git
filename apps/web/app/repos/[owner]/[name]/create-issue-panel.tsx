@@ -94,6 +94,7 @@ export function CreateIssuePanel({
             labels: parsedLabels.join(","),
             confirmed: true,
           }),
+          t,
         },
       );
       const data = (await response.json().catch(() => ({}))) as {

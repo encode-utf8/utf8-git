@@ -67,7 +67,7 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
     setLoading(true);
     setLoadError(null);
     try {
-      const response = await fetchWithRetry(`/api/repos?page=${nextPage}`);
+      const response = await fetchWithRetry(`/api/repos?page=${nextPage}`, { t });
       const data = (await response.json()) as {
         repos: RepoSummary[];
         hasMore: boolean;
@@ -78,7 +78,7 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
       setNextPage(data.nextPage);
     } catch (error) {
       setLoadError(
-        error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null),
+        error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null, t),
       );
     } finally {
       setLoading(false);
@@ -96,7 +96,11 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
           aria-label={t("repoList.searchLabel")}
           className="h-10 w-full rounded-lg border border-black/[.08] bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-100 sm:max-w-xs"
         />
-        <div className="flex items-center gap-2" role="group" aria-label={t("repoList.visibilityLabel")}>
+        <div
+          className="flex items-center gap-2"
+          role="group"
+          aria-label={t("repoList.visibilityLabel")}
+        >
           {VISIBILITY_OPTIONS.map((option) => (
             <button
               key={option.value}

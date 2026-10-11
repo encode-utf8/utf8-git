@@ -64,6 +64,7 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
       try {
         const response = await fetchWithRetry(`${endpoint}?number=${number}`, {
           signal: controller.signal,
+          t,
         });
         const data = (await response.json()) as MergeCheckResponse;
         if (!controller.signal.aborted) {
@@ -74,12 +75,12 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
           return;
         }
         const info =
-          failure instanceof OnlineRequestError ? failure.info : describeApiFailure(500, null);
+          failure instanceof OnlineRequestError ? failure.info : describeApiFailure(500, null, t);
         setCheckError(info.message);
       }
     })();
     return () => controller.abort();
-  }, [endpoint, number]);
+  }, [endpoint, number, t]);
 
   const view = useMemo(
     () =>
@@ -110,6 +111,7 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
     try {
       const response = await fetchJsonWithRetry(endpoint, {
         body: JSON.stringify({ number, method, confirmed: true }),
+        t,
       });
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;

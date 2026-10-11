@@ -9,6 +9,7 @@ import {
 } from "@/lib/audit-export";
 import { auth } from "@/lib/auth";
 import { getDataStores } from "@/lib/data-stores";
+import { getTranslator } from "@/lib/i18n/server";
 import { latestPerIdempotencyKey } from "@/lib/operation-audit";
 
 // 审计日志导出：GET /api/account/audit/export?format=csv|json
@@ -21,6 +22,7 @@ async function handleGET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const { t } = await getTranslator();
   const format = parseAuditExportFormat(new URL(request.url).searchParams.get("format"));
 
   // 预取足够多的原始记录（started + 终态分开写），按幂等键收敛成「每次操作一条」再截断上限
@@ -30,7 +32,7 @@ async function handleGET(request: Request) {
   });
   const operations = latestPerIdempotencyKey(rows).slice(0, AUDIT_EXPORT_MAX_OPERATIONS);
 
-  const { body, contentType, filename } = buildAuditExport(operations, { format });
+  const { body, contentType, filename } = buildAuditExport(operations, { format, t });
   // CSV 前置 BOM：让 Excel 等工具按 UTF-8 识别中文列名与内容
   const payload = format === "csv" ? `\uFEFF${body}` : body;
 

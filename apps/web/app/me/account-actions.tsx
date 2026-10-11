@@ -10,6 +10,7 @@ import {
 } from "@/lib/account-ops";
 import { fetchJsonWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
+import { useTranslator } from "@/lib/i18n/client";
 import { confirmationView } from "@/lib/operations";
 
 import { ConfirmCard } from "../repos/[owner]/[name]/confirm-card";
@@ -35,16 +36,17 @@ export function AccountActions({ auditRecords, signOutAction }: AccountActionsPr
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const { t } = useTranslator();
 
   const view = useMemo(() => {
     if (panel === "revoke") {
-      return confirmationView(createRevokeAuthorizationDescriptor());
+      return confirmationView(createRevokeAuthorizationDescriptor(t), t);
     }
     if (panel === "purge") {
-      return confirmationView(createPurgeAccountDataDescriptor({ auditRecords }));
+      return confirmationView(createPurgeAccountDataDescriptor({ auditRecords }, t), t);
     }
     return null;
-  }, [auditRecords, panel]);
+  }, [auditRecords, panel, t]);
 
   const open = useCallback((next: PanelKind) => {
     setPanel(next);
@@ -67,31 +69,27 @@ export function AccountActions({ auditRecords, signOutAction }: AccountActionsPr
         const data = (await response.json().catch(() => ({}))) as { error?: string };
         setError(
           current === "purge"
-            ? describePurgeDataFailure(response.status, data.error)
-            : describeRevokeAuthorizationFailure(response.status, data.error),
+            ? describePurgeDataFailure(response.status, data.error, t)
+            : describeRevokeAuthorizationFailure(response.status, data.error, t),
         );
         return;
       }
       setPanel(null);
-      setDone(
-        current === "purge"
-          ? "已清除本应用内的账号数据：审计、缓存与账号记录均已删除，登录会话已结束。"
-          : "已撤销 GitHub 授权：令牌已失效、本地密文已删除，登录会话已结束。",
-      );
+      setDone(current === "purge" ? t("me.donePurge") : t("me.doneRevoke"));
     } catch (failure) {
       const info =
-        failure instanceof OnlineRequestError ? failure.info : describeApiFailure(500, null);
+        failure instanceof OnlineRequestError ? failure.info : describeApiFailure(500, null, t);
       setError(info.message);
     } finally {
       setPending(false);
     }
-  }, [panel, pending]);
+  }, [panel, pending, t]);
 
   return (
     <section className="mt-8 border-t border-black/[.08] pt-6 dark:border-white/[.145]">
-      <h2 className="text-sm font-semibold text-black dark:text-zinc-50">危险操作</h2>
+      <h2 className="text-sm font-semibold text-black dark:text-zinc-50">{t("me.dangerTitle")}</h2>
       <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-        两项操作都需要二次确认；执行后当前登录会话立即结束。
+        {t("me.dangerBody")}
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -101,7 +99,7 @@ export function AccountActions({ auditRecords, signOutAction }: AccountActionsPr
           disabled={pending}
           className={DANGER_BUTTON}
         >
-          撤销 GitHub 授权
+          {t("me.revoke")}
         </button>
         <button
           type="button"
@@ -109,7 +107,7 @@ export function AccountActions({ auditRecords, signOutAction }: AccountActionsPr
           disabled={pending}
           className={DANGER_BUTTON}
         >
-          清除我的数据
+          {t("me.purge")}
         </button>
       </div>
 
@@ -140,7 +138,7 @@ export function AccountActions({ auditRecords, signOutAction }: AccountActionsPr
               onClick={() => void signOutAction()}
               className="h-8 rounded-full border border-green-400 px-4 text-xs font-medium transition-colors hover:bg-green-100 dark:border-green-600 dark:hover:bg-green-900"
             >
-              退出并返回首页
+              {t("me.signOutHome")}
             </button>
           </div>
         </div>

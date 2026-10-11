@@ -90,7 +90,7 @@ export function DeleteBranchPanel({
         const url = `${endpoint}?branch=${encodeURIComponent(branch)}&current=${encodeURIComponent(
           currentBranch ?? "",
         )}`;
-        const response = await fetchWithRetry(url, { signal: controller.signal });
+        const response = await fetchWithRetry(url, { signal: controller.signal, t });
         const data = (await response.json()) as DeleteCheckResponse;
         if (!controller.signal.aborted) {
           setCheck({ branch, data });
@@ -100,12 +100,12 @@ export function DeleteBranchPanel({
           return;
         }
         const info =
-          failure instanceof OnlineRequestError ? failure.info : describeApiFailure(500, null);
+          failure instanceof OnlineRequestError ? failure.info : describeApiFailure(500, null, t);
         setCheck({ branch, error: info.message });
       }
     })();
     return () => controller.abort();
-  }, [branch, currentBranch, endpoint]);
+  }, [branch, currentBranch, endpoint, t]);
 
   // 只采用与当前所选分支匹配的预检结果；不匹配时视为仍在检查
   const active = check?.branch === branch ? check : null;
@@ -134,6 +134,7 @@ export function DeleteBranchPanel({
           sha: headSha ?? undefined,
           confirmed: true,
         }),
+        t,
       });
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;

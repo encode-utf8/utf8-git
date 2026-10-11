@@ -178,7 +178,7 @@ export default async function ReposPage() {
       );
     }
     if (error instanceof GitHubNetworkError || error instanceof GitHubTimeoutError) {
-      const info = describeGithubError(error);
+      const info = describeGithubError(error, t);
       return (
         <PageShell>
           <Notice title={info.title}>

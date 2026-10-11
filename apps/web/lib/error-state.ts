@@ -15,6 +15,7 @@ import {
   GitHubTimeoutError,
   GitHubUnauthorizedError,
 } from "./github-errors";
+import { sourceTranslate, type Translate } from "./i18n/translate";
 
 // 在线状态错误类别
 export type OnlineErrorKind =
@@ -59,7 +60,7 @@ export function retryDelayMs(attempt: number, baseDelayMs = 400, maxDelayMs = 40
 }
 
 // ISO 时间 → 「YYYY-MM-DD HH:mm（UTC）」
-export function formatResetAt(iso: string | null): string | null {
+export function formatResetAt(iso: string | null, t: Translate = sourceTranslate): string | null {
   if (!iso) {
     return null;
   }
@@ -67,7 +68,7 @@ export function formatResetAt(iso: string | null): string | null {
   if (!Number.isFinite(time)) {
     return null;
   }
-  return `${new Date(time).toISOString().slice(0, 16).replace("T", " ")}（UTC）`;
+  return `${new Date(time).toISOString().slice(0, 16).replace("T", " ")}${t("common.utcSuffix")}`;
 }
 
 // 中止类错误（超时 / 主动取消）：不视为网络失败
@@ -83,6 +84,7 @@ export function isAbortError(error: unknown): boolean {
 export function describeKind(
   kind: OnlineErrorKind,
   options: { resetAt?: string | null; status?: number | null } = {},
+  t: Translate = sourceTranslate,
 ): OnlineErrorInfo {
   const resetAt = options.resetAt ?? null;
   const status = options.status ?? null;
@@ -99,81 +101,90 @@ export function describeKind(
     case "offline":
       return info({
         kind,
-        title: "网络已断开",
-        message: "当前设备未联网，无法连接 GitHub。请检查网络后重试。",
-        action: "重试",
+        title: t("errors.offline.title"),
+        message: t("errors.offline.message"),
+        action: t("errors.offline.action"),
       });
     case "network":
       return info({
         kind,
-        title: "无法连接 GitHub",
-        message: "请求未能到达 GitHub（可能是网络中断、代理或 DNS 问题）。请稍后重试。",
-        action: "重试",
+        title: t("errors.network.title"),
+        message: t("errors.network.message"),
+        action: t("errors.network.action"),
       });
     case "timeout":
       return info({
         kind,
-        title: "请求超时",
-        message: "GitHub 在预期时间内没有响应，可能是网络缓慢或服务繁忙。请重试。",
-        action: "重试",
+        title: t("errors.timeout.title"),
+        message: t("errors.timeout.message"),
+        action: t("errors.timeout.action"),
       });
     case "rate_limited": {
-      const when = formatResetAt(resetAt);
+      const when = formatResetAt(resetAt, t);
       return info({
         kind,
-        title: "GitHub API 访问频率超限",
+        title: t("errors.rateLimited.title"),
         message: when
-          ? `请求次数暂时超出 GitHub 配额，预计 ${when} 恢复。当前展示的是缓存数据（如有），可在恢复后重试。`
-          : "请求次数暂时超出 GitHub 配额，且暂无可用的缓存数据。请稍后重试。",
-        action: "重试",
+          ? t("errors.rateLimited.messageWithReset", { time: when })
+          : t("errors.rateLimited.message"),
+        action: t("errors.rateLimited.action"),
       });
     }
     case "unauthorized":
       return info({
         kind,
-        title: "GitHub 授权已失效",
-        message: "令牌可能已被撤销或过期，重新授权后即可继续。",
-        action: "重新授权",
+        title: t("errors.unauthorized.title"),
+        message: t("errors.unauthorized.message"),
+        action: t("errors.unauthorized.action"),
       });
     case "forbidden":
       return info({
         kind,
-        title: "访问被 GitHub 拒绝（403）",
-        message:
-          "可能原因：组织开启了 SAML SSO 且本应用尚未获批，或当前授权权限不足。请重新授权或前往 GitHub 处理。",
-        action: "重新授权",
+        title: t("errors.forbidden.title"),
+        message: t("errors.forbidden.message"),
+        action: t("errors.forbidden.action"),
       });
     case "not_found":
       return info({
         kind,
-        title: "资源不存在或无权访问",
-        message: "目标可能已被删除、改名，或当前授权不包含该私有资源。",
-        action: "返回列表",
+        title: t("errors.notFound.title"),
+        message: t("errors.notFound.message"),
+        action: t("errors.notFound.action"),
       });
     case "cursor_expired":
       return info({
         kind,
-        title: "分页数据已过期",
-        message: "服务端分页游标已失效，请刷新页面后从第一页重新加载。",
-        action: "刷新页面",
+        title: t("errors.cursorExpired.title"),
+        message: t("errors.cursorExpired.message"),
+        action: t("errors.cursorExpired.action"),
       });
     default:
       return info({
         kind: "server_error",
-        title: "GitHub 服务暂时不可用",
-        message: `GitHub 返回了服务端错误${status ? `（${status}）` : ""}，请稍后重试。`,
-        action: "重试",
+        title: t("errors.serverError.title"),
+        message: status
+          ? t("errors.serverError.messageWithStatus", { status })
+          : t("errors.serverError.message"),
+        action: t("errors.serverError.action"),
       });
   }
 }
 
 // 服务端：把 GitHub 错误类翻成统一呈现
-export function describeGithubError(error: unknown): OnlineErrorInfo {
+export function describeGithubError(
+  error: unknown,
+  t: Translate = sourceTranslate,
+): OnlineErrorInfo {
   const kind = classifyGithubError(error);
-  return describeKind(kind, {
-    resetAt: error instanceof GitHubRateLimitError ? (error.resetAt?.toISOString() ?? null) : null,
-    status: error instanceof GitHubApiError ? error.status : null,
-  });
+  return describeKind(
+    kind,
+    {
+      resetAt:
+        error instanceof GitHubRateLimitError ? (error.resetAt?.toISOString() ?? null) : null,
+      status: error instanceof GitHubApiError ? error.status : null,
+    },
+    t,
+  );
 }
 
 export function classifyGithubError(error: unknown): OnlineErrorKind {
@@ -248,22 +259,27 @@ const ERROR_CODE_KINDS: Readonly<Record<string, OnlineErrorKind>> = {
 export function describeApiFailure(
   status: number,
   payload: { error?: unknown; resetAt?: unknown } | null = null,
+  t: Translate = sourceTranslate,
 ): OnlineErrorInfo {
   const code = typeof payload?.error === "string" ? payload.error : null;
   const resetAt = typeof payload?.resetAt === "string" ? payload.resetAt : null;
   const kind = (code ? ERROR_CODE_KINDS[code] : undefined) ?? kindFromStatus(status);
-  return describeKind(kind, { resetAt, status });
+  return describeKind(kind, { resetAt, status }, t);
 }
 
 // 客户端：把 fetch 抛出的异常（断网 / 中止 / 网络失败）翻成统一呈现
-export function describeFetchRejection(error: unknown, online: boolean): OnlineErrorInfo {
+export function describeFetchRejection(
+  error: unknown,
+  online: boolean,
+  t: Translate = sourceTranslate,
+): OnlineErrorInfo {
   if (!online) {
-    return describeKind("offline");
+    return describeKind("offline", {}, t);
   }
   if (isAbortError(error)) {
-    return describeKind("timeout");
+    return describeKind("timeout", {}, t);
   }
-  return describeKind("network");
+  return describeKind("network", {}, t);
 }
 
 // 客户端请求失败的结构化错误：组件据此渲染文案与重试按钮

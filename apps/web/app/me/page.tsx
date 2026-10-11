@@ -7,6 +7,7 @@ import { AccountActions } from "./account-actions";
 import { auth, signOut } from "@/lib/auth";
 import { formatUtcDateTime } from "@/lib/commit-format";
 import { getDataStores } from "@/lib/data-stores";
+import { getTranslator } from "@/lib/i18n/server";
 import { getPrismaClient } from "@/lib/prisma";
 
 const DOWNLOAD_LINK =
@@ -35,6 +36,7 @@ export default async function MePage() {
     : null;
   // 「清除我的数据」的影响预览要说明会删掉多少条审计记录
   const auditRecords = await getDataStores().operationAudit.count({ actor: userId });
+  const { t } = await getTranslator();
 
   async function logout() {
     "use server";
@@ -45,25 +47,27 @@ export default async function MePage() {
     <div className="flex flex-1 items-center justify-center bg-zinc-50 px-6 py-16 font-sans dark:bg-black">
       <main className="w-full max-w-xl rounded-2xl border border-black/[.08] bg-white p-8 shadow-sm dark:border-white/[.145] dark:bg-zinc-950">
         <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
-          我的账号
+          {t("me.title")}
         </h1>
 
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          前往{" "}
+          {t("me.toReposBefore")}{" "}
           <Link
             href="/repos"
             className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
           >
-            我的仓库
+            {t("me.toReposLink")}
           </Link>{" "}
-          查看仓库列表。
+          {t("me.toReposAfter")}
         </p>
 
         <div className="mt-6 flex items-center gap-4">
           {user.image ? (
             <Image
               src={user.image}
-              alt={`${user.name ?? user.githubLogin ?? "GitHub 用户"} 的头像`}
+              alt={t("me.avatarAlt", {
+                name: user.name ?? user.githubLogin ?? t("me.githubUser"),
+              })}
               width={64}
               height={64}
               className="h-16 w-16 rounded-full"
@@ -75,7 +79,7 @@ export default async function MePage() {
           )}
           <div>
             <p className="text-lg font-medium text-black dark:text-zinc-50">
-              {user.name ?? "未设置昵称"}
+              {user.name ?? t("me.noNickname")}
             </p>
             {user.githubLogin ? (
               <Link
@@ -95,49 +99,55 @@ export default async function MePage() {
 
         <dl className="mt-8 space-y-3 text-sm">
           <div className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 dark:bg-white/[.06]">
-            <dt className="text-zinc-500 dark:text-zinc-400">会话策略</dt>
-            <dd className="text-zinc-800 dark:text-zinc-200">数据库会话（服务端可撤销）</dd>
+            <dt className="text-zinc-500 dark:text-zinc-400">{t("me.sessionPolicy")}</dt>
+            <dd className="text-zinc-800 dark:text-zinc-200">{t("me.sessionPolicyValue")}</dd>
           </div>
           <div className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 dark:bg-white/[.06]">
-            <dt className="text-zinc-500 dark:text-zinc-400">授权范围</dt>
+            <dt className="text-zinc-500 dark:text-zinc-400">{t("me.scope")}</dt>
             <dd className="font-mono text-xs text-zinc-800 dark:text-zinc-200">
               {account?.scope ?? "read:user repo"}
             </dd>
           </div>
           <div className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 dark:bg-white/[.06]">
-            <dt className="text-zinc-500 dark:text-zinc-400">令牌有效期至</dt>
+            <dt className="text-zinc-500 dark:text-zinc-400">{t("me.tokenExpires")}</dt>
             <dd className="text-zinc-800 dark:text-zinc-200">
-              {tokenExpiresAt ? `${tokenExpiresAt}（UTC）` : "当前授权未设置过期时间"}
+              {tokenExpiresAt
+                ? `${tokenExpiresAt}${t("common.utcSuffix")}`
+                : t("me.tokenNeverExpires")}
             </dd>
           </div>
           <div className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 dark:bg-white/[.06]">
-            <dt className="text-zinc-500 dark:text-zinc-400">写操作审计</dt>
-            <dd className="text-zinc-800 dark:text-zinc-200">{auditRecords} 条记录</dd>
+            <dt className="text-zinc-500 dark:text-zinc-400">{t("me.audit")}</dt>
+            <dd className="text-zinc-800 dark:text-zinc-200">
+              {t("me.auditCount", { count: auditRecords })}
+            </dd>
           </div>
         </dl>
 
         <p className="mt-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-          权限用途与数据处理的完整说明见{" "}
+          {t("me.permissionsNoteBefore")}{" "}
           <Link
             href="/permissions"
             className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-100"
           >
-            授权说明
+            {t("me.permissionsNoteLink")}
           </Link>
-          。
+          {t("me.permissionsNoteAfter")}
         </p>
 
         <section className="mt-8 border-t border-black/[.08] pt-6 dark:border-white/[.145]">
-          <h2 className="text-sm font-semibold text-black dark:text-zinc-50">导出操作审计</h2>
+          <h2 className="text-sm font-semibold text-black dark:text-zinc-50">
+            {t("me.exportTitle")}
+          </h2>
           <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-            把写操作审计导出为 CSV / JSON 留存，内容与「操作历史」页一致。
+            {t("me.exportBody")}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <a href="/api/account/audit/export?format=csv" className={DOWNLOAD_LINK}>
-              下载 CSV
+              {t("me.exportCsv")}
             </a>
             <a href="/api/account/audit/export?format=json" className={DOWNLOAD_LINK}>
-              下载 JSON
+              {t("me.exportJson")}
             </a>
           </div>
         </section>
@@ -151,7 +161,7 @@ export default async function MePage() {
             type="submit"
             className="flex h-10 w-full items-center justify-center rounded-full border border-black/[.08] px-5 text-sm font-medium text-black transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-50 dark:hover:bg-white/[.08]"
           >
-            退出登录
+            {t("me.signOut")}
           </button>
         </form>
       </main>

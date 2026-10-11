@@ -360,6 +360,7 @@ export function TimelineView({
         `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/operations/create-branch`,
         {
           body: JSON.stringify({ branch: trimmed, from: branchStart.oid, confirmed: true }),
+          t,
         },
       );
       const data = (await response.json().catch(() => ({}))) as { error?: string; branch?: string };
@@ -486,13 +487,15 @@ export function TimelineView({
     try {
       const response = await fetchWithRetry(
         `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/timeline?${query.toString()}`,
+        { t },
       );
       const data = (await response.json()) as TimelinePageResponse;
       setCommits((previous) => mergeCommits(previous, data.commits));
       setHasNextPage(data.pageInfo.hasNextPage);
       setPage(nextPage);
     } catch (error) {
-      const info = error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null);
+      const info =
+        error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null, t);
       setLoadError(info);
       // 游标过期无法在同一页继续翻页，停掉自动加载并提示刷新
       if (info.kind === "cursor_expired") {
@@ -501,7 +504,7 @@ export function TimelineView({
     } finally {
       setLoading(false);
     }
-  }, [branchParam, hasNextPage, loading, name, owner, page]);
+  }, [branchParam, hasNextPage, loading, name, owner, page, t]);
 
   useEffect(() => {
     // 存在错误时暂停自动翻页，等待用户手动重试，避免对限流 / 故障反复冲击
@@ -531,6 +534,7 @@ export function TimelineView({
         }
         const response = await fetchWithRetry(
           `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/timeline?${query.toString()}`,
+          { t },
         );
         const data = (await response.json()) as TimelinePageResponse;
         setCommits(data.commits);
@@ -542,13 +546,13 @@ export function TimelineView({
         containerRef.current?.scrollTo({ top: 0 });
       } catch (error) {
         setLoadError(
-          error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null),
+          error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null, t),
         );
       } finally {
         setLoading(false);
       }
     },
-    [loading, name, owner],
+    [loading, name, owner, t],
   );
 
   return (

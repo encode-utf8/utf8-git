@@ -65,7 +65,7 @@ export function RestoreBranchPanel({
     const controller = new AbortController();
     void (async () => {
       try {
-        const response = await fetchWithRetry(endpoint, { signal: controller.signal });
+        const response = await fetchWithRetry(endpoint, { signal: controller.signal, t });
         const data = (await response.json()) as RestoreListResponse;
         if (!controller.signal.aborted) {
           setCandidates(Array.isArray(data.candidates) ? data.candidates : []);
@@ -75,12 +75,12 @@ export function RestoreBranchPanel({
           return;
         }
         const info =
-          failure instanceof OnlineRequestError ? failure.info : describeApiFailure(500, null);
+          failure instanceof OnlineRequestError ? failure.info : describeApiFailure(500, null, t);
         setListError(info.message);
       }
     })();
     return () => controller.abort();
-  }, [endpoint]);
+  }, [endpoint, t]);
 
   // 默认选中最新一条（审计最新优先），减少一次点击
   const selected = useMemo(() => {
@@ -134,6 +134,7 @@ export function RestoreBranchPanel({
     try {
       const response = await fetchJsonWithRetry(endpoint, {
         body: JSON.stringify({ idempotencyKey: selected.idempotencyKey, confirmed: true }),
+        t,
       });
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;

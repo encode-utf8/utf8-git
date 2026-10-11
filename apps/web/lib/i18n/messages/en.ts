@@ -32,6 +32,63 @@ export const en: Messages = {
     before: "You are offline, so GitHub cannot be reached. Check your connection and",
     after: ".",
   },
+  errors: {
+    offline: {
+      title: "You are offline",
+      message:
+        "This device has no connection, so GitHub cannot be reached. Check the network and retry.",
+      action: "Retry",
+    },
+    network: {
+      title: "Cannot reach GitHub",
+      message:
+        "The request never reached GitHub (a network break, proxy or DNS issue). Please retry later.",
+      action: "Retry",
+    },
+    timeout: {
+      title: "Request timed out",
+      message:
+        "GitHub did not respond in time; the network may be slow or the service busy. Please retry.",
+      action: "Retry",
+    },
+    rateLimited: {
+      title: "GitHub API rate limit exceeded",
+      messageWithReset:
+        "GitHub's request quota is temporarily exhausted, expected to recover at {time}. Cached data (if any) is shown; retry once it recovers.",
+      message:
+        "GitHub's request quota is temporarily exhausted and no cached data is available. Please retry later.",
+      action: "Retry",
+    },
+    unauthorized: {
+      title: "GitHub authorization expired",
+      message: "The token may have been revoked or expired. Reconnect to continue.",
+      action: "Reconnect",
+    },
+    forbidden: {
+      title: "Access denied by GitHub (403)",
+      message:
+        "Possible causes: the organization uses SAML SSO without approving this app, or the current authorization lacks the required scope. Reconnect or handle it on GitHub.",
+      action: "Reconnect",
+    },
+    notFound: {
+      title: "Resource missing or no access",
+      message:
+        "It may have been deleted or renamed, or the current authorization does not cover this private resource.",
+      action: "Back to list",
+    },
+    cursorExpired: {
+      title: "Pagination data expired",
+      message:
+        "The server-side pagination cursor is no longer valid. Refresh the page and load from page one.",
+      action: "Refresh page",
+    },
+    serverError: {
+      title: "GitHub is temporarily unavailable",
+      message: "GitHub returned a server error. Please retry later.",
+      messageWithStatus: "GitHub returned a server error ({status}). Please retry later.",
+      action: "Retry",
+    },
+  },
   scopes: {
     readUser: {
       title: "Read your public profile",
@@ -351,6 +408,55 @@ export const en: Messages = {
       succeeded: "Succeeded",
       failed: "Failed",
     },
+    history: {
+      title: "Operation history",
+      backToTimeline: "Back to timeline",
+      description:
+        "Lists only the write operations you started in this app ({count} per page, failures included); each entry comes with the equivalent Git / gh command and a result link. The git commands assume",
+      descriptionCode: "origin",
+      descriptionAfter:
+        "points at this repository; they are for reference and copying only — this app never runs them.",
+      statusLabel: "Status",
+      statusFilterLabel: "Filter by status",
+      filterAll: "All",
+      filterSucceeded: "Succeeded only",
+      filterFailed: "Failed only",
+      invalidRepo: "The repository path is invalid, so the operation history cannot be shown.",
+      loadFailedBefore:
+        "Operation history is temporarily unavailable: the server-side tables may not be ready. Retry later; if it keeps failing, check",
+      loadFailedLink: "deployment self-check",
+      loadFailedAfter: ".",
+      emptyFiltered: "No records on this page match the filters.",
+      backToAll: "Back to all records",
+      empty:
+        "No write operations yet. Create a branch, file an issue, merge a pull request or delete a branch on the timeline, and the audit record will show up here.",
+      failureReason: "Failure reason: {message}",
+      gitCommand: "Equivalent command",
+      paginationLabel: "Operation history pagination",
+      previousPage: "Previous",
+      nextPage: "Next",
+      pageNumber: "Page {page}",
+    },
+    link: {
+      viewBranch: "View branch on GitHub",
+      viewBranches: "View branch list",
+      viewIssue: "View issue #{number}",
+      viewIssuePlain: "View issue",
+      viewPull: "View pull request #{number}",
+      viewPullPlain: "View pull request",
+    },
+    export: {
+      time: "Time (UTC)",
+      repo: "Repository",
+      kind: "Operation",
+      status: "Status",
+      summary: "Summary",
+      error: "Failure reason",
+      command: "Equivalent command",
+      link: "Result link",
+      key: "Idempotency key",
+      payload: "Payload (JSON)",
+    },
     failure: {
       unauthorized: "The authorization is no longer valid. Sign in again and retry.",
       forbidden: "Insufficient permissions to complete this operation.",
@@ -450,6 +556,30 @@ export const en: Messages = {
       remainingHours: "about {hours} hours left",
       remainingMinutes: "about {minutes} minutes left",
     },
+    account: {
+      revokeSummary: "Revoke utf8-git's GitHub authorization",
+      revokeImpact1:
+        "Calls the GitHub API to revoke this app's access token; it stops working immediately",
+      revokeImpact2:
+        "Deletes the encrypted token stored by this app, plus the account's caches and GitHub quota snapshots",
+      revokeImpact3:
+        "Ends the current login session: signing in and authorizing again is required to continue",
+      revokeImpact4:
+        "Keeps existing write-operation audit records (use “Erase my data” to delete them all)",
+      purgeSummary: "Erase account data in utf8-git",
+      purgeImpact1:
+        "Deletes this app's account record, encrypted token and login session, and signs you out immediately",
+      purgeImpact2:
+        "Deletes your write-operation audit records ({records}) and all caches and quota snapshots for this account",
+      purgeImpact3:
+        "Best-effort revokes the access token with GitHub; local data is erased even if revocation fails",
+      purgeImpact4:
+        "Does not affect repositories, commits, issues or pull requests on GitHub (this app only reads and displays them)",
+      revokeConflict:
+        "GitHub refused the revocation. Retry later, or remove the authorization manually in GitHub Settings → Applications.",
+      purgeConflict:
+        "Data erasure did not complete. Retry later; if it keeps failing, file an issue in the repository.",
+    },
     descriptor: {
       createBranch: {
         summary: "Create branch {branch} in {repo}",
@@ -492,6 +622,40 @@ export const en: Messages = {
           "The restored branch does not inherit the previous protection rules; re-enable them in the GitHub repository settings if needed",
       },
     },
+  },
+  me: {
+    title: "My account",
+    toReposBefore: "Go to",
+    toReposLink: "My repositories",
+    toReposAfter: "to see the repository list.",
+    avatarAlt: "Avatar of {name}",
+    githubUser: "GitHub user",
+    noNickname: "No display name",
+    sessionPolicy: "Session strategy",
+    sessionPolicyValue: "Database session (revocable server-side)",
+    scope: "Authorized scopes",
+    tokenExpires: "Token expires at",
+    tokenNeverExpires: "The current authorization has no expiry",
+    audit: "Write-operation audit",
+    auditCount: "{count} records",
+    permissionsNoteBefore: "Read the full notes on scopes and data handling in",
+    permissionsNoteLink: "Authorization notes",
+    permissionsNoteAfter: ".",
+    exportTitle: "Export operation audit",
+    exportBody:
+      "Download the write-operation audit as CSV / JSON; the content matches the “Operation history” page.",
+    exportCsv: "Download CSV",
+    exportJson: "Download JSON",
+    signOut: "Sign out",
+    dangerTitle: "Dangerous actions",
+    dangerBody: "Both actions need confirmation; the current session ends as soon as one runs.",
+    revoke: "Revoke GitHub authorization",
+    purge: "Erase my data",
+    signOutHome: "Sign out and go home",
+    donePurge:
+      "Account data erased from this app: audit records, caches and the account record are gone, and the session has ended.",
+    doneRevoke:
+      "GitHub authorization revoked: the token is invalid, the local ciphertext is deleted, and the session has ended.",
   },
   permissions: {
     metaTitle: "Authorization notes · utf8-git",

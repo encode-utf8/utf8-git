@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { formatUtcDateTime } from "@/lib/commit-format";
 import { getDataStores } from "@/lib/data-stores";
 import { operationGitCommand, operationResultLink } from "@/lib/git-commands";
+import { getTranslator } from "@/lib/i18n/server";
 import { reportError } from "@/lib/observability";
 import {
   operationKindLabel,
@@ -19,10 +20,11 @@ const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 // 每页条数按「操作条数」计（同一次操作在审计里是 started + 终态两条记录）
 const PAGE_SIZE = 20;
 
+// 状态筛选：label 取自消息目录，文案随界面语言切换
 const STATUS_FILTERS = [
-  { value: "all", label: "全部", status: undefined },
-  { value: "succeeded", label: "仅成功", status: "succeeded" },
-  { value: "failed", label: "仅失败", status: "failed" },
+  { value: "all", labelKey: "ops.history.filterAll", status: undefined },
+  { value: "succeeded", labelKey: "ops.history.filterSucceeded", status: "succeeded" },
+  { value: "failed", labelKey: "ops.history.filterFailed", status: "failed" },
 ] as const;
 
 type HistoryFilter = (typeof STATUS_FILTERS)[number]["value"];
@@ -83,6 +85,7 @@ export default async function RepoOperationsPage({
 }) {
   const { owner, name } = await params;
   const search = await searchParams;
+  const { t } = await getTranslator();
 
   const session = await auth();
   const userId = session?.user?.id;
@@ -122,7 +125,7 @@ export default async function RepoOperationsPage({
         <header>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             <Link href="/repos" className="underline-offset-4 hover:underline">
-              我的仓库
+              {t("repos.title")}
             </Link>
             <span className="mx-1">/</span>
             {validRepo ? (
@@ -134,24 +137,24 @@ export default async function RepoOperationsPage({
             )}
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
-            操作历史
+            {t("ops.history.title")}
           </h1>
           <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            只列出你在本应用里发起的写操作（每页 {PAGE_SIZE} 条，含失败记录）；每条附带 等价 Git /
-            gh 命令与结果链接。git 命令假设 <code>origin</code> 指向该仓库，命令仅供 参考与复制，
-            本应用不会执行它。
+            {t("ops.history.description", { count: PAGE_SIZE })}{" "}
+            <code>{t("ops.history.descriptionCode")}</code>
+            {t("ops.history.descriptionAfter")}
           </p>
           <div className="mt-3">
             <Link href={validRepo ? `/repos/${owner}/${name}` : "/repos"} className={PAGE_LINK}>
-              返回时间线
+              {t("ops.history.backToTimeline")}
             </Link>
           </div>
           {validRepo ? (
             <nav
-              aria-label="按状态筛选"
+              aria-label={t("ops.history.statusFilterLabel")}
               className="mt-4 flex flex-wrap items-center gap-2 text-zinc-500 dark:text-zinc-400"
             >
-              <span className="text-xs">状态</span>
+              <span className="text-xs">{t("ops.history.statusLabel")}</span>
               {STATUS_FILTERS.map((item) => (
                 <Link
                   key={item.value}
@@ -159,7 +162,7 @@ export default async function RepoOperationsPage({
                   aria-current={filter === item.value ? "page" : undefined}
                   className={`${FILTER_BASE} ${filter === item.value ? FILTER_ACTIVE : FILTER_IDLE}`}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               ))}
             </nav>
@@ -168,33 +171,30 @@ export default async function RepoOperationsPage({
 
         {!validRepo ? (
           <p className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
-            仓库地址不合法，无法展示操作历史。
+            {t("ops.history.invalidRepo")}
           </p>
         ) : loadFailed ? (
           <p className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
-            暂时无法读取操作历史：服务端数据表可能尚未就绪。请稍后重试；若持续失败，请查看{" "}
+            {t("ops.history.loadFailedBefore")}{" "}
             <Link href="/api/health" className="font-medium underline underline-offset-4">
-              部署自检
+              {t("ops.history.loadFailedLink")}
             </Link>
-            。
+            {t("ops.history.loadFailedAfter")}
           </p>
         ) : records.length === 0 ? (
           <p className="mt-6 rounded-xl border border-black/[.08] bg-white p-4 text-sm text-zinc-600 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-300">
             {page > 1 || filter !== "all" ? (
               <>
-                这一页没有符合条件的记录。
+                {t("ops.history.emptyFiltered")}
                 <Link
                   href={historyHref(owner, name, {})}
                   className="ml-1 font-medium underline underline-offset-4"
                 >
-                  回到全部记录
+                  {t("ops.history.backToAll")}
                 </Link>
               </>
             ) : (
-              <>
-                还没有写操作记录。在时间线上完成一次「新建分支 / 提交 Issue / 合并 PR /
-                删除分支」后，这里就会出现对应的审计记录。
-              </>
+              <>{t("ops.history.empty")}</>
             )}
           </p>
         ) : (
@@ -202,7 +202,13 @@ export default async function RepoOperationsPage({
             <ul className="mt-6 space-y-3">
               {records.map((record) => {
                 const command = operationGitCommand(record.kind, repo, record.payload);
-                const link = operationResultLink(record.kind, repo, record.payload, record.result);
+                const link = operationResultLink(
+                  record.kind,
+                  repo,
+                  record.payload,
+                  record.result,
+                  t,
+                );
                 return (
                   <li
                     key={`${record.idempotencyKey}@${record.recordedAt}`}
@@ -210,18 +216,19 @@ export default async function RepoOperationsPage({
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-zinc-300 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
-                        {operationKindLabel(record.kind)}
+                        {operationKindLabel(record.kind, t)}
                       </span>
                       <span
                         className={`rounded-full border px-2 py-0.5 text-xs ${statusClass(record.status)}`}
                       >
-                        {operationStatusLabel(record.status)}
+                        {operationStatusLabel(record.status, t)}
                       </span>
                       <time
                         dateTime={record.recordedAt}
                         className="text-xs text-zinc-500 dark:text-zinc-400"
                       >
-                        {formatUtcDateTime(record.recordedAt)}（UTC）
+                        {formatUtcDateTime(record.recordedAt)}
+                        {t("common.utcSuffix")}
                       </time>
                     </div>
 
@@ -230,13 +237,13 @@ export default async function RepoOperationsPage({
                     </p>
                     {record.error ? (
                       <p className="mt-1 text-xs text-red-700 dark:text-red-300">
-                        失败原因：{record.error}
+                        {t("ops.history.failureReason", { message: record.error })}
                       </p>
                     ) : null}
 
                     {command ? (
                       <div className="mt-2 flex flex-wrap items-baseline gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                        <span className="shrink-0">等价命令</span>
+                        <span className="shrink-0">{t("ops.history.gitCommand")}</span>
                         <code className="break-all rounded-lg border border-black/[.08] bg-zinc-50 px-2 py-1 font-mono text-[11px] dark:border-white/[.145] dark:bg-zinc-900">
                           {command}
                         </code>
@@ -260,7 +267,7 @@ export default async function RepoOperationsPage({
 
             {page > 1 || hasNext ? (
               <nav
-                aria-label="操作历史分页"
+                aria-label={t("ops.history.paginationLabel")}
                 className="mt-6 flex items-center justify-between gap-3"
               >
                 {page > 1 ? (
@@ -268,18 +275,20 @@ export default async function RepoOperationsPage({
                     href={historyHref(owner, name, { filter, page: page - 1 })}
                     className={PAGE_LINK}
                   >
-                    上一页
+                    {t("ops.history.previousPage")}
                   </Link>
                 ) : (
                   <span aria-hidden="true" />
                 )}
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">第 {page} 页</span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {t("ops.history.pageNumber", { page })}
+                </span>
                 {hasNext ? (
                   <Link
                     href={historyHref(owner, name, { filter, page: page + 1 })}
                     className={PAGE_LINK}
                   >
-                    下一页
+                    {t("ops.history.nextPage")}
                   </Link>
                 ) : (
                   <span aria-hidden="true" />

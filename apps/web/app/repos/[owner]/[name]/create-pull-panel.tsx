@@ -127,6 +127,7 @@ export function CreatePullPanel({
             draft,
             confirmed: true,
           }),
+          t,
         },
       );
       const data = (await response.json().catch(() => ({}))) as {

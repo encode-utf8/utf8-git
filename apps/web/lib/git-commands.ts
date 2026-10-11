@@ -1,6 +1,7 @@
 // M3-7 操作历史：把审计记录翻译成「等价 Git / gh 命令」与结果链接（纯逻辑，无 IO）。
 // 命令仅用于展示与复制，本应用不会去执行它；git 命令统一假设 origin 指向该仓库。
 
+import { sourceTranslate, type Translate } from "./i18n/translate";
 import type { OperationKind } from "./operations";
 
 export type ResultLink = { href: string; label: string };
@@ -78,32 +79,46 @@ export function operationResultLink(
   repo: string,
   payload: OperationPayload,
   result: unknown,
+  t: Translate = sourceTranslate,
 ): ResultLink | null {
   switch (kind) {
     case "createBranch":
     case "restoreBranch":
       return payload.branch
-        ? { href: `https://github.com/${repo}/tree/${payload.branch}`, label: "在 GitHub 查看分支" }
+        ? {
+            href: `https://github.com/${repo}/tree/${payload.branch}`,
+            label: t("ops.link.viewBranch"),
+          }
         : null;
     case "createIssue": {
       const url = resultField(result, "url");
       const number = resultField(result, "number");
-      return url ? { href: url, label: number ? `查看 Issue #${number}` : "查看 Issue" } : null;
+      return url
+        ? {
+            href: url,
+            label: number ? t("ops.link.viewIssue", { number }) : t("ops.link.viewIssuePlain"),
+          }
+        : null;
     }
     case "createPullRequest": {
       const url = resultField(result, "url");
       const number = resultField(result, "number");
-      return url ? { href: url, label: number ? `查看 PR #${number}` : "查看 PR" } : null;
+      return url
+        ? {
+            href: url,
+            label: number ? t("ops.link.viewPull", { number }) : t("ops.link.viewPullPlain"),
+          }
+        : null;
     }
     case "mergePullRequest":
       return payload.number
         ? {
             href: `https://github.com/${repo}/pull/${payload.number}`,
-            label: `查看 PR #${payload.number}`,
+            label: t("ops.link.viewPull", { number: payload.number }),
           }
         : null;
     case "deleteBranch":
-      return { href: `https://github.com/${repo}/branches`, label: "查看分支列表" };
+      return { href: `https://github.com/${repo}/branches`, label: t("ops.link.viewBranches") };
     default:
       return null;
   }
