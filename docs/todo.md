@@ -109,7 +109,7 @@
 - [ ] TODO-244 可访问性审查（键盘可达、对比度）
 - [ ] TODO-245 依赖更新与安全扫描（Dependabot + audit）
 - [ ] TODO-246 服务端泳道缓存 / 增量布局（大仓库切换分支时避免 `computeLaneLayout` 全量重算；万级满并发布局约 120ms 的一次性成本可作缓存粒度参考）
-- [ ] TODO-247 已登录界面文案迁移到消息目录（仓库列表 / 时间线 / 提交详情 / 各操作面板 / 账号页与操作历史页，含 `lib/error-state.ts` 的错误与空状态文案）
+- [x] TODO-247 已登录界面文案迁移到消息目录（仓库列表 / 时间线 / 提交详情 / 各操作面板 / 账号页与操作历史页，含 `lib/error-state.ts` 与 `client-fetch` 的错误与空状态文案）：纯逻辑层加 `Translate = sourceTranslate` 末位可选参数，组件传当前语言、API 路由与单测不传；`ops.history` / `ops.link` / `ops.export` / `ops.account` / `errors.*` / `me.*` / `commitDetail.*` 等键补齐，`apps/web/app/**` 已无硬编码中文；英文路径暂无 E2E，时间格式未本地化）
 
 ### 3.6 文档与社区
 
