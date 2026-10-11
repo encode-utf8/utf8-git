@@ -11,6 +11,42 @@
 
 ---
 
+## 2026-10-11 · M4-3 国际化：自建轻量 i18n + 首批页面双语
+
+**目标**：把界面文案集中管理、支持中英切换（docs/requirements.md FR-5.3「中文优先，预留英文」）。先打通机制，再分批迁移文案。
+
+**完成内容**
+
+- 内核 `apps/web/lib/i18n/`：
+  - `config.ts`：语言清单（zh-CN / en）、默认语言、语言偏好 Cookie 名与 `resolveLocale`（Cookie 优先；否则解析 `Accept-Language` 的 q 值；都不匹配回退中文），纯函数。
+  - `messages/zh-CN.ts`：中文为源语言；`messages/en.ts` 用 `Messages`（即 `typeof zhCN`）约束，漏译 / 多译直接编译报错。
+  - `translate.ts`：点号路径查表 + `{name}` 插值 + 回退链（当前语言 → 中文 → 键名）；键名是推导出的联合类型，写错即类型错误。
+  - `server.ts`（`getLocale` / `getTranslator`）与 `client.tsx`（`LocaleProvider` / `useLocale` / `useTranslator`）两个入口。
+  - `actions.ts`：`setLocalePreference` Server Action —— 服务端写 Cookie，`secure` 按环境判定（浏览器端直接写 `document.cookie` 会被 React Compiler 的不可变性规则拦下）。
+- 切换入口 `app/locale-switcher.tsx`：右上角悬浮分段控件；调 Server Action 记住语言后 `router.refresh()`，由服务端按新语言重渲染。
+- 根布局：`<html lang>` 与 `generateMetadata()` 跟随语言，并包一层 `LocaleProvider`。
+- 首批迁移：根布局元信息、断网横幅、登录页、授权说明页；`lib/permissions.ts` 的 scope 文案改为消息键（`scopes.<key>.{title,purpose}`），登录页与说明页共用。
+- 测试：`config.test.ts`（偏好优先 / q 值排序 / `q=0` 与 `*` / 地区子标签 / 回退默认）、`translate.test.ts`（取词 / 插值 / 未知键回退）、`messages.test.ts`（两种语言叶子键完全一致、无空文案）；E2E 新增 `e2e/i18n.spec.ts`（默认中文 → 切 English → 切回），Playwright 固定 `locale: "zh-CN"`，避免断言随运行机器的 Accept-Language 漂移。
+- 本地验证（`next start` 实测）：`Accept-Language: en` → 英文、`Cookie: utf8-git-locale=zh-CN` 覆盖英文头 → 中文、无头 → 中文，`<html lang>` 同步。
+
+**关键决策**
+
+| 编号     | 决策                                               | 理由                                                                                 | 备选与否决原因                                                      |
+| -------- | -------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| ADR-0116 | 自建轻量 i18n，不引 next-intl 等依赖               | 只需两条语言、无复数 / 富文本 / 日期本地化诉求；自建零依赖、纯函数可测、键名类型安全 | next-intl：引入依赖与路由约定，当前收益不足                         |
+| ADR-0117 | 语言走 Cookie + Accept-Language，不做 URL 前缀路由 | 既有 URL 全部不变（E2E、分享链接、审计记录里的链接都稳定），改动面最小               | `/[locale]/...` 路由：URL 可分享 / 利于 SEO，但改动面与影响面都更大 |
+| ADR-0118 | 中文作为源语言，英文用类型约束保证键齐全           | `en: Messages` 漏译即编译失败，避免英文界面出现中文兜底或空文案                      | 运行时校验键齐全：问题要等到跑起来才暴露                            |
+
+**问题与风险**
+
+- 根布局读 Cookie，`/`、`/permissions` 由静态预渲染改为按请求动态渲染 —— 这是 Cookie 方案的主要代价。
+- 客户端 bundle 同时包含中英两份目录（`client.tsx` → `translate.ts` → 整个 `CATALOG`）；文案量变大后可按语言拆包。
+- 已登录界面仍是中文：英文用户进入 `/repos` 及其后页面会看到中文，迁移清单见 TODO-247。
+
+**下一步**
+
+- M4-4 可访问性审查（TODO-244）或 TODO-247 已登录界面文案迁移；性能方向仍有 TODO-246。
+
 ## 2026-10-11 · M4-2 泳道布局基准：1000 / 10000 节点 + 切片按行二分
 
 **目标**：给「大仓库时间线会不会卡」一个可复现的答案，并把万级规模纳入 CI 护栏。
