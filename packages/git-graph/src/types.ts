@@ -77,7 +77,10 @@ export interface LaneEdge {
 export interface LaneLayout {
   /** 按输入顺序排列的提交节点，下标即行号。 */
   nodes: LaneAssignment[];
-  /** 相邻行之间的连线段（含跨泳道斜线）。 */
+  /**
+   * 相邻行之间的连线段（含跨泳道斜线）。
+   * 不变式：按 `row` 升序排列 —— 窗口切片据此二分定位，无需扫描全量。
+   */
   segments: LaneSegment[];
   /** 提交到父提交的语义连线。 */
   edges: LaneEdge[];

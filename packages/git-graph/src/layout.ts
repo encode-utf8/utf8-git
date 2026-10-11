@@ -264,6 +264,18 @@ function clampRow(value: number, total: number): number {
   return Math.max(0, Math.min(Math.trunc(value), total));
 }
 
+/** 在按 `row` 升序排列的线段中二分出第一条第 `row >= target` 的线段下标（无则返回长度）。 */
+function firstSegmentAtOrAfter(segments: LaneSegment[], target: number): number {
+  let low = 0;
+  let high = segments.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (segments[middle]!.row < target) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
 /**
  * 从完整布局切出渲染窗口 `[start, end)`（虚拟滚动 / 窗口化）。
  *
@@ -272,6 +284,9 @@ function clampRow(value: number, total: number): number {
  *   窗口末行之外的行带落在视口外（`computeVirtualWindow` 已含 overscan），无需创建 SVG 元素；
  * - `laneCount` 取整体值，保证滚动时列宽稳定。
  *
+ * 依赖 `computeLaneLayout` 的不变式「segments 按 row 升序」：窗口内的线段是其中一段连续区间，
+ * 二分定位即可，避免每帧扫描全量线段（万级节点 / 满并发下这是切片成本的大头）。
+ *
  * 纯函数、无副作用，不修改入参。
  */
 export function sliceLaneLayout(layout: LaneLayout, start: number, end: number): LaneSlice {
@@ -279,14 +294,16 @@ export function sliceLaneLayout(layout: LaneLayout, start: number, end: number):
   const from = clampRow(start, total);
   const to = Math.max(from, clampRow(end, total));
 
+  const segmentsFrom = firstSegmentAtOrAfter(layout.segments, from);
+  const segmentsTo = firstSegmentAtOrAfter(layout.segments, to);
+
   return {
     start: from,
     end: to,
     laneCount: layout.laneCount,
     nodes: layout.nodes.slice(from, to),
-    segments: layout.segments.filter(
-      (segment) =>
-        segment.row >= from && segment.row < to && (segment.row + 1 < to || segment.truncated),
-    ),
+    segments: layout.segments
+      .slice(segmentsFrom, segmentsTo)
+      .filter((segment) => segment.row + 1 < to || segment.truncated),
   };
 }
