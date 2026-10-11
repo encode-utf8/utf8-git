@@ -309,7 +309,7 @@ for c in commits:
 | --- | --- | --- |
 | 单元 / 集成测试 | 泳道布局算法、数据层与 API 路由、缓存与降级、限频与幂等回放 | Vitest（内存后端 + 落库会话） |
 | E2E | mock 上游 + 落库会话：看时间线 → 建/删/恢复分支 → 授权与账号操作 | Playwright（CI 起 postgres service） |
-| 性能基准 | 大仓库时间线布局与渲染基准 | 独立脚本 `scripts/perf-validate.mjs` + `packages/git-graph` 的 perf 单测（M4 归口细化） |
+| 性能基准 | 大仓库时间线布局与渲染基准 | HTTP 侧 `scripts/perf-validate.mjs`；算法侧 `packages/git-graph/src/layout.bench.ts`（1000 / 10000 节点，`pnpm --filter @utf8-git/git-graph bench`）+ CI 护栏 `layout.perf.test.ts` |
 | 可观测性 | 结构化错误文案 + 写操作审计（`operation_audit`）；未接入外部错误上报 | — |
 
 ## 10. 技术风险与缓解

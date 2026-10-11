@@ -104,10 +104,11 @@
 ### 3.5 工程化
 
 - [x] TODO-241 可观测性（M4-1：`lib/redact.ts` 统一脱敏（连接串 / GitHub 令牌 / 敏感键名），`lib/health.ts` 的 `redactConnectionInfo` 改为复用；`lib/logger.ts` 一行一条 JSON 的结构化日志（`LOG_LEVEL` 控制级别，字段先脱敏再落盘，sink 抛错不影响主流程）；`lib/observability.ts` 提供请求关联 id（复用 `x-request-id` 或生成并随响应头回写）、`reportError`（结构化错误日志 + 可选 POST 到 `ERROR_REPORT_ENDPOINT`）与 `withObservability` 路由包裹器（记录 `route` / `method` / `path` / `status` / `durationMs`，抛错转 500 并上报一次，5xx 也上报）；`instrumentation.ts` 的 `onRequestError` 兜住服务端组件 / Server Action 的未捕获异常；12 个 API 路由（除 Auth.js `[...nextauth]`）统一接入）
-- [ ] TODO-242 性能基准测试（1000/10000 节点）
+- [x] TODO-242 性能基准测试（M4-2：`packages/git-graph/src/layout.bench.ts` 输出 min / median / p99 的 Markdown 表（`pnpm --filter @utf8-git/git-graph bench`），覆盖 1000 / 10000 节点的深链、默认并发与满并发；CI 护栏 `layout.perf.test.ts` 扩到万级。基准暴露「切片耗时与总线段数成正比」，改为按 `row` 二分定位窗口区间后，万级满并发切片 median 6.379ms → 0.028ms，并用「逐窗口与朴素过滤等价」单测固定该不变式。结果见 `docs/reports/tech-analysis/M4-2-layout-benchmark.md`）
 - [ ] TODO-243 国际化框架（zh-CN / en）
 - [ ] TODO-244 可访问性审查（键盘可达、对比度）
 - [ ] TODO-245 依赖更新与安全扫描（Dependabot + audit）
+- [ ] TODO-246 服务端泳道缓存 / 增量布局（大仓库切换分支时避免 `computeLaneLayout` 全量重算；万级满并发布局约 120ms 的一次性成本可作缓存粒度参考）
 
 ### 3.6 文档与社区
 
