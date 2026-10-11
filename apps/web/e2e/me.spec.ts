@@ -16,7 +16,7 @@ test("账号页展示已授权信息与危险操作入口", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "我的账号" })).toBeVisible();
   await expect(page.getByText("read:user repo")).toBeVisible();
   await expect(page.getByText("令牌有效期至")).toBeVisible();
-  await expect(page.getByText("写操作审计")).toBeVisible();
+  await expect(page.getByText("写操作审计", { exact: true })).toBeVisible();
 
   await expect(page.getByRole("heading", { name: "危险操作" })).toBeVisible();
   await expect(page.getByRole("button", { name: "撤销 GitHub 授权" })).toBeVisible();
