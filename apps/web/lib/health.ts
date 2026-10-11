@@ -4,7 +4,9 @@
 import { getPrismaClient } from "./prisma";
 import { resolveStoreBackend, type StoreBackend } from "./shared-store";
 
-// 生产库必须具备的表；缺表说明迁移未执行，或 DATABASE_URL 指向了错误的库
+// 生产库必须具备的表；缺表说明迁移未执行，或 DATABASE_URL 指向了错误的库。
+// 新增迁移后必须把新表同步进本清单，否则缺表不会在 /api/health 暴露
+// （曾漏 operation_audit：生产「操作历史」页 500，而自检仍判通过）。
 export const REQUIRED_TABLES = [
   "users",
   "accounts",
@@ -12,6 +14,7 @@ export const REQUIRED_TABLES = [
   "verification_tokens",
   "shared_cache_entries",
   "rate_limit_states",
+  "operation_audit",
 ] as const;
 
 // 必须存在的密钥类环境变量（只判断有无，不读出内容）

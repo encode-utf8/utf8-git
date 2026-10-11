@@ -8,6 +8,7 @@ import { operationGitCommand, operationResultLink } from "@/lib/git-commands";
 import {
   OPERATION_KIND_LABEL,
   OPERATION_STATUS_LABEL,
+  type OperationAuditRecord,
   type OperationAuditStatus,
 } from "@/lib/operations";
 
@@ -94,15 +95,24 @@ export default async function RepoOperationsPage({
   const filter = parseFilter(search.status);
   const status = STATUS_FILTERS.find((item) => item.value === filter)?.status;
 
-  const records = validRepo
-    ? await getDataStores().operationAudit.listOperations({
+  // 读取审计表失败（例如生产库漏跑迁移、缺 operation_audit）时给出可读提示，
+  // 而不是整页 500；原始错误仍写入服务端日志（Vercel Runtime Logs）便于定位。
+  let records: OperationAuditRecord[] = [];
+  let loadFailed = false;
+  if (validRepo) {
+    try {
+      records = await getDataStores().operationAudit.listOperations({
         repo,
         actor: userId,
         status,
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
-      })
-    : [];
+      });
+    } catch (error) {
+      loadFailed = true;
+      console.error(`[operations] 读取操作历史失败 repo=${repo}`, error);
+    }
+  }
   const hasNext = records.length === PAGE_SIZE;
 
   return (
@@ -158,6 +168,14 @@ export default async function RepoOperationsPage({
         {!validRepo ? (
           <p className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
             仓库地址不合法，无法展示操作历史。
+          </p>
+        ) : loadFailed ? (
+          <p className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+            暂时无法读取操作历史：服务端数据表可能尚未就绪。请稍后重试；若持续失败，请查看{" "}
+            <Link href="/api/health" className="font-medium underline underline-offset-4">
+              部署自检
+            </Link>
+            。
           </p>
         ) : records.length === 0 ? (
           <p className="mt-6 rounded-xl border border-black/[.08] bg-white p-4 text-sm text-zinc-600 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-300">

@@ -29,6 +29,12 @@ function findCheck(report: HealthReport, name: string) {
   return report.checks.find((check) => check.name === name);
 }
 
+describe("REQUIRED_TABLES", () => {
+  it("覆盖 M3 审计表 operation_audit（曾漏列导致缺表不被自检发现）", () => {
+    expect(REQUIRED_TABLES).toContain("operation_audit");
+  });
+});
+
 describe("runHealthChecks", () => {
   it("生产配置齐全时整体通过", async () => {
     const report = await runHealthChecks({ env: makeEnv(), ...healthyDeps });
