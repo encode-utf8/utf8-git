@@ -18,6 +18,15 @@ export type SyntheticHistoryOptions = {
 
 const DEFAULT_CONCURRENT = 6;
 
+/** 生成确定性的「无分支深链」历史：`total` 个提交串成一条线（单泳道）。 */
+export function makeLinearHistory(total: number): CommitLike[] {
+  const count = positiveInt(total, 1);
+  return Array.from({ length: count }, (_, index) => ({
+    oid: `l${index}`,
+    parents: index + 1 < count ? [`l${index + 1}`] : [],
+  }));
+}
+
 function trunkOid(index: number): string {
   return `t${index}`;
 }
