@@ -9,6 +9,9 @@ import { formatUtcDateTime } from "@/lib/commit-format";
 import { getDataStores } from "@/lib/data-stores";
 import { getPrismaClient } from "@/lib/prisma";
 
+const DOWNLOAD_LINK =
+  "flex h-9 items-center rounded-full border border-black/[.08] px-4 text-xs font-medium text-zinc-800 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]";
+
 export default async function MePage() {
   const session = await auth();
   const userId = session?.user?.id;
@@ -123,6 +126,21 @@ export default async function MePage() {
           </Link>
           。
         </p>
+
+        <section className="mt-8 border-t border-black/[.08] pt-6 dark:border-white/[.145]">
+          <h2 className="text-sm font-semibold text-black dark:text-zinc-50">导出操作审计</h2>
+          <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+            把写操作审计导出为 CSV / JSON 留存，内容与「操作历史」页一致。
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a href="/api/account/audit/export?format=csv" className={DOWNLOAD_LINK}>
+              下载 CSV
+            </a>
+            <a href="/api/account/audit/export?format=json" className={DOWNLOAD_LINK}>
+              下载 JSON
+            </a>
+          </div>
+        </section>
 
         <div className="mt-4">
           <AccountActions auditRecords={auditRecords} signOutAction={logout} />

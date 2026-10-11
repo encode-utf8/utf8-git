@@ -95,6 +95,13 @@ export function isWithinReplayWindow(recordedAt: string, now: Date, windowMs: nu
   return now.getTime() - recorded <= windowMs;
 }
 
+/** 操作状态的中文名：操作历史页与审计导出共用同一份文案。 */
+export const OPERATION_STATUS_LABEL: Record<OperationAuditStatus, string> = {
+  started: "进行中",
+  succeeded: "成功",
+  failed: "失败",
+};
+
 /** 操作类型的中文名：确认卡片按钮、操作历史页共用同一份文案。 */
 export const OPERATION_KIND_LABEL: Record<OperationKind, string> = {
   createBranch: "创建分支",

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { expect, test } from "@playwright/test";
@@ -20,6 +21,29 @@ test("账号页展示已授权信息与危险操作入口", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "危险操作" })).toBeVisible();
   await expect(page.getByRole("button", { name: "撤销 GitHub 授权" })).toBeVisible();
   await expect(page.getByRole("button", { name: "清除我的数据" })).toBeVisible();
+});
+
+// TODO-233：审计日志导出（CSV 走真实下载，JSON 走同源请求校验结构）
+test("导出操作审计：CSV 可下载、JSON 结构完整", async ({ page }) => {
+  await page.goto("/me");
+  await expect(page.getByRole("heading", { name: "导出操作审计" })).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("link", { name: "下载 CSV" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^utf8-git-audit-\d{8}\.csv$/);
+  const csvPath = await download.path();
+  const csvText = await readFile(csvPath, "utf8");
+  expect(csvText).toContain("时间(UTC)");
+  expect(csvText).toContain("仓库,操作,状态");
+  expect(csvText).toContain("等价命令");
+
+  const response = await page.request.get("/api/account/audit/export?format=json");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toContain("application/json");
+  const bundle = (await response.json()) as { count: number; operations: unknown[] };
+  expect(bundle.count).toBe(bundle.operations.length);
 });
 
 test.describe("撤销 GitHub 授权", () => {

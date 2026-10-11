@@ -5,19 +5,17 @@ import { auth } from "@/lib/auth";
 import { formatUtcDateTime } from "@/lib/commit-format";
 import { getDataStores } from "@/lib/data-stores";
 import { operationGitCommand, operationResultLink } from "@/lib/git-commands";
-import { OPERATION_KIND_LABEL, type OperationAuditStatus } from "@/lib/operations";
+import {
+  OPERATION_KIND_LABEL,
+  OPERATION_STATUS_LABEL,
+  type OperationAuditStatus,
+} from "@/lib/operations";
 
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-_.]{0,98})$/;
 const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 
 // 每页条数按「操作条数」计（同一次操作在审计里是 started + 终态两条记录）
 const PAGE_SIZE = 20;
-
-const STATUS_LABEL: Record<OperationAuditStatus, string> = {
-  started: "进行中",
-  succeeded: "成功",
-  failed: "失败",
-};
 
 const STATUS_FILTERS = [
   { value: "all", label: "全部", status: undefined },
@@ -198,7 +196,7 @@ export default async function RepoOperationsPage({
                       <span
                         className={`rounded-full border px-2 py-0.5 text-xs ${statusClass(record.status)}`}
                       >
-                        {STATUS_LABEL[record.status]}
+                        {OPERATION_STATUS_LABEL[record.status]}
                       </span>
                       <time
                         dateTime={record.recordedAt}
