@@ -382,6 +382,41 @@ describe("sliceLaneLayout", () => {
     sliceLaneLayout(layout, 1, 3);
     expect(JSON.stringify(layout)).toBe(snapshot);
   });
+
+  it("segments 按 row 升序（切片二分定位依赖的不变式）", () => {
+    const layouts = [
+      computeLaneLayout(linear),
+      computeLaneLayout([
+        { oid: "M", parents: ["A", "B"] },
+        { oid: "A", parents: ["Base"] },
+        { oid: "B", parents: ["Base"] },
+        { oid: "Base", parents: [] },
+      ]),
+      computeLaneLayout(makeBranchyHistory({ branches: 12, commitsPerBranch: 7 })),
+      computeLaneLayout(makeBranchyHistory({ branches: 12, commitsPerBranch: 7, concurrent: 12 })),
+    ];
+    for (const layout of layouts) {
+      const rows = layout.segments.map((segment) => segment.row);
+      expect(rows).toEqual([...rows].sort((left, right) => left - right));
+    }
+  });
+
+  it("二分切片与朴素过滤在每个窗口上等价", () => {
+    const layout = computeLaneLayout(
+      makeBranchyHistory({ branches: 12, commitsPerBranch: 7, concurrent: 12 }),
+    );
+    const naive = (from: number, to: number) =>
+      layout.segments.filter(
+        (segment) =>
+          segment.row >= from && segment.row < to && (segment.row + 1 < to || segment.truncated),
+      );
+
+    for (let from = 0; from <= layout.nodes.length; from += 1) {
+      for (let to = from; to <= layout.nodes.length; to += 1) {
+        expect(sliceLaneLayout(layout, from, to).segments).toEqual(naive(from, to));
+      }
+    }
+  });
 });
 
 describe("makeBranchyHistory", () => {
