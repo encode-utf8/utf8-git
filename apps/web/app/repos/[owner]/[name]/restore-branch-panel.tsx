@@ -11,6 +11,7 @@ import {
 import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
 import type { ExplainMode } from "@/lib/glossary";
+import { useTranslator } from "@/lib/i18n/client";
 import { confirmationView } from "@/lib/operations";
 
 import { ConceptNote } from "./concept-note";
@@ -50,6 +51,7 @@ export function RestoreBranchPanel({
   onRestored,
   onCancel,
 }: RestoreBranchPanelProps) {
+  const { t } = useTranslator();
   const [candidates, setCandidates] = useState<RestoreCandidate[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -91,29 +93,36 @@ export function RestoreBranchPanel({
   const verdict = useMemo(
     () =>
       selected
-        ? evaluateBranchRestore({
-            branch: selected.branch,
-            sha: selected.sha,
-            recordedAt: selected.recordedAt,
-          })
+        ? evaluateBranchRestore(
+            {
+              branch: selected.branch,
+              sha: selected.sha,
+              recordedAt: selected.recordedAt,
+            },
+            t,
+          )
         : null,
-    [selected],
+    [selected, t],
   );
 
   const view = useMemo(
     () =>
       selected
         ? confirmationView(
-            createRestoreBranchDescriptor({
-              owner,
-              name,
-              branch: selected.branch,
-              sha: selected.sha,
-              source: selected.idempotencyKey,
-            }),
+            createRestoreBranchDescriptor(
+              {
+                owner,
+                name,
+                branch: selected.branch,
+                sha: selected.sha,
+                source: selected.idempotencyKey,
+              },
+              t,
+            ),
+            t,
           )
         : null,
-    [name, owner, selected],
+    [name, owner, selected, t],
   );
 
   const submit = useCallback(async () => {
@@ -131,16 +140,16 @@ export function RestoreBranchPanel({
         message?: string;
       };
       if (!response.ok) {
-        setError(data.message ?? describeRestoreBranchFailure(response.status, data.error));
+        setError(data.message ?? describeRestoreBranchFailure(response.status, data.error, t));
         return;
       }
-      onRestored(`已恢复分支 ${selected.branch}`);
+      onRestored(t("panels.restoreBranch.restored", { branch: selected.branch }));
     } catch {
-      setError("网络异常，未能恢复分支，请稍后重试。");
+      setError(t("panels.restoreBranch.networkError"));
     } finally {
       setPending(false);
     }
-  }, [endpoint, onRestored, pending, selected]);
+  }, [endpoint, onRestored, pending, selected, t]);
 
   if (listError) {
     return (
@@ -148,14 +157,14 @@ export function RestoreBranchPanel({
         role="alert"
         className={`${NOTICE_CLASS} border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-200`}
       >
-        <p>无法读取可恢复的删除记录：{listError}</p>
+        <p>{t("panels.restoreBranch.listError", { message: listError })}</p>
         <div className="mt-3 flex justify-end">
           <button
             type="button"
             onClick={onCancel}
             className="h-8 rounded-full border border-red-400 px-4 text-xs font-medium transition-colors hover:bg-red-100 dark:border-red-600 dark:hover:bg-red-900"
           >
-            关闭
+            {t("common.close")}
           </button>
         </div>
       </div>
@@ -167,7 +176,7 @@ export function RestoreBranchPanel({
       <p
         className={`${NOTICE_CLASS} border-black/[.08] bg-zinc-50 text-zinc-600 dark:border-white/[.145] dark:bg-zinc-900 dark:text-zinc-300`}
       >
-        正在读取可恢复的删除记录…
+        {t("panels.restoreBranch.loading")}
       </p>
     );
   }
@@ -177,18 +186,17 @@ export function RestoreBranchPanel({
       <div
         className={`${NOTICE_CLASS} border-black/[.08] bg-zinc-50 text-zinc-600 dark:border-white/[.145] dark:bg-zinc-900 dark:text-zinc-300`}
       >
-        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">暂无可恢复的分支</p>
-        <p className="mt-1">
-          只列出本应用在近 24 小时内成功删除、且保存了提交 SHA
-          的分支；用其他方式删除的分支无法在这里恢复。
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          {t("panels.restoreBranch.emptyTitle")}
         </p>
+        <p className="mt-1">{t("panels.restoreBranch.emptyBody")}</p>
         <div className="mt-3 flex justify-end">
           <button
             type="button"
             onClick={onCancel}
             className="h-8 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
           >
-            关闭
+            {t("common.close")}
           </button>
         </div>
       </div>
@@ -199,7 +207,9 @@ export function RestoreBranchPanel({
     <div className="rounded-xl border border-black/[.08] p-4 dark:border-white/[.145]">
       <ConceptNote id="branch" mode={mode} className="mb-3" />
       <fieldset>
-        <legend className="text-xs text-zinc-600 dark:text-zinc-300">选择要恢复的删除记录</legend>
+        <legend className="text-xs text-zinc-600 dark:text-zinc-300">
+          {t("panels.restoreBranch.legend")}
+        </legend>
         <div className="mt-2 space-y-1">
           {candidates.map((item) => (
             <label
@@ -218,7 +228,10 @@ export function RestoreBranchPanel({
                 className="h-4 w-4"
               />
               <span>
-                恢复 {item.branch}（{describeRestoreRemaining(item.recordedAt)}）
+                {t("panels.restoreBranch.candidate", {
+                  branch: item.branch,
+                  remaining: describeRestoreRemaining(item.recordedAt, undefined, t),
+                })}
               </span>
             </label>
           ))}
@@ -226,7 +239,7 @@ export function RestoreBranchPanel({
       </fieldset>
 
       <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-        恢复只重建分支引用、指向删除前的提交，不会恢复分支保护规则；也无法恢复用其他工具删除的分支。
+        {t("panels.restoreBranch.hint")}
       </p>
 
       <div className="mt-3">
@@ -243,14 +256,16 @@ export function RestoreBranchPanel({
             role="alert"
             className={`${NOTICE_CLASS} border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100`}
           >
-            <p className="text-sm font-semibold">不可恢复：{verdict?.reason}</p>
+            <p className="text-sm font-semibold">
+              {t("panels.restoreBranch.impossible", { reason: verdict?.reason ?? "" })}
+            </p>
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
                 onClick={onCancel}
                 className="h-8 rounded-full border border-amber-400 px-4 text-xs font-medium transition-colors hover:bg-amber-100 dark:border-amber-600 dark:hover:bg-amber-900"
               >
-                关闭
+                {t("common.close")}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getTranslator } from "@/lib/i18n/server";
 import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
@@ -115,6 +116,7 @@ async function handlePOST(
     return authorized.error;
   }
   const { userId, owner, name, token } = authorized;
+  const { t } = await getTranslator();
 
   let body: unknown;
   try {
@@ -145,31 +147,37 @@ async function handlePOST(
     source.status !== "succeeded"
   ) {
     return NextResponse.json(
-      { error: "restore_not_found", message: "找不到可恢复的删除记录，请刷新后重试。" },
+      { error: "restore_not_found", message: t("ops.restore.notFound") },
       { status: 404 },
     );
   }
 
   const { branch, sha } = readDeletePayload(source.payload);
-  const verdict = evaluateBranchRestore({
-    branch: branch ?? "",
-    sha,
-    recordedAt: source.recordedAt,
-  });
+  const verdict = evaluateBranchRestore(
+    {
+      branch: branch ?? "",
+      sha,
+      recordedAt: source.recordedAt,
+    },
+    t,
+  );
   if (!branch || !sha || !verdict.canRestore) {
     return NextResponse.json(
-      { error: "restore_unavailable", message: verdict.reason ?? "该删除记录无法恢复。" },
+      { error: "restore_unavailable", message: verdict.reason ?? t("ops.restore.unavailable") },
       { status: 409 },
     );
   }
 
-  const descriptor = createRestoreBranchDescriptor({
-    owner,
-    name,
-    branch,
-    sha,
-    source: source.idempotencyKey,
-  });
+  const descriptor = createRestoreBranchDescriptor(
+    {
+      owner,
+      name,
+      branch,
+      sha,
+      source: source.idempotencyKey,
+    },
+    t,
+  );
 
   try {
     const outcome = await runOperation({

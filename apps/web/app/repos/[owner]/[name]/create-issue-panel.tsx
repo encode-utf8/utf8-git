@@ -4,7 +4,11 @@ import { useCallback, useMemo, useState } from "react";
 
 import { fetchJsonWithRetry } from "@/lib/client-fetch";
 import type { ExplainMode } from "@/lib/glossary";
+import { useTranslator } from "@/lib/i18n/client";
 import {
+  ISSUE_LABEL_MAX_LENGTH,
+  ISSUE_LABELS_MAX_COUNT,
+  ISSUE_TITLE_MAX_LENGTH,
   createIssueDescriptor,
   describeCreateIssueFailure,
   parseIssueLabels,
@@ -41,6 +45,7 @@ export function CreateIssuePanel({
   onCreated,
   onCancel,
 }: CreateIssuePanelProps) {
+  const { t } = useTranslator();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [labels, setLabels] = useState("");
@@ -48,30 +53,31 @@ export function CreateIssuePanel({
   const [error, setError] = useState<string | null>(null);
 
   const trimmedTitle = title.trim();
-  const titleError = trimmedTitle ? validateIssueTitle(title) : null;
+  const titleError = trimmedTitle ? validateIssueTitle(title, t) : null;
   const labelList = useMemo(() => parseIssueLabels(labels), [labels]);
-  const labelsError = labelList.length > 0 ? validateIssueLabels(labelList) : null;
+  const labelsError = labelList.length > 0 ? validateIssueLabels(labelList, t) : null;
 
   // 确认卡片与审计共用同一份描述：标题留空时也渲染卡片，提示信息才不会消失
   const view = useMemo(
     () =>
       confirmationView(
-        createIssueDescriptor({ owner, name, title: trimmedTitle, body, labels: labelList }),
+        createIssueDescriptor({ owner, name, title: trimmedTitle, body, labels: labelList }, t),
+        t,
       ),
-    [body, labelList, name, owner, trimmedTitle],
+    [body, labelList, name, owner, t, trimmedTitle],
   );
 
   const submit = useCallback(async () => {
     if (pending) {
       return;
     }
-    const titleProblem = validateIssueTitle(title);
+    const titleProblem = validateIssueTitle(title, t);
     if (titleProblem) {
       setError(titleProblem);
       return;
     }
     const parsedLabels = parseIssueLabels(labels);
-    const labelProblem = validateIssueLabels(parsedLabels);
+    const labelProblem = validateIssueLabels(parsedLabels, t);
     if (labelProblem) {
       setError(labelProblem);
       return;
@@ -96,19 +102,21 @@ export function CreateIssuePanel({
         title?: string;
       };
       if (!response.ok) {
-        setError(describeCreateIssueFailure(response.status, data.error));
+        setError(describeCreateIssueFailure(response.status, data.error, t));
         return;
       }
       // 回放（幂等命中）同样带编号，用上游返回值拼提示，避免与本地状态不一致
       const numberLabel =
         typeof data.number === "number" && data.number > 0 ? `#${data.number} ` : "";
-      onCreated(`已创建 Issue ${numberLabel}${data.title || title.trim()}`);
+      onCreated(
+        t("panels.createIssue.created", { number: numberLabel, title: data.title || title.trim() }),
+      );
     } catch {
-      setError("网络异常，未能创建 Issue，请稍后重试。");
+      setError(t("panels.createIssue.networkError"));
     } finally {
       setPending(false);
     }
-  }, [body, labels, name, onCreated, owner, pending, title]);
+  }, [body, labels, name, onCreated, owner, pending, t, title]);
 
   return (
     <ConfirmCard
@@ -121,28 +129,28 @@ export function CreateIssuePanel({
       <ConceptNote id="issue" mode={mode} className="mt-3" />
       <div className="mt-3 space-y-1">
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="new-issue-title">
-          Issue 标题
+          {t("panels.createIssue.title")}
         </label>
         <input
           id="new-issue-title"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder="简要描述问题或需求"
+          placeholder={t("panels.createIssue.titlePlaceholder")}
           className={`h-9 ${FIELD_CLASS}`}
         />
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-          {titleError ?? "标题必填，最多 256 个字符。"}
+          {titleError ?? t("panels.createIssue.titleHint", { max: ISSUE_TITLE_MAX_LENGTH })}
         </p>
 
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="new-issue-body">
-          正文（Markdown）
+          {t("panels.createIssue.body")}
         </label>
         <textarea
           id="new-issue-body"
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={4}
-          placeholder={"## 复现步骤\n\n- 第一步\n\n**期望**：…"}
+          placeholder={t("panels.createIssue.bodyPlaceholder")}
           className={`py-2 ${FIELD_CLASS}`}
         />
 
@@ -150,7 +158,7 @@ export function CreateIssuePanel({
           className="block text-xs text-zinc-600 dark:text-zinc-300"
           htmlFor="new-issue-labels"
         >
-          标签（逗号分隔）
+          {t("panels.createIssue.labels")}
         </label>
         <input
           id="new-issue-labels"
@@ -160,12 +168,18 @@ export function CreateIssuePanel({
           className={`h-9 max-w-sm ${FIELD_CLASS}`}
         />
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-          {labelsError ?? "最多 10 个标签，单个不超过 50 个字符。"}
+          {labelsError ??
+            t("panels.createIssue.labelsHint", {
+              count: ISSUE_LABELS_MAX_COUNT,
+              max: ISSUE_LABEL_MAX_LENGTH,
+            })}
         </p>
       </div>
 
       <div className="mt-3">
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">正文预览</p>
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+          {t("panels.createIssue.bodyPreview")}
+        </p>
         <div className="mt-1 rounded-lg border border-black/[.08] p-2 dark:border-white/[.145]">
           <MarkdownPreview source={body} />
         </div>

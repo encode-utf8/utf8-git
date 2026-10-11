@@ -1,6 +1,7 @@
 // M3-1 操作编排：所有写操作（建分支 / 建 Issue / 合并 PR / 删分支 / 恢复分支）走同一条管线。
 // 纯逻辑、无 IO：执行器与审计写入都通过参数注入，便于单测与后续替换持久化实现。
 
+import { sourceTranslate, type MessageKey, type Translate } from "./i18n/translate";
 import type { EnvLike } from "./shared-store";
 
 export type OperationKind =
@@ -95,24 +96,37 @@ export function isWithinReplayWindow(recordedAt: string, now: Date, windowMs: nu
   return now.getTime() - recorded <= windowMs;
 }
 
-/** 操作状态的中文名：操作历史页与审计导出共用同一份文案。 */
-export const OPERATION_STATUS_LABEL: Record<OperationAuditStatus, string> = {
-  started: "进行中",
-  succeeded: "成功",
-  failed: "失败",
+/** 操作状态在消息目录中的键：操作历史页与审计导出共用同一份文案。 */
+const OPERATION_STATUS_KEY: Record<OperationAuditStatus, MessageKey> = {
+  started: "ops.status.started",
+  succeeded: "ops.status.succeeded",
+  failed: "ops.status.failed",
 };
 
-/** 操作类型的中文名：确认卡片按钮、操作历史页共用同一份文案。 */
-export const OPERATION_KIND_LABEL: Record<OperationKind, string> = {
-  createBranch: "创建分支",
-  createIssue: "创建 Issue",
-  createPullRequest: "创建 PR",
-  mergePullRequest: "合并 PR",
-  deleteBranch: "删除分支",
-  restoreBranch: "恢复分支",
-  revokeAuthorization: "撤销授权",
-  purgeAccountData: "清除数据",
+/** 操作类型在消息目录中的键：确认卡片按钮、操作历史页共用同一份文案。 */
+const OPERATION_KIND_KEY: Record<OperationKind, MessageKey> = {
+  createBranch: "ops.kind.createBranch",
+  createIssue: "ops.kind.createIssue",
+  createPullRequest: "ops.kind.createPullRequest",
+  mergePullRequest: "ops.kind.mergePullRequest",
+  deleteBranch: "ops.kind.deleteBranch",
+  restoreBranch: "ops.kind.restoreBranch",
+  revokeAuthorization: "ops.kind.revokeAuthorization",
+  purgeAccountData: "ops.kind.purgeAccountData",
 };
+
+/** 操作状态的可读名（默认源语言，供审计导出等无界面场景使用）。 */
+export function operationStatusLabel(
+  status: OperationAuditStatus,
+  t: Translate = sourceTranslate,
+): string {
+  return t(OPERATION_STATUS_KEY[status]);
+}
+
+/** 操作类型 / 确认按钮的可读名。 */
+export function operationKindLabel(kind: OperationKind, t: Translate = sourceTranslate): string {
+  return t(OPERATION_KIND_KEY[kind]);
+}
 
 // 破坏性操作：确认卡片用红色主按钮呈现（删除分支、撤销授权、清除数据）
 const DANGER_KINDS: ReadonlySet<OperationKind> = new Set<OperationKind>([
@@ -133,11 +147,14 @@ export function repositorySlug(repo: RepositoryRef): string {
 }
 
 /** 确认卡片所需的展示信息（标题 / 影响预览 / 按钮文案 / 是否危险操作）。 */
-export function confirmationView(descriptor: OperationDescriptor): ConfirmationView {
+export function confirmationView(
+  descriptor: OperationDescriptor,
+  t: Translate = sourceTranslate,
+): ConfirmationView {
   return {
     title: descriptor.summary,
     impacts: descriptor.impacts,
-    confirmLabel: OPERATION_KIND_LABEL[descriptor.kind],
+    confirmLabel: operationKindLabel(descriptor.kind, t),
     danger: DANGER_KINDS.has(descriptor.kind),
   };
 }
@@ -239,25 +256,26 @@ export function describeOperationFailure(
   status: number,
   code: string | undefined,
   conflictMessage: string,
+  t: Translate = sourceTranslate,
 ): string {
   switch (code) {
     case "token_invalid":
     case "no_token":
-      return "授权已失效，请重新登录后再试。";
+      return t("ops.failure.unauthorized");
     case "forbidden":
-      return "权限不足，无法完成该操作。";
+      return t("ops.failure.forbidden");
     case "not_found":
-      return "仓库不存在或无权访问。";
+      return t("ops.failure.notFound");
     case "rate_limited":
-      return "GitHub 请求过于频繁，请稍后再试。";
+      return t("ops.failure.rateLimited");
     case "github_unreachable":
-      return "无法连接 GitHub，请检查网络后重试。";
+      return t("ops.failure.unreachable");
     case "github_timeout":
-      return "GitHub 请求超时，请重试。";
+      return t("ops.failure.timeout");
     case "confirmation_required":
-      return "请先在确认卡片中确认本次操作。";
+      return t("ops.failure.confirmationRequired");
     case "too_many_requests":
-      return "操作过于频繁，请稍后再试。";
+      return t("ops.failure.tooManyRequests");
     case "branch_conflict":
     case "issue_invalid":
     case "pull_invalid":
@@ -266,12 +284,12 @@ export function describeOperationFailure(
     case "purge_failed":
       return conflictMessage;
     case "revoke_unavailable":
-      return "服务端未配置 GitHub 应用凭据，无法自助撤销；请到 GitHub 设置中手动移除授权。";
+      return t("ops.failure.revokeUnavailable");
     default:
       break;
   }
   if (status === 400) {
-    return "请求参数有误，请检查输入。";
+    return t("ops.failure.badRequest");
   }
-  return "操作失败，请稍后重试。";
+  return t("ops.failure.generic");
 }

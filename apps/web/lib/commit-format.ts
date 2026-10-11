@@ -1,4 +1,7 @@
 // 提交节点格式化工具（纯函数；时间戳一律以 UTC 呈现，避免 SSR / CSR 时区不一致）
+// 相对时间的文案取自消息目录 `time.*`，默认源语言，组件传入当前语言的 `t` 时随语言切换。
+
+import { sourceTranslate, type Translate } from "./i18n/translate";
 
 // 短 SHA：取前 7 位
 export function shortSha(sha: string): string {
@@ -6,22 +9,26 @@ export function shortSha(sha: string): string {
 }
 
 // 相对时间：刚刚 / X 分钟前 / X 小时前 / X 天前；超过 30 天回退到日期
-export function formatRelativeTime(fromMs: number, toMs: number): string {
+export function formatRelativeTime(
+  fromMs: number,
+  toMs: number,
+  t: Translate = sourceTranslate,
+): string {
   const diff = Math.max(0, toMs - fromMs);
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
   if (diff < minute) {
-    return "刚刚";
+    return t("time.justNow");
   }
   if (diff < hour) {
-    return `${Math.floor(diff / minute)} 分钟前`;
+    return t("time.minutesAgo", { count: Math.floor(diff / minute) });
   }
   if (diff < day) {
-    return `${Math.floor(diff / hour)} 小时前`;
+    return t("time.hoursAgo", { count: Math.floor(diff / hour) });
   }
   if (diff < 30 * day) {
-    return `${Math.floor(diff / day)} 天前`;
+    return t("time.daysAgo", { count: Math.floor(diff / day) });
   }
   return new Date(fromMs).toISOString().slice(0, 10);
 }

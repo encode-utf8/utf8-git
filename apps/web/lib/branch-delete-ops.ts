@@ -1,6 +1,7 @@
 // M3-5 删除分支：可删除性判定与操作描述构造（纯逻辑，前后端共用，无 IO）。
 // 判定顺序即优先级：默认分支 > 受保护分支 > 当前正在查看的分支。
 
+import { sourceTranslate, type Translate } from "./i18n/translate";
 import { describeOperationFailure, repositorySlug, type OperationDescriptor } from "./operations";
 
 export type BranchDeletionInput = {
@@ -20,19 +21,22 @@ export type BranchDeletionVerdict = {
 };
 
 /** 判定分支能否删除，并给出不可删除的原因。 */
-export function evaluateBranchDeletion(input: BranchDeletionInput): BranchDeletionVerdict {
+export function evaluateBranchDeletion(
+  input: BranchDeletionInput,
+  t: Translate = sourceTranslate,
+): BranchDeletionVerdict {
   const branch = input.branch.trim();
   if (!branch) {
-    return { canDelete: false, reason: "请选择要删除的分支。" };
+    return { canDelete: false, reason: t("ops.deletion.selectBranch") };
   }
   if (input.defaultBranch && branch === input.defaultBranch) {
-    return { canDelete: false, reason: "默认分支不能删除。" };
+    return { canDelete: false, reason: t("ops.deletion.defaultBranch") };
   }
   if (input.protectedBranch) {
-    return { canDelete: false, reason: "该分支受保护规则保护，不能删除。" };
+    return { canDelete: false, reason: t("ops.deletion.protected") };
   }
   if (input.currentBranch && branch === input.currentBranch) {
-    return { canDelete: false, reason: "不能删除当前正在查看的分支。" };
+    return { canDelete: false, reason: t("ops.deletion.current") };
   }
   return { canDelete: true, reason: null };
 }
@@ -51,28 +55,35 @@ export type DeleteBranchInput = {
 };
 
 /** 构造「删除分支」操作描述：确认卡片与审计记录共用同一份数据。 */
-export function createDeleteBranchDescriptor(input: DeleteBranchInput): OperationDescriptor {
+export function createDeleteBranchDescriptor(
+  input: DeleteBranchInput,
+  t: Translate = sourceTranslate,
+): OperationDescriptor {
   const { owner, name, headSha } = input;
   const branch = input.branch.trim();
   const repo = repositorySlug({ owner, name });
   const impacts = [
-    `删除分支 ${branch}，该分支引用将从仓库移除`,
-    "不会删除任何提交：被删除的提交仍可被其他分支或标签引用",
+    t("ops.descriptor.deleteBranch.remove", { branch }),
+    t("ops.descriptor.deleteBranch.keepCommits"),
   ];
   if (headSha) {
-    impacts.push(`删除前分支指向 ${headSha}，如需恢复请先记录该 SHA`);
+    impacts.push(t("ops.descriptor.deleteBranch.head", { sha: headSha }));
   }
-  impacts.push("一键恢复将在 M3-6 提供，当前版本请自行记录 SHA");
+  impacts.push(t("ops.descriptor.deleteBranch.restoreHint"));
   return {
     kind: "deleteBranch",
     repo: { owner, name },
-    summary: `在 ${repo} 删除分支 ${branch}`,
+    summary: t("ops.descriptor.deleteBranch.summary", { repo, branch }),
     impacts,
     payload: headSha ? { branch, sha: headSha } : { branch },
   };
 }
 
 /** 把删除分支接口的失败映射为可读文案（供客户端展示）。 */
-export function describeDeleteBranchFailure(status: number, code?: string): string {
-  return describeOperationFailure(status, code, "分支不存在、受保护或已被删除，请刷新后重试。");
+export function describeDeleteBranchFailure(
+  status: number,
+  code?: string,
+  t: Translate = sourceTranslate,
+): string {
+  return describeOperationFailure(status, code, t("ops.conflict.deleteBranch"), t);
 }

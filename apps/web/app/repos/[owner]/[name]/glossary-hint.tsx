@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { shouldExplain, termById, type ExplainMode, type GlossaryTermId } from "@/lib/glossary";
+import { glossaryKey, shouldExplain, type ExplainMode, type GlossaryTermId } from "@/lib/glossary";
+import { useTranslator } from "@/lib/i18n/client";
 
 const CARD_WIDTH = 320;
 const CARD_GAP = 6;
@@ -17,7 +18,7 @@ type Position = { top: number; left: number };
  * 以免被时间线滚动容器的 overflow 与行内 transform 裁剪。
  */
 export function GlossaryHint({ id, mode }: { id: GlossaryTermId; mode: ExplainMode }) {
-  const term = termById(id);
+  const { t } = useTranslator();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<Position | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -60,7 +61,7 @@ export function GlossaryHint({ id, mode }: { id: GlossaryTermId; mode: ExplainMo
     };
   }, [open]);
 
-  if (!shouldExplain(term, mode)) {
+  if (!shouldExplain(id, mode)) {
     return null;
   }
 
@@ -69,7 +70,7 @@ export function GlossaryHint({ id, mode }: { id: GlossaryTermId; mode: ExplainMo
       <button
         ref={triggerRef}
         type="button"
-        aria-label={`解释：${term.term}`}
+        aria-label={t("glossary.hint", { term: t(glossaryKey(id, "term")) })}
         aria-describedby={open ? panelId : undefined}
         aria-expanded={open}
         onClick={openCard}
@@ -89,9 +90,15 @@ export function GlossaryHint({ id, mode }: { id: GlossaryTermId; mode: ExplainMo
               style={{ top: position.top, left: position.left, width: CARD_WIDTH }}
               className="fixed z-50 rounded-xl border border-black/[.08] bg-white p-3 text-left shadow-lg dark:border-white/[.145] dark:bg-zinc-900"
             >
-              <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-50">{term.term}</p>
-              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">{term.summary}</p>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{term.detail}</p>
+              <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-50">
+                {t(glossaryKey(id, "term"))}
+              </p>
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+                {t(glossaryKey(id, "summary"))}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                {t(glossaryKey(id, "detail"))}
+              </p>
             </div>,
             document.body,
           )

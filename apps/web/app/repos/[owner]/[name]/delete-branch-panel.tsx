@@ -6,6 +6,7 @@ import { createDeleteBranchDescriptor, describeDeleteBranchFailure } from "@/lib
 import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
 import type { ExplainMode } from "@/lib/glossary";
+import { useTranslator } from "@/lib/i18n/client";
 import type { TimelineBranch } from "@/lib/github-timeline";
 import { confirmationView } from "@/lib/operations";
 
@@ -70,6 +71,7 @@ export function DeleteBranchPanel({
   onDeleted,
   onCancel,
 }: DeleteBranchPanelProps) {
+  const { t } = useTranslator();
   const [branch, setBranch] = useState(() => initialBranch(branches, defaultBranch, currentBranch));
   const [check, setCheck] = useState<DeleteCheckState | null>(null);
   const [pending, setPending] = useState(false);
@@ -114,8 +116,8 @@ export function DeleteBranchPanel({
   );
 
   const view = useMemo(
-    () => confirmationView(createDeleteBranchDescriptor({ owner, name, branch, headSha })),
-    [branch, headSha, name, owner],
+    () => confirmationView(createDeleteBranchDescriptor({ owner, name, branch, headSha }, t), t),
+    [branch, headSha, name, owner, t],
   );
 
   const submit = useCallback(async () => {
@@ -139,16 +141,16 @@ export function DeleteBranchPanel({
       };
       if (!response.ok) {
         // 服务端给出的原因（默认 / 受保护分支）比通用文案更具体，优先展示
-        setError(data.message ?? describeDeleteBranchFailure(response.status, data.error));
+        setError(data.message ?? describeDeleteBranchFailure(response.status, data.error, t));
         return;
       }
-      onDeleted(`已删除分支 ${branch}`);
+      onDeleted(t("panels.deleteBranch.deleted", { branch }));
     } catch {
-      setError("网络异常，未能删除分支，请稍后重试。");
+      setError(t("panels.deleteBranch.networkError"));
     } finally {
       setPending(false);
     }
-  }, [branch, currentBranch, endpoint, headSha, onDeleted, pending]);
+  }, [branch, currentBranch, endpoint, headSha, onDeleted, pending, t]);
 
   return (
     <div className="rounded-xl border border-black/[.08] p-4 dark:border-white/[.145]">
@@ -158,7 +160,7 @@ export function DeleteBranchPanel({
           className="block text-xs text-zinc-600 dark:text-zinc-300"
           htmlFor="delete-branch-name"
         >
-          要删除的分支
+          {t("panels.deleteBranch.select")}
         </label>
         <select
           id="delete-branch-name"
@@ -170,7 +172,7 @@ export function DeleteBranchPanel({
           {branches.map((item) => (
             <option key={item.name} value={item.name}>
               {item.name}
-              {item.name === defaultBranch ? "（默认）" : ""}
+              {item.name === defaultBranch ? t("panels.deleteBranch.defaultSuffix") : ""}
             </option>
           ))}
         </select>
@@ -182,16 +184,14 @@ export function DeleteBranchPanel({
             role="alert"
             className={`${NOTICE_CLASS} border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-200`}
           >
-            <p>
-              无法检查分支「{branch}」的可删除性：{active.error}
-            </p>
+            <p>{t("panels.deleteBranch.checkError", { branch, message: active.error })}</p>
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
                 onClick={onCancel}
                 className="h-8 rounded-full border border-red-400 px-4 text-xs font-medium transition-colors hover:bg-red-100 dark:border-red-600 dark:hover:bg-red-900"
               >
-                关闭
+                {t("common.close")}
               </button>
             </div>
           </div>
@@ -199,7 +199,7 @@ export function DeleteBranchPanel({
           <p
             className={`${NOTICE_CLASS} border-black/[.08] bg-zinc-50 text-zinc-600 dark:border-white/[.145] dark:bg-zinc-900 dark:text-zinc-300`}
           >
-            正在检查分支「{branch}」的可删除性…
+            {t("panels.deleteBranch.checking", { branch })}
           </p>
         ) : active.data.canDelete ? (
           <ConfirmCard
@@ -214,17 +214,17 @@ export function DeleteBranchPanel({
             role="alert"
             className={`${NOTICE_CLASS} border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100`}
           >
-            <p className="text-sm font-semibold">不可删除：{active.data.reason}</p>
-            <p className="mt-1">
-              请更换要删除的分支；默认分支与受保护分支只能在 GitHub 仓库设置中调整。
+            <p className="text-sm font-semibold">
+              {t("panels.deleteBranch.notDeletable", { reason: active.data.reason ?? "" })}
             </p>
+            <p className="mt-1">{t("panels.deleteBranch.notDeletableHint")}</p>
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
                 onClick={onCancel}
                 className="h-8 rounded-full border border-amber-400 px-4 text-xs font-medium transition-colors hover:bg-amber-100 dark:border-amber-600 dark:hover:bg-amber-900"
               >
-                关闭
+                {t("common.close")}
               </button>
             </div>
           </div>

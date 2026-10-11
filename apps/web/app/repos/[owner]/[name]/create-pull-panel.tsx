@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { fetchJsonWithRetry } from "@/lib/client-fetch";
 import type { ExplainMode } from "@/lib/glossary";
+import { useTranslator } from "@/lib/i18n/client";
 import {
   PR_TITLE_MAX_LENGTH,
   createPullRequestDescriptor,
@@ -59,6 +60,7 @@ export function CreatePullPanel({
   onCreated,
   onCancel,
 }: CreatePullPanelProps) {
+  const { t } = useTranslator();
   const [base, setBase] = useState(() => initialBase(branches, defaultBase));
   const [head, setHead] = useState(() => initialHead(branches, initialBase(branches, defaultBase)));
   const [title, setTitle] = useState("");
@@ -68,41 +70,45 @@ export function CreatePullPanel({
   const [error, setError] = useState<string | null>(null);
 
   const trimmedTitle = title.trim();
-  const titleError = trimmedTitle ? validatePullTitle(title) : null;
-  const branchError = head && base ? validatePullBranches({ head, base }) : null;
+  const titleError = trimmedTitle ? validatePullTitle(title, t) : null;
+  const branchError = head && base ? validatePullBranches({ head, base }, t) : null;
 
   // 确认卡片与审计共用同一份描述
   const view = useMemo(
     () =>
       confirmationView(
-        createPullRequestDescriptor({
-          owner,
-          name,
-          head,
-          base,
-          title: trimmedTitle,
-          body,
-          draft,
-        }),
+        createPullRequestDescriptor(
+          {
+            owner,
+            name,
+            head,
+            base,
+            title: trimmedTitle,
+            body,
+            draft,
+          },
+          t,
+        ),
+        t,
       ),
-    [base, body, draft, head, name, owner, trimmedTitle],
+    [base, body, draft, head, name, owner, t, trimmedTitle],
   );
 
   const submit = useCallback(async () => {
     if (pending) {
       return;
     }
-    const titleProblem = validatePullTitle(title);
+    const titleProblem = validatePullTitle(title, t);
     if (titleProblem) {
       setError(titleProblem);
       return;
     }
-    const branchProblem = validatePullBranches({ head, base });
+    const branchProblem = validatePullBranches({ head, base }, t);
     if (branchProblem) {
       setError(branchProblem);
       return;
     }
-    const bodyProblem = validatePullBody(body);
+    const bodyProblem = validatePullBody(body, t);
     if (bodyProblem) {
       setError(bodyProblem);
       return;
@@ -130,18 +136,20 @@ export function CreatePullPanel({
         title?: string;
       };
       if (!response.ok) {
-        setError(data.message ?? describeCreatePullRequestFailure(response.status, data.error));
+        setError(data.message ?? describeCreatePullRequestFailure(response.status, data.error, t));
         return;
       }
       const numberLabel =
         typeof data.number === "number" && data.number > 0 ? `#${data.number} ` : "";
-      onCreated(`已创建 PR ${numberLabel}${data.title || title.trim()}`);
+      onCreated(
+        t("panels.createPull.created", { number: numberLabel, title: data.title || title.trim() }),
+      );
     } catch {
-      setError("网络异常，未能创建 PR，请稍后重试。");
+      setError(t("panels.createPull.networkError"));
     } finally {
       setPending(false);
     }
-  }, [base, body, draft, head, name, onCreated, owner, pending, title]);
+  }, [base, body, draft, head, name, onCreated, owner, pending, t, title]);
 
   if (branches.length < 2) {
     return (
@@ -149,15 +157,15 @@ export function CreatePullPanel({
         role="alert"
         className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
       >
-        <p className="text-sm font-semibold">无法创建 PR</p>
-        <p className="mt-1">仓库至少需要两个分支才能创建 PR，请先新建一个分支。</p>
+        <p className="text-sm font-semibold">{t("panels.createPull.needTwoBranchesTitle")}</p>
+        <p className="mt-1">{t("panels.createPull.needTwoBranchesBody")}</p>
         <div className="mt-3 flex justify-end">
           <button
             type="button"
             onClick={onCancel}
             className="h-8 rounded-full border border-amber-400 px-4 text-xs font-medium transition-colors hover:bg-amber-100 dark:border-amber-600 dark:hover:bg-amber-900"
           >
-            取消
+            {t("common.cancel")}
           </button>
         </div>
       </div>
@@ -175,7 +183,7 @@ export function CreatePullPanel({
       <ConceptNote id="pull-request" mode={mode} className="mt-3" />
       <div className="mt-3 space-y-1">
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="pr-base">
-          目标分支（base）
+          {t("panels.createPull.base")}
         </label>
         <select
           id="pr-base"
@@ -191,7 +199,7 @@ export function CreatePullPanel({
         </select>
 
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="pr-head">
-          来源分支（head）
+          {t("panels.createPull.head")}
         </label>
         <select
           id="pr-head"
@@ -210,28 +218,28 @@ export function CreatePullPanel({
         ) : null}
 
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="pr-title">
-          PR 标题
+          {t("panels.createPull.title")}
         </label>
         <input
           id="pr-title"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder="简要描述这次改动"
+          placeholder={t("panels.createPull.titlePlaceholder")}
           className={`h-9 ${FIELD_CLASS}`}
         />
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-          {titleError ?? `标题必填，最多 ${PR_TITLE_MAX_LENGTH} 个字符。`}
+          {titleError ?? t("panels.createPull.titleHint", { max: PR_TITLE_MAX_LENGTH })}
         </p>
 
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="pr-body">
-          PR 正文（Markdown）
+          {t("panels.createPull.body")}
         </label>
         <textarea
           id="pr-body"
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={4}
-          placeholder={"## 背景\n\n- 改动点\n\n**验证**：…"}
+          placeholder={t("panels.createPull.bodyPlaceholder")}
           className={`py-2 ${FIELD_CLASS}`}
         />
 
@@ -246,12 +254,14 @@ export function CreatePullPanel({
             onChange={(event) => setDraft(event.target.checked)}
             className="h-4 w-4 rounded border-black/[.08] dark:border-white/[.145]"
           />
-          创建为草稿
+          {t("panels.createPull.draft")}
         </label>
       </div>
 
       <div className="mt-3">
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">正文预览</p>
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+          {t("panels.createPull.bodyPreview")}
+        </p>
         <div className="mt-1 rounded-lg border border-black/[.08] p-2 dark:border-white/[.145]">
           <MarkdownPreview source={body} />
         </div>

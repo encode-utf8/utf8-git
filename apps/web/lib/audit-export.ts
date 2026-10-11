@@ -3,8 +3,8 @@
 
 import { operationGitCommand, operationResultLink, type ResultLink } from "./git-commands";
 import {
-  OPERATION_KIND_LABEL,
-  OPERATION_STATUS_LABEL,
+  operationKindLabel,
+  operationStatusLabel,
   type OperationAuditRecord,
   type OperationAuditStatus,
   type OperationKind,
@@ -48,9 +48,9 @@ export function auditRecordToEntry(record: OperationAuditRecord): AuditExportEnt
     recordedAt: record.recordedAt,
     repo: record.repo,
     kind: record.kind,
-    kindLabel: OPERATION_KIND_LABEL[record.kind],
+    kindLabel: operationKindLabel(record.kind),
     status: record.status,
-    statusLabel: OPERATION_STATUS_LABEL[record.status],
+    statusLabel: operationStatusLabel(record.status),
     summary: record.summary,
     error: record.error,
     payload: record.payload,

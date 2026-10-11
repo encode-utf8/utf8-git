@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { useTranslator } from "@/lib/i18n/client";
 import type { ConfirmationView } from "@/lib/operations";
 
 type ConfirmCardProps = {
@@ -26,6 +27,7 @@ export function ConfirmCard({
   onCancel,
   children,
 }: ConfirmCardProps) {
+  const { t } = useTranslator();
   return (
     <div
       role="dialog"
@@ -57,7 +59,7 @@ export function ConfirmCard({
           disabled={pending}
           className="h-9 rounded-full border border-black/[.08] px-4 text-xs text-zinc-700 transition-colors hover:bg-black/[.04] disabled:opacity-60 dark:border-white/[.145] dark:text-zinc-200 dark:hover:bg-white/[.08]"
         >
-          取消
+          {t("common.cancel")}
         </button>
         <button
           type="button"
@@ -69,7 +71,7 @@ export function ConfirmCard({
               : "h-9 rounded-full border border-black/[.08] bg-zinc-900 px-4 text-xs font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60 dark:border-white/[.145] dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
           }
         >
-          {pending ? "执行中…" : view.confirmLabel}
+          {pending ? t("confirm.executing") : view.confirmLabel}
         </button>
       </div>
     </div>

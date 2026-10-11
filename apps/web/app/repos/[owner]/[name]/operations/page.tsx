@@ -7,8 +7,8 @@ import { getDataStores } from "@/lib/data-stores";
 import { operationGitCommand, operationResultLink } from "@/lib/git-commands";
 import { reportError } from "@/lib/observability";
 import {
-  OPERATION_KIND_LABEL,
-  OPERATION_STATUS_LABEL,
+  operationKindLabel,
+  operationStatusLabel,
   type OperationAuditRecord,
   type OperationAuditStatus,
 } from "@/lib/operations";
@@ -210,12 +210,12 @@ export default async function RepoOperationsPage({
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-zinc-300 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
-                        {OPERATION_KIND_LABEL[record.kind]}
+                        {operationKindLabel(record.kind)}
                       </span>
                       <span
                         className={`rounded-full border px-2 py-0.5 text-xs ${statusClass(record.status)}`}
                       >
-                        {OPERATION_STATUS_LABEL[record.status]}
+                        {operationStatusLabel(record.status)}
                       </span>
                       <time
                         dateTime={record.recordedAt}

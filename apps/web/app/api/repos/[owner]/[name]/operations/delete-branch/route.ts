@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getTranslator } from "@/lib/i18n/server";
 import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
@@ -54,11 +55,12 @@ async function handleGET(
     return authorized.error;
   }
   const { owner, name, token } = authorized;
+  const { t } = await getTranslator();
 
   const search = new URL(request.url).searchParams;
   const branch = (search.get("branch") ?? "").trim();
   const currentRaw = (search.get("current") ?? "").trim();
-  const nameError = validateBranchName(branch);
+  const nameError = validateBranchName(branch, t);
   if (nameError) {
     return NextResponse.json({ error: "invalid_branch", message: nameError }, { status: 400 });
   }
@@ -72,17 +74,20 @@ async function handleGET(
           defaultBranch: settings.defaultBranch,
           protected: false,
           canDelete: false,
-          reason: "分支不存在或无权访问。",
+          reason: t("ops.deletion.notFound"),
         },
         { headers: NO_STORE },
       );
     }
-    const verdict = evaluateBranchDeletion({
-      branch,
-      defaultBranch: settings.defaultBranch,
-      protectedBranch: settings.protectedBranch,
-      currentBranch: currentRaw || null,
-    });
+    const verdict = evaluateBranchDeletion(
+      {
+        branch,
+        defaultBranch: settings.defaultBranch,
+        protectedBranch: settings.protectedBranch,
+        currentBranch: currentRaw || null,
+      },
+      t,
+    );
     return NextResponse.json(
       {
         branch,
@@ -110,6 +115,7 @@ async function handlePOST(
     return authorized.error;
   }
   const { userId, owner, name, token } = authorized;
+  const { t } = await getTranslator();
 
   let body: unknown;
   try {
@@ -127,7 +133,7 @@ async function handlePOST(
     return NextResponse.json({ error: "confirmation_required" }, { status: 400 });
   }
   const branch = typeof input.branch === "string" ? input.branch.trim() : "";
-  const nameError = validateBranchName(branch);
+  const nameError = validateBranchName(branch, t);
   if (nameError) {
     return NextResponse.json({ error: "invalid_branch", message: nameError }, { status: 400 });
   }
@@ -148,16 +154,19 @@ async function handlePOST(
   }
   if (!settings.exists) {
     return NextResponse.json(
-      { error: "branch_not_deletable", message: "分支不存在或无权访问。" },
+      { error: "branch_not_deletable", message: t("ops.deletion.notFound") },
       { status: 409 },
     );
   }
-  const verdict = evaluateBranchDeletion({
-    branch,
-    defaultBranch: settings.defaultBranch,
-    protectedBranch: settings.protectedBranch,
-    currentBranch: current,
-  });
+  const verdict = evaluateBranchDeletion(
+    {
+      branch,
+      defaultBranch: settings.defaultBranch,
+      protectedBranch: settings.protectedBranch,
+      currentBranch: current,
+    },
+    t,
+  );
   if (!verdict.canDelete) {
     return NextResponse.json(
       { error: "branch_not_deletable", message: verdict.reason },
@@ -165,7 +174,7 @@ async function handlePOST(
     );
   }
 
-  const descriptor = createDeleteBranchDescriptor({ owner, name, branch, headSha });
+  const descriptor = createDeleteBranchDescriptor({ owner, name, branch, headSha }, t);
 
   try {
     const outcome = await runOperation({

@@ -2,6 +2,7 @@
 // 恢复窗口固定 24h；删除记录由写操作审计（operation_audit）保存，其中含删除前的分支头 SHA。
 
 import { shortSha } from "./commit-format";
+import { sourceTranslate, type Translate } from "./i18n/translate";
 import { describeOperationFailure, repositorySlug, type OperationDescriptor } from "./operations";
 
 export const RESTORE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -28,43 +29,50 @@ export type BranchRestoreVerdict = {
 };
 
 /** 判定删除记录能否在恢复窗口内撤销。 */
-export function evaluateBranchRestore(input: BranchRestoreInput): BranchRestoreVerdict {
+export function evaluateBranchRestore(
+  input: BranchRestoreInput,
+  t: Translate = sourceTranslate,
+): BranchRestoreVerdict {
   const branch = input.branch.trim();
   if (!branch) {
-    return { canRestore: false, reason: "缺少要恢复的分支名。" };
+    return { canRestore: false, reason: t("ops.restore.missingBranch") };
   }
   if (!input.sha) {
-    return { canRestore: false, reason: "该删除记录没有保存提交 SHA，无法恢复。" };
+    return { canRestore: false, reason: t("ops.restore.missingSha") };
   }
   const deletedAt = new Date(input.recordedAt).getTime();
   if (!Number.isFinite(deletedAt)) {
-    return { canRestore: false, reason: "删除记录的时间无效，无法恢复。" };
+    return { canRestore: false, reason: t("ops.restore.invalidTime") };
   }
   const now = input.now ?? Date.now();
   if (now - deletedAt > RESTORE_WINDOW_MS) {
     return {
       canRestore: false,
-      reason: `已超出 ${RESTORE_WINDOW_HOURS} 小时恢复窗口，无法恢复。`,
+      reason: t("ops.restore.windowExpired", { hours: RESTORE_WINDOW_HOURS }),
     };
   }
   return { canRestore: true, reason: null };
 }
 
-/** 剩余恢复时间的中文描述（候选列表展示用）。 */
-export function describeRestoreRemaining(recordedAt: string, now: number = Date.now()): string {
+/** 剩余恢复时间的可读描述（候选列表展示用）。 */
+export function describeRestoreRemaining(
+  recordedAt: string,
+  now: number = Date.now(),
+  t: Translate = sourceTranslate,
+): string {
   const remaining = new Date(recordedAt).getTime() + RESTORE_WINDOW_MS - now;
   if (!Number.isFinite(remaining)) {
-    return "恢复窗口未知";
+    return t("ops.restore.unknownWindow");
   }
   if (remaining <= 0) {
-    return "恢复窗口已过期";
+    return t("ops.restore.expired");
   }
   const hours = Math.floor(remaining / (60 * 60 * 1000));
   if (hours >= 1) {
-    return `剩余约 ${hours} 小时`;
+    return t("ops.restore.remainingHours", { hours });
   }
   const minutes = Math.max(1, Math.ceil(remaining / (60 * 1000)));
-  return `剩余约 ${minutes} 分钟`;
+  return t("ops.restore.remainingMinutes", { minutes });
 }
 
 export type RestoreBranchInput = {
@@ -80,28 +88,31 @@ export type RestoreBranchInput = {
 };
 
 /** 构造「恢复分支」操作描述：确认卡片与审计记录共用同一份数据。 */
-export function createRestoreBranchDescriptor(input: RestoreBranchInput): OperationDescriptor {
+export function createRestoreBranchDescriptor(
+  input: RestoreBranchInput,
+  t: Translate = sourceTranslate,
+): OperationDescriptor {
   const { owner, name, sha, source } = input;
   const branch = input.branch.trim();
   const repo = repositorySlug({ owner, name });
   return {
     kind: "restoreBranch",
     repo: { owner, name },
-    summary: `在 ${repo} 恢复分支 ${branch}`,
+    summary: t("ops.descriptor.restoreBranch.summary", { repo, branch }),
     impacts: [
-      `把分支 ${branch} 重新指向删除前的提交 ${shortSha(sha)}`,
-      "不会修改其他分支或提交",
-      "恢复后的分支不继承原保护规则，如需保护请在 GitHub 仓库设置中重新开启",
+      t("ops.descriptor.restoreBranch.rePoint", { branch, sha: shortSha(sha) }),
+      t("ops.descriptor.restoreBranch.noChange"),
+      t("ops.descriptor.restoreBranch.noProtection"),
     ],
     payload: { branch, from: sha, source },
   };
 }
 
 /** 把恢复分支接口的失败映射为可读文案（供客户端展示）。 */
-export function describeRestoreBranchFailure(status: number, code?: string): string {
-  return describeOperationFailure(
-    status,
-    code,
-    "分支已存在或提交 SHA 已不可达，无法恢复，请刷新后重试。",
-  );
+export function describeRestoreBranchFailure(
+  status: number,
+  code?: string,
+  t: Translate = sourceTranslate,
+): string {
+  return describeOperationFailure(status, code, t("ops.conflict.restoreBranch"), t);
 }

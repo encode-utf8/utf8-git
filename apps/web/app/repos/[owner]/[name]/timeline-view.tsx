@@ -188,12 +188,12 @@ function CommitRow({
             <span>·</span>
             <time
               suppressHydrationWarning
-              title={`${formatUtcDateTime(commit.committedDate)}（UTC）`}
+              title={`${formatUtcDateTime(commit.committedDate)}${t("common.utcSuffix")}`}
             >
               {commit.committedDate
                 ? nowMs === null
                   ? formatUtcDateTime(commit.committedDate)
-                  : formatRelativeTime(Date.parse(commit.committedDate), nowMs)
+                  : formatRelativeTime(Date.parse(commit.committedDate), nowMs, t)
                 : "—"}
             </time>
           </span>
@@ -317,17 +317,20 @@ export function TimelineView({
 
   // 创建分支（M3-2）：起点默认取选中提交，否则取已加载的最新提交（即当前分支头）。
   const branchStart = selectedCommit ?? commits[0] ?? null;
-  const branchNameError = newBranchName ? validateBranchName(newBranchName.trim()) : null;
+  const branchNameError = newBranchName ? validateBranchName(newBranchName.trim(), t) : null;
   const branchDescriptor = useMemo(
     () =>
       branchStart
-        ? createBranchDescriptor({
-            owner,
-            name,
-            branch: newBranchName.trim(),
-            fromSha: branchStart.oid,
-            fromLabel: t("timeline.commitLabel", { sha: shortSha(branchStart.oid) }),
-          })
+        ? createBranchDescriptor(
+            {
+              owner,
+              name,
+              branch: newBranchName.trim(),
+              fromSha: branchStart.oid,
+              fromLabel: t("timeline.commitLabel", { sha: shortSha(branchStart.oid) }),
+            },
+            t,
+          )
         : null,
     [branchStart, name, newBranchName, owner, t],
   );
@@ -345,7 +348,7 @@ export function TimelineView({
     if (!branchStart || creating) {
       return;
     }
-    const nameError = validateBranchName(trimmed);
+    const nameError = validateBranchName(trimmed, t);
     if (nameError) {
       setCreateError(nameError);
       return;
@@ -361,7 +364,7 @@ export function TimelineView({
       );
       const data = (await response.json().catch(() => ({}))) as { error?: string; branch?: string };
       if (!response.ok) {
-        setCreateError(describeCreateBranchFailure(response.status, data.error));
+        setCreateError(describeCreateBranchFailure(response.status, data.error, t));
         return;
       }
       setCreateSuccess(t("timeline.branchCreated", { branch: data.branch ?? trimmed }));
@@ -661,7 +664,7 @@ export function TimelineView({
             >
               {EXPLAIN_MODES.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </option>
               ))}
             </select>
@@ -682,7 +685,7 @@ export function TimelineView({
       {createOpen && branchDescriptor ? (
         <div className="mt-3">
           <ConfirmCard
-            view={confirmationView(branchDescriptor)}
+            view={confirmationView(branchDescriptor, t)}
             pending={creating}
             error={createError}
             onConfirm={() => void submitCreateBranch()}

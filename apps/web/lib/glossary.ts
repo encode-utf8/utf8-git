@@ -1,108 +1,66 @@
-// 概念解释层（M2-6）的术语词条与展示规则。
+// 概念解释层（M2-6）的术语结构与展示规则；词条文案在消息目录 `glossary.*` 下（随语言切换）。
 // 解释层默认关闭，只有用户主动开启后才渲染，避免干扰熟悉 Git 的使用者。
+
+import type { MessageKey } from "./i18n/translate";
 
 export type GlossaryTermId =
   "author" | "sha" | "merge" | "branch" | "pull-request" | "issue" | "lane";
 
-/** 术语难度：basic 面向新手，deep 面向进阶阅读。 */
+/** 术语难度：basic 面向新手，deep 面向进阶阅读；与语言无关。 */
 export type GlossaryLevel = "basic" | "deep";
-
-export type GlossaryTerm = {
-  id: GlossaryTermId;
-  term: string;
-  summary: string;
-  detail: string;
-  level: GlossaryLevel;
-};
 
 /** 解释模式：关闭 / 新手 / 进阶。 */
 export type ExplainMode = "off" | "beginner" | "advanced";
 
-export const EXPLAIN_MODES: readonly { value: ExplainMode; label: string }[] = [
-  { value: "off", label: "关闭" },
-  { value: "beginner", label: "新手" },
-  { value: "advanced", label: "进阶" },
+/** 全部术语 id（顺序即界面展示顺序的参考）。 */
+export const GLOSSARY_TERM_IDS: readonly GlossaryTermId[] = [
+  "author",
+  "sha",
+  "merge",
+  "branch",
+  "pull-request",
+  "issue",
+  "lane",
 ];
 
-const TERMS: readonly GlossaryTerm[] = [
-  {
-    id: "author",
-    term: "提交作者",
-    summary: "写下这次改动的账号。",
-    detail: "作者取自提交的 author 字段，可能与「提交者（committer）」不同，例如合并他人 PR 时。",
-    level: "basic",
-  },
-  {
-    id: "sha",
-    term: "提交哈希（SHA）",
-    summary: "每次提交的唯一指纹，由提交内容计算得出。",
-    detail:
-      "完整为 40 位十六进制，界面常显示前 7 位缩写；它永久指向这一次改动，也是分支、标签与操作记录引用的目标。",
-    level: "basic",
-  },
-  {
-    id: "merge",
-    term: "合并提交（merge）",
-    summary: "把两条分支的历史汇到一起的提交，会有两个及以上父提交。",
-    detail: "时间线上带 merge 标记的节点通常来自一次分支合并，它的父提交分别指向被合并的双方。",
-    level: "basic",
-  },
-  {
-    id: "branch",
-    term: "分支",
-    summary: "从某个提交分出来的一条独立开发线，可以在上面改动而不影响主线。",
-    detail:
-      "新建分支只是从某个提交拉出一条新引用，不会改动任何现有分支或提交；改动提交到分支后，再通过 PR 合并回主线。",
-    level: "basic",
-  },
-  {
-    id: "pull-request",
-    term: "拉取请求（Pull Request）",
-    summary: "请求把一条分支的改动合并进另一条分支，并附带讨论与评审流程。",
-    detail:
-      "未合并前主线不受影响；合并 PR 会把来源分支的提交并入目标分支，通常不可撤销。时间线上的 #编号 徽标可跳转到 GitHub 上对应的 PR。",
-    level: "deep",
-  },
-  {
-    id: "issue",
-    term: "议题（Issue）",
-    summary: "仓库里用来记录问题、需求或讨论的条目，不包含代码改动。",
-    detail:
-      "新建 Issue 不会改动任何代码、分支或提交；当提交信息或 PR 描述里写上「fixes #123」时，它才会与对应改动关联并在时间线上一并展示。",
-    level: "deep",
-  },
-  {
-    id: "lane",
-    term: "泳道",
-    summary: "时间线左侧每条分支对应的竖直轨道。",
-    detail:
-      "同一泳道上的节点属于同一条历史线；出现分叉或合并时，连线会在泳道之间转移，颜色仅用于区分不同的线。",
-    level: "deep",
-  },
+const TERM_LEVELS: Readonly<Record<GlossaryTermId, GlossaryLevel>> = {
+  author: "basic",
+  sha: "basic",
+  merge: "basic",
+  branch: "basic",
+  "pull-request": "deep",
+  issue: "deep",
+  lane: "deep",
+};
+
+export const EXPLAIN_MODES: readonly { value: ExplainMode; labelKey: MessageKey }[] = [
+  { value: "off", labelKey: "glossary.modeOff" },
+  { value: "beginner", labelKey: "glossary.modeBeginner" },
+  { value: "advanced", labelKey: "glossary.modeAdvanced" },
 ];
 
-export const GLOSSARY_TERMS: readonly GlossaryTerm[] = TERMS;
+/** 术语文案字段。 */
+export type GlossaryField = "term" | "summary" | "detail";
 
-const TERM_BY_ID = new Map<GlossaryTermId, GlossaryTerm>(TERMS.map((item) => [item.id, item]));
+/** 术语文案在消息目录中的键：`glossary.<id>.<field>`。 */
+export function glossaryKey(id: GlossaryTermId, field: GlossaryField): MessageKey {
+  return `glossary.${id}.${field}`;
+}
 
-/** 按 id 取词条；id 由类型约束，运行时缺失视为编程错误。 */
-export function termById(id: GlossaryTermId): GlossaryTerm {
-  const term = TERM_BY_ID.get(id);
-  if (!term) {
-    throw new Error(`未知术语：${id}`);
-  }
-  return term;
+/** 术语难度（与语言无关，用于「新手 / 进阶」展示判定）。 */
+export function glossaryLevel(id: GlossaryTermId): GlossaryLevel {
+  return TERM_LEVELS[id];
 }
 
 /** 判断某词条在当前模式下是否展示：新手展示全部，进阶只保留进阶概念，关闭则一律不展示。 */
-export function shouldExplain(term: GlossaryTerm, mode: ExplainMode): boolean {
+export function shouldExplain(id: GlossaryTermId, mode: ExplainMode): boolean {
   if (mode === "off") {
     return false;
   }
   if (mode === "beginner") {
     return true;
   }
-  return term.level === "deep";
+  return TERM_LEVELS[id] === "deep";
 }
 
 export function isExplainMode(value: string): value is ExplainMode {

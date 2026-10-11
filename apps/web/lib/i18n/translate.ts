@@ -53,3 +53,10 @@ export function createTranslator(locale: Locale): Translator {
 
   return { locale, t };
 }
+
+/**
+ * 源语言（中文）翻译函数：供 `lib/*` 纯逻辑作为默认文案来源。
+ * 客户端 / 服务端组件传入当前语言的 `t` 时会被覆盖，因此这些默认值只影响
+ * 未接入界面的调用方（API 路由、单测）。
+ */
+export const sourceTranslate: Translate = createTranslator(DEFAULT_LOCALE).t;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getTranslator } from "@/lib/i18n/server";
 import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
@@ -33,6 +34,8 @@ async function handlePOST(
     return NextResponse.json({ error: "invalid_repo" }, { status: 400 });
   }
 
+  const { t } = await getTranslator();
+
   let body: unknown;
   try {
     body = await request.json();
@@ -48,7 +51,7 @@ async function handlePOST(
   if (!SHA_PATTERN.test(from)) {
     return NextResponse.json({ error: "invalid_from" }, { status: 400 });
   }
-  const nameError = validateBranchName(branch);
+  const nameError = validateBranchName(branch, t);
   if (nameError) {
     return NextResponse.json({ error: "invalid_branch", message: nameError }, { status: 400 });
   }
@@ -62,13 +65,16 @@ async function handlePOST(
     return NextResponse.json({ error: "no_token" }, { status: 401 });
   }
 
-  const descriptor = createBranchDescriptor({
-    owner,
-    name,
-    branch,
-    fromSha: from,
-    fromLabel: `提交 ${shortSha(from)}`,
-  });
+  const descriptor = createBranchDescriptor(
+    {
+      owner,
+      name,
+      branch,
+      fromSha: from,
+      fromLabel: t("timeline.commitLabel", { sha: shortSha(from) }),
+    },
+    t,
+  );
 
   try {
     const outcome = await runOperation({

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure } from "@/lib/error-state";
+import { useTranslator } from "@/lib/i18n/client";
 import { confirmationView } from "@/lib/operations";
 import {
   MERGE_METHODS,
@@ -47,6 +48,7 @@ const NOTICE_CLASS = "rounded-xl border p-3 text-xs leading-5";
  * 可合并时给出确认卡片（含合并方式），不可合并时只解释原因、不提供执行入口。
  */
 export function MergePullPanel({ owner, name, number, onMerged, onCancel }: MergePullPanelProps) {
+  const { t } = useTranslator();
   const [check, setCheck] = useState<MergeCheckResponse | null>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [method, setMethod] = useState<MergeMethod>("merge");
@@ -82,17 +84,21 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
   const view = useMemo(
     () =>
       confirmationView(
-        createMergePullRequestDescriptor({
-          owner,
-          name,
-          number,
-          title: check?.title || `PR #${number}`,
-          baseBranch: check?.baseRef ?? "默认分支",
-          headBranch: check?.headRef ?? "head 分支",
-          method,
-        }),
+        createMergePullRequestDescriptor(
+          {
+            owner,
+            name,
+            number,
+            title: check?.title || `PR #${number}`,
+            baseBranch: check?.baseRef ?? t("panels.mergePull.defaultBranch"),
+            headBranch: check?.headRef ?? t("panels.mergePull.headBranch"),
+            method,
+          },
+          t,
+        ),
+        t,
       ),
-    [check?.baseRef, check?.headRef, check?.title, method, name, number, owner],
+    [check?.baseRef, check?.headRef, check?.title, method, name, number, owner, t],
   );
 
   const submit = useCallback(async () => {
@@ -111,16 +117,16 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
       };
       if (!response.ok) {
         // 服务端给出的原因（如冲突）比通用文案更具体，优先展示
-        setError(data.message ?? describeMergePullRequestFailure(response.status, data.error));
+        setError(data.message ?? describeMergePullRequestFailure(response.status, data.error, t));
         return;
       }
-      onMerged(`已合并 PR #${number}`);
+      onMerged(t("panels.mergePull.merged", { number }));
     } catch {
-      setError("网络异常，未能完成合并，请稍后重试。");
+      setError(t("panels.mergePull.networkError"));
     } finally {
       setPending(false);
     }
-  }, [endpoint, method, number, onMerged, pending]);
+  }, [endpoint, method, number, onMerged, pending, t]);
 
   if (checkError) {
     return (
@@ -128,16 +134,14 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
         role="alert"
         className={`${NOTICE_CLASS} border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-200`}
       >
-        <p>
-          无法检查 PR #{number} 的可合并性：{checkError}
-        </p>
+        <p>{t("panels.mergePull.checkError", { number, message: checkError })}</p>
         <div className="mt-3 flex justify-end">
           <button
             type="button"
             onClick={onCancel}
             className="h-8 rounded-full border border-red-400 px-4 text-xs font-medium transition-colors hover:bg-red-100 dark:border-red-600 dark:hover:bg-red-900"
           >
-            关闭
+            {t("common.close")}
           </button>
         </div>
       </div>
@@ -149,7 +153,7 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
       <p
         className={`${NOTICE_CLASS} border-black/[.08] bg-zinc-50 text-zinc-600 dark:border-white/[.145] dark:bg-zinc-900 dark:text-zinc-300`}
       >
-        正在检查 PR #{number} 的可合并性…
+        {t("panels.mergePull.checking", { number })}
       </p>
     );
   }
@@ -160,15 +164,19 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
         role="alert"
         className={`${NOTICE_CLASS} border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100`}
       >
-        <p className="text-sm font-semibold">无法合并 PR #{number}</p>
-        <p className="mt-1">可合并性检查：{check.reason ?? "当前状态不允许合并。"}</p>
+        <p className="text-sm font-semibold">{t("panels.mergePull.cannotMerge", { number })}</p>
+        <p className="mt-1">
+          {t("panels.mergePull.checkReason", {
+            reason: check.reason ?? t("panels.mergePull.notAllowed"),
+          })}
+        </p>
         <div className="mt-3 flex justify-end">
           <button
             type="button"
             onClick={onCancel}
             className="h-8 rounded-full border border-amber-400 px-4 text-xs font-medium transition-colors hover:bg-amber-100 dark:border-amber-600 dark:hover:bg-amber-900"
           >
-            取消
+            {t("common.cancel")}
           </button>
         </div>
       </div>
@@ -184,9 +192,11 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
       onCancel={onCancel}
     >
       <div className="mt-3 space-y-1">
-        <p className="text-xs text-zinc-600 dark:text-zinc-300">可合并性检查：可合并</p>
+        <p className="text-xs text-zinc-600 dark:text-zinc-300">
+          {t("panels.mergePull.checkPassed")}
+        </p>
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="merge-method">
-          合并方式
+          {t("panels.mergePull.method")}
         </label>
         <select
           id="merge-method"
@@ -200,12 +210,13 @@ export function MergePullPanel({ owner, name, number, onMerged, onCancel }: Merg
         >
           {MERGE_METHODS.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}
+              {t(option.labelKey)}
             </option>
           ))}
         </select>
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-          {check.headRef ?? "head 分支"} → {check.baseRef ?? "默认分支"}
+          {check.headRef ?? t("panels.mergePull.headBranch")} →{" "}
+          {check.baseRef ?? t("panels.mergePull.defaultBranch")}
         </p>
       </div>
     </ConfirmCard>

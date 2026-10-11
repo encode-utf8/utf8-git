@@ -2,62 +2,63 @@ import { describe, expect, it } from "vitest";
 
 import {
   EXPLAIN_MODES,
-  GLOSSARY_TERMS,
+  GLOSSARY_TERM_IDS,
+  glossaryKey,
+  glossaryLevel,
   isExplainMode,
   shouldExplain,
-  termById,
-  type GlossaryTermId,
 } from "./glossary";
+import { zhCN } from "./i18n/messages/zh-CN";
+
+// 词条文案已迁到消息目录，这里通过源语言（中文）目录校验内容与结构。
+function zh(key: string): unknown {
+  return key
+    .split(".")
+    .reduce<unknown>((current, part) => (current as Record<string, unknown>)[part], zhCN);
+}
 
 describe("术语词条", () => {
-  it("id 唯一且字段完整", () => {
-    const ids = GLOSSARY_TERMS.map((term) => term.id);
-    expect(new Set(ids).size).toBe(ids.length);
-    for (const term of GLOSSARY_TERMS) {
-      expect(term.term.length).toBeGreaterThan(0);
-      expect(term.summary.length).toBeGreaterThan(0);
-      expect(term.detail.length).toBeGreaterThan(0);
-      expect(["basic", "deep"]).toContain(term.level);
+  it("id 唯一且文案字段完整", () => {
+    expect(new Set(GLOSSARY_TERM_IDS).size).toBe(GLOSSARY_TERM_IDS.length);
+    for (const id of GLOSSARY_TERM_IDS) {
+      for (const field of ["term", "summary", "detail"] as const) {
+        const value = zh(glossaryKey(id, field));
+        expect(typeof value).toBe("string");
+        expect((value as string).length).toBeGreaterThan(0);
+      }
+      expect(["basic", "deep"]).toContain(glossaryLevel(id));
     }
   });
 
-  it("termById 命中词条，未知 id 抛错", () => {
-    expect(termById("sha").term).toContain("哈希");
-    expect(() => termById("missing" as GlossaryTermId)).toThrow(/未知术语/);
-  });
-
   it("分支 / PR / Issue 都说明「是什么」与「会产生什么作用」", () => {
-    const branch = termById("branch");
-    expect(branch.term).toBe("分支");
-    expect(branch.summary).toContain("独立开发线");
-    expect(branch.detail).toContain("不会改动任何现有分支");
+    expect(zh(glossaryKey("branch", "term"))).toBe("分支");
+    expect(zh(glossaryKey("branch", "summary"))).toContain("独立开发线");
+    expect(zh(glossaryKey("branch", "detail"))).toContain("不会改动任何现有分支");
 
-    const pullRequest = termById("pull-request");
-    expect(pullRequest.summary).toContain("合并");
-    expect(pullRequest.detail).toContain("不可撤销");
+    expect(zh(glossaryKey("pull-request", "summary"))).toContain("合并");
+    expect(zh(glossaryKey("pull-request", "detail"))).toContain("不可撤销");
 
-    const issue = termById("issue");
-    expect(issue.summary).toContain("不包含代码改动");
-    expect(issue.detail).toContain("不会改动任何代码");
+    expect(zh(glossaryKey("issue", "summary"))).toContain("不包含代码改动");
+    expect(zh(glossaryKey("issue", "detail"))).toContain("不会改动任何代码");
   });
 });
 
 describe("展示规则", () => {
   it("关闭模式不展示任何术语", () => {
-    for (const term of GLOSSARY_TERMS) {
-      expect(shouldExplain(term, "off")).toBe(false);
+    for (const id of GLOSSARY_TERM_IDS) {
+      expect(shouldExplain(id, "off")).toBe(false);
     }
   });
 
   it("新手模式展示全部术语", () => {
-    for (const term of GLOSSARY_TERMS) {
-      expect(shouldExplain(term, "beginner")).toBe(true);
+    for (const id of GLOSSARY_TERM_IDS) {
+      expect(shouldExplain(id, "beginner")).toBe(true);
     }
   });
 
   it("进阶模式只保留进阶术语", () => {
-    for (const term of GLOSSARY_TERMS) {
-      expect(shouldExplain(term, "advanced")).toBe(term.level === "deep");
+    for (const id of GLOSSARY_TERM_IDS) {
+      expect(shouldExplain(id, "advanced")).toBe(glossaryLevel(id) === "deep");
     }
   });
 });

@@ -1,4 +1,7 @@
+"use client";
+
 import { parseInline, parseMarkdownLite, type MarkdownInline } from "@/lib/markdown-lite";
+import { useTranslator } from "@/lib/i18n/client";
 
 // 行内渲染：加粗与行内代码映射为元素，纯文本原样输出（不注入 HTML）。
 function renderInline(text: string) {
@@ -32,9 +35,12 @@ const HEADING_CLASS: Record<1 | 2 | 3, string> = {
 
 /** Issue 正文预览：结构化渲染，避免 HTML 注入。 */
 export function MarkdownPreview({ source }: { source: string }) {
+  const { t } = useTranslator();
   const blocks = parseMarkdownLite(source);
   if (blocks.length === 0) {
-    return <p className="text-xs text-zinc-400 dark:text-zinc-500">（正文预览）</p>;
+    return (
+      <p className="text-xs text-zinc-400 dark:text-zinc-500">{t("panels.bodyPreviewEmpty")}</p>
+    );
   }
   return (
     <div className="space-y-2 text-xs text-zinc-700 dark:text-zinc-200">

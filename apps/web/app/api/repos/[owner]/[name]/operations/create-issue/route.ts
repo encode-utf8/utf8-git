@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getTranslator } from "@/lib/i18n/server";
 import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
@@ -36,6 +37,8 @@ async function handlePOST(
     return NextResponse.json({ error: "invalid_repo" }, { status: 400 });
   }
 
+  const { t } = await getTranslator();
+
   let body: unknown;
   try {
     body = await request.json();
@@ -55,15 +58,18 @@ async function handlePOST(
     return NextResponse.json({ error: "confirmation_required" }, { status: 400 });
   }
 
-  const titleError = validateIssueTitle(title);
+  const titleError = validateIssueTitle(title, t);
   if (titleError) {
     return NextResponse.json({ error: "invalid_issue", message: titleError }, { status: 400 });
   }
   if (issueBody.length > ISSUE_BODY_MAX_LENGTH) {
-    return NextResponse.json({ error: "invalid_issue", message: "正文过长。" }, { status: 400 });
+    return NextResponse.json(
+      { error: "invalid_issue", message: t("ops.issueBody.tooLong") },
+      { status: 400 },
+    );
   }
   const labels = parseIssueLabels(rawLabels);
-  const labelsError = validateIssueLabels(labels);
+  const labelsError = validateIssueLabels(labels, t);
   if (labelsError) {
     return NextResponse.json({ error: "invalid_issue", message: labelsError }, { status: 400 });
   }
@@ -77,13 +83,16 @@ async function handlePOST(
     return NextResponse.json({ error: "no_token" }, { status: 401 });
   }
 
-  const descriptor = createIssueDescriptor({
-    owner,
-    name,
-    title,
-    body: issueBody,
-    labels,
-  });
+  const descriptor = createIssueDescriptor(
+    {
+      owner,
+      name,
+      title,
+      body: issueBody,
+      labels,
+    },
+    t,
+  );
 
   try {
     const outcome = await runOperation({

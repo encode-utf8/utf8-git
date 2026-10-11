@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getTranslator } from "@/lib/i18n/server";
 import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
@@ -57,6 +58,7 @@ async function handleGET(
     return authorized.error;
   }
   const { owner, name, token } = authorized;
+  const { t } = await getTranslator();
 
   const number = parsePullNumber(new URL(request.url).searchParams.get("number"));
   if (number === null) {
@@ -65,13 +67,16 @@ async function handleGET(
 
   try {
     const pull = await fetchPullRequest({ token, owner, name, number });
-    const mergeability = evaluateMergeability({
-      state: pull.state,
-      merged: pull.merged,
-      draft: pull.draft,
-      mergeable: pull.mergeable,
-      mergeableState: pull.mergeableState,
-    });
+    const mergeability = evaluateMergeability(
+      {
+        state: pull.state,
+        merged: pull.merged,
+        draft: pull.draft,
+        mergeable: pull.mergeable,
+        mergeableState: pull.mergeableState,
+      },
+      t,
+    );
     return NextResponse.json(
       {
         number: pull.number,
@@ -106,6 +111,7 @@ async function handlePOST(
     return authorized.error;
   }
   const { userId, owner, name, token } = authorized;
+  const { t } = await getTranslator();
 
   let body: unknown;
   try {
@@ -137,13 +143,16 @@ async function handlePOST(
   } catch (error) {
     return mapOperationFailure(error, "pull_not_mergeable");
   }
-  const mergeability = evaluateMergeability({
-    state: pull.state,
-    merged: pull.merged,
-    draft: pull.draft,
-    mergeable: pull.mergeable,
-    mergeableState: pull.mergeableState,
-  });
+  const mergeability = evaluateMergeability(
+    {
+      state: pull.state,
+      merged: pull.merged,
+      draft: pull.draft,
+      mergeable: pull.mergeable,
+      mergeableState: pull.mergeableState,
+    },
+    t,
+  );
   if (!mergeability.canMerge) {
     return NextResponse.json(
       { error: "pull_not_mergeable", message: mergeability.reason },
@@ -151,15 +160,18 @@ async function handlePOST(
     );
   }
 
-  const descriptor = createMergePullRequestDescriptor({
-    owner,
-    name,
-    number,
-    title: pull.title,
-    baseBranch: pull.baseRef ?? "默认分支",
-    headBranch: pull.headRef ?? "head 分支",
-    method,
-  });
+  const descriptor = createMergePullRequestDescriptor(
+    {
+      owner,
+      name,
+      number,
+      title: pull.title,
+      baseBranch: pull.baseRef ?? t("panels.mergePull.defaultBranch"),
+      headBranch: pull.headRef ?? t("panels.mergePull.headBranch"),
+      method,
+    },
+    t,
+  );
 
   try {
     const outcome = await runOperation({
@@ -174,7 +186,10 @@ async function handlePOST(
     // GitHub 正常合并返回 2xx；merged=false 属语义失败，按不可合并处理
     if (!outcome.value.merged) {
       return NextResponse.json(
-        { error: "pull_not_mergeable", message: outcome.value.message ?? "GitHub 未能完成合并。" },
+        {
+          error: "pull_not_mergeable",
+          message: outcome.value.message ?? t("ops.failure.mergeFailed"),
+        },
         { status: 409 },
       );
     }

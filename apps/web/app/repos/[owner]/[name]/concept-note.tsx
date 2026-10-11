@@ -1,4 +1,7 @@
-import { shouldExplain, termById, type ExplainMode, type GlossaryTermId } from "@/lib/glossary";
+"use client";
+
+import { glossaryKey, shouldExplain, type ExplainMode, type GlossaryTermId } from "@/lib/glossary";
+import { useTranslator } from "@/lib/i18n/client";
 
 const NOTE_CLASS =
   "rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] leading-5 text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100";
@@ -16,14 +19,16 @@ export function ConceptNote({
   mode: ExplainMode;
   className?: string;
 }) {
-  const term = termById(id);
-  if (!shouldExplain(term, mode)) {
+  const { t } = useTranslator();
+  if (!shouldExplain(id, mode)) {
     return null;
   }
   return (
     <p className={className ? `${NOTE_CLASS} ${className}` : NOTE_CLASS}>
-      <span className="font-medium">{term.term}：</span>
-      {term.summary}
+      <span className="font-medium">
+        {t("glossary.note", { term: t(glossaryKey(id, "term")) })}
+      </span>
+      {t(glossaryKey(id, "summary"))}
     </p>
   );
 }

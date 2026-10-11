@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getTranslator } from "@/lib/i18n/server";
 import { withObservability } from "@/lib/observability";
 import { getGitHubAccessToken } from "@/lib/access-token";
 import { auth } from "@/lib/auth";
@@ -35,6 +36,8 @@ async function handlePOST(
     return NextResponse.json({ error: "invalid_repo" }, { status: 400 });
   }
 
+  const { t } = await getTranslator();
+
   let body: unknown;
   try {
     body = await request.json();
@@ -59,15 +62,15 @@ async function handlePOST(
   const pullBody = typeof input.body === "string" ? input.body : "";
   const draft = input.draft === true;
 
-  const titleError = validatePullTitle(title);
+  const titleError = validatePullTitle(title, t);
   if (titleError) {
     return NextResponse.json({ error: "invalid_pull", message: titleError }, { status: 400 });
   }
-  const branchError = validatePullBranches({ head, base });
+  const branchError = validatePullBranches({ head, base }, t);
   if (branchError) {
     return NextResponse.json({ error: "invalid_pull", message: branchError }, { status: 400 });
   }
-  const bodyError = validatePullBody(pullBody);
+  const bodyError = validatePullBody(pullBody, t);
   if (bodyError) {
     return NextResponse.json({ error: "invalid_pull", message: bodyError }, { status: 400 });
   }
@@ -81,15 +84,18 @@ async function handlePOST(
     return NextResponse.json({ error: "no_token" }, { status: 401 });
   }
 
-  const descriptor = createPullRequestDescriptor({
-    owner,
-    name,
-    head,
-    base,
-    title,
-    body: pullBody,
-    draft,
-  });
+  const descriptor = createPullRequestDescriptor(
+    {
+      owner,
+      name,
+      head,
+      base,
+      title,
+      body: pullBody,
+      draft,
+    },
+    t,
+  );
 
   try {
     const outcome = await runOperation({

@@ -21,6 +21,8 @@ export const en: Messages = {
     listSeparator: ", ",
     utcSuffix: " (UTC)",
     unknownTime: "Unknown time",
+    cancel: "Cancel",
+    close: "Close",
   },
   locale: {
     label: "Interface language",
@@ -203,6 +205,292 @@ export const en: Messages = {
     issueState: {
       open: "Open",
       closed: "Closed",
+    },
+  },
+  time: {
+    justNow: "just now",
+    minutesAgo: "{count} minutes ago",
+    hoursAgo: "{count} hours ago",
+    daysAgo: "{count} days ago",
+  },
+  confirm: {
+    executing: "Working…",
+  },
+  glossary: {
+    modeOff: "Off",
+    modeBeginner: "Beginner",
+    modeAdvanced: "Advanced",
+    hint: "Explain: {term}",
+    note: "{term}: ",
+    author: {
+      term: "Commit author",
+      summary: "The account that wrote this change.",
+      detail:
+        "The author comes from the commit's author field and may differ from the committer, for example when merging someone else's pull request.",
+    },
+    sha: {
+      term: "Commit hash (SHA)",
+      summary: "The unique fingerprint of a commit, computed from its contents.",
+      detail:
+        "It is 40 hex digits in full; the interface usually shows the first 7. It permanently points at this change, and branches, tags and operation records refer to it.",
+    },
+    merge: {
+      term: "Merge commit",
+      summary: "A commit that joins two branches' histories, so it has two or more parents.",
+      detail:
+        "A timeline node flagged merge usually comes from merging branches; its parents point at both sides of the merge.",
+    },
+    branch: {
+      term: "Branch",
+      summary:
+        "An independent line of work split off from a commit, where you can change things without touching the main line.",
+      detail:
+        "Creating a branch just adds a new reference from a commit; it changes no existing branch or commit. Commits land on the branch and later merge back through a pull request.",
+    },
+    "pull-request": {
+      term: "Pull request",
+      summary: "A request to merge one branch's changes into another, with discussion and review.",
+      detail:
+        "The main line is unaffected until it is merged. Merging brings the source branch's commits into the target branch and is usually irreversible. The #number badges on the timeline link to the matching pull request on GitHub.",
+    },
+    issue: {
+      term: "Issue",
+      summary:
+        "An entry for recording a problem, request or discussion; it contains no code changes.",
+      detail:
+        "Creating an issue changes no code, branch or commit. It becomes linked to a change when a commit message or pull request description mentions “fixes #123”, and then appears on the timeline.",
+    },
+    lane: {
+      term: "Lane",
+      summary: "The vertical track on the left of the timeline that each branch follows.",
+      detail:
+        "Nodes in the same lane belong to the same line of history; when history forks or merges, the connector moves between lanes, and colours only distinguish the lines.",
+    },
+  },
+  panels: {
+    bodyPreviewEmpty: "(body preview)",
+    createIssue: {
+      title: "Issue title",
+      titlePlaceholder: "Briefly describe the problem or request",
+      titleHint: "A title is required, up to {max} characters.",
+      body: "Body (Markdown)",
+      bodyPlaceholder: "## Steps to reproduce\n\n- First step\n\n**Expected**: …",
+      labels: "Labels (comma separated)",
+      labelsHint: "Up to {count} labels, each no longer than {max} characters.",
+      bodyPreview: "Body preview",
+      created: "Created issue {number}{title}",
+      networkError: "Network error — the issue was not created. Please try again later.",
+    },
+    createPull: {
+      needTwoBranchesTitle: "Cannot create a pull request",
+      needTwoBranchesBody:
+        "A repository needs at least two branches to create a pull request. Create a branch first.",
+      base: "Base branch",
+      head: "Head branch",
+      title: "Pull request title",
+      titlePlaceholder: "Briefly describe this change",
+      titleHint: "A title is required, up to {max} characters.",
+      body: "Pull request body (Markdown)",
+      bodyPlaceholder: "## Background\n\n- What changed\n\n**Verified**: …",
+      draft: "Create as draft",
+      bodyPreview: "Body preview",
+      created: "Created pull request {number}{title}",
+      networkError: "Network error — the pull request was not created. Please try again later.",
+    },
+    deleteBranch: {
+      select: "Branch to delete",
+      defaultSuffix: " (default)",
+      checkError: "Could not check whether “{branch}” can be deleted: {message}",
+      checking: "Checking whether “{branch}” can be deleted…",
+      notDeletable: "Cannot delete: {reason}",
+      notDeletableHint:
+        "Choose another branch; the default and protected branches can only be changed in the GitHub repository settings.",
+      deleted: "Deleted branch {branch}",
+      networkError: "Network error — the branch was not deleted. Please try again later.",
+    },
+    mergePull: {
+      checkError: "Could not check whether pull request #{number} can be merged: {message}",
+      checking: "Checking whether pull request #{number} can be merged…",
+      cannotMerge: "Cannot merge pull request #{number}",
+      checkReason: "Mergeability check: {reason}",
+      notAllowed: "The current state does not allow merging.",
+      checkPassed: "Mergeability check: mergeable",
+      method: "Merge method",
+      defaultBranch: "default branch",
+      headBranch: "head branch",
+      merged: "Merged pull request #{number}",
+      networkError: "Network error — the merge did not complete. Please try again later.",
+    },
+    restoreBranch: {
+      listError: "Could not load restorable deletions: {message}",
+      loading: "Loading restorable deletions…",
+      emptyTitle: "No branches to restore",
+      emptyBody:
+        "Only branches this app deleted successfully in the last 24 hours and whose commit SHA was saved are listed; branches deleted another way cannot be restored here.",
+      legend: "Choose a deletion to restore",
+      candidate: "Restore {branch} ({remaining})",
+      hint: "Restoring only recreates the branch reference pointing at the commit from before deletion; it does not restore branch protection rules, and branches removed with other tools cannot be restored.",
+      impossible: "Cannot restore: {reason}",
+      restored: "Restored branch {branch}",
+      networkError: "Network error — the branch was not restored. Please try again later.",
+    },
+  },
+  ops: {
+    kind: {
+      createBranch: "Create branch",
+      createIssue: "Create issue",
+      createPullRequest: "Create pull request",
+      mergePullRequest: "Merge pull request",
+      deleteBranch: "Delete branch",
+      restoreBranch: "Restore branch",
+      revokeAuthorization: "Revoke authorization",
+      purgeAccountData: "Erase data",
+    },
+    status: {
+      started: "In progress",
+      succeeded: "Succeeded",
+      failed: "Failed",
+    },
+    failure: {
+      unauthorized: "The authorization is no longer valid. Sign in again and retry.",
+      forbidden: "Insufficient permissions to complete this operation.",
+      notFound: "The repository does not exist or you have no access.",
+      rateLimited: "Too many GitHub requests. Please try again later.",
+      unreachable: "Cannot reach GitHub. Check your connection and retry.",
+      timeout: "The GitHub request timed out. Please retry.",
+      confirmationRequired: "Confirm this operation in the card first.",
+      tooManyRequests: "Too many operations. Please try again later.",
+      revokeUnavailable:
+        "The server has no GitHub app credentials, so self-service revocation is unavailable; remove the authorization in GitHub settings instead.",
+      badRequest: "Invalid request parameters. Check your input.",
+      mergeFailed: "GitHub could not complete the merge.",
+      generic: "The operation failed. Please try again later.",
+    },
+    conflict: {
+      createBranch: "The branch already exists or the name is not accepted. Try another name.",
+      createIssue: "The issue title or content was not accepted. Check it and retry.",
+      createPullRequest:
+        "A pull request for this branch pair already exists, or the title was not accepted. Check it and retry.",
+      mergePullRequest:
+        "The pull request cannot be merged right now (it may be merged, closed, or have conflicts).",
+      deleteBranch: "The branch is missing, protected or already deleted. Refresh and retry.",
+      restoreBranch:
+        "The branch already exists or the commit SHA is unreachable, so it cannot be restored. Refresh and retry.",
+    },
+    branchName: {
+      empty: "The branch name cannot be empty.",
+      tooLong: "The branch name cannot exceed {max} characters.",
+      illegalChars:
+        "The branch name cannot contain spaces or ~ ^ : ? * [ \\ and similar characters.",
+      leadingDash: "The branch name cannot start with -.",
+      leadingSlash: "The branch name cannot start or end with /.",
+      trailingDot: "The branch name cannot end with .",
+      atSign: "The branch name cannot be @.",
+      doubleDot: "The branch name cannot contain consecutive ..",
+      atBrace: "The branch name cannot contain @{",
+      doubleSlash: "The branch name cannot contain consecutive //",
+      emptySegment: "No segment of the branch name may be empty.",
+      dotSegment: "No segment of the branch name may start with .",
+      lockSegment: "No segment of the branch name may end with .lock",
+    },
+    issueTitle: {
+      empty: "The issue title cannot be empty.",
+      tooLong: "The issue title cannot exceed {max} characters.",
+    },
+    issueBody: {
+      tooLong: "The body is too long.",
+    },
+    issueLabels: {
+      tooMany: "At most {count} labels.",
+      newline: "A label cannot contain a line break.",
+      tooLong: "A single label cannot exceed {max} characters.",
+    },
+    pullTitle: {
+      empty: "The pull request title cannot be empty.",
+      tooLong: "The pull request title cannot exceed {max} characters.",
+    },
+    pullBody: {
+      tooLong: "The pull request body cannot exceed {max} characters.",
+    },
+    pullBranches: {
+      headInvalid: "Head branch: {reason}",
+      baseInvalid: "Base branch: {reason}",
+      same: "The head and base branches cannot be the same.",
+    },
+    mergeMethod: {
+      merge: "Merge commit",
+      squash: "Squash and merge",
+      rebase: "Rebase and merge",
+    },
+    mergeability: {
+      merged: "This pull request is already merged.",
+      closed: "This pull request is closed and cannot be merged.",
+      draft: "This pull request is still a draft; mark it ready for review first.",
+      conflict: "There are merge conflicts that must be resolved first.",
+      blocked: "Blocked by branch protection rules or required checks.",
+      notAllowed: "The current Git state does not allow an automatic merge.",
+      pending: "GitHub has not finished computing mergeability yet. Please retry later.",
+    },
+    deletion: {
+      notFound: "The branch does not exist or you have no access.",
+      selectBranch: "Choose a branch to delete.",
+      defaultBranch: "The default branch cannot be deleted.",
+      protected: "This branch is protected and cannot be deleted.",
+      current: "You cannot delete the branch you are currently viewing.",
+    },
+    restore: {
+      notFound: "No restorable deletion record was found. Refresh and retry.",
+      unavailable: "This deletion record cannot be restored.",
+      missingBranch: "A branch name to restore is required.",
+      missingSha: "This deletion record has no commit SHA and cannot be restored.",
+      invalidTime: "The deletion record has an invalid time and cannot be restored.",
+      windowExpired: "The {hours}-hour restore window has passed; it cannot be restored.",
+      unknownWindow: "restore window unknown",
+      expired: "restore window expired",
+      remainingHours: "about {hours} hours left",
+      remainingMinutes: "about {minutes} minutes left",
+    },
+    descriptor: {
+      createBranch: {
+        summary: "Create branch {branch} in {repo}",
+        from: "Create branch {branch} from {fromLabel} ({sha})",
+        noChange: "Changes no existing branch or commit",
+      },
+      createIssue: {
+        summary: "Create an issue in {repo}: {title}",
+        created: "New issue “{title}”",
+        labels: "Labels: {labels}",
+        noLabels: "No labels",
+        noChange: "Changes no code, branch or commit",
+      },
+      createPullRequest: {
+        summary: "Create a pull request in {repo}: {head} → {base}",
+        created: "New pull request “{title}”: {head} → {base}",
+        draft: "Create as a draft (no merge requested yet)",
+        ready: "Create as a mergeable pull request",
+        noChange: "Changes no branch or commit",
+      },
+      mergePullRequest: {
+        summary: "Merge pull request #{number} in {repo}: {title}",
+        merge: "Merge {head} into {base} (method: {method})",
+        result: "Pull request #{number} becomes “merged”, usually irreversible",
+        noDeleteBranch: "Deletes no branch",
+      },
+      deleteBranch: {
+        summary: "Delete branch {branch} in {repo}",
+        remove: "Delete branch {branch}; its reference is removed from the repository",
+        keepCommits:
+          "Deletes no commit: removed commits remain reachable from other branches or tags",
+        head: "The branch pointed at {sha} before deletion; record that SHA first if you may need to restore it",
+        restoreHint: "One-click restore arrives in M3-6; for now record the SHA yourself",
+      },
+      restoreBranch: {
+        summary: "Restore branch {branch} in {repo}",
+        rePoint: "Point branch {branch} back at commit {sha} from before deletion",
+        noChange: "Changes no other branch or commit",
+        noProtection:
+          "The restored branch does not inherit the previous protection rules; re-enable them in the GitHub repository settings if needed",
+      },
     },
   },
   permissions: {
