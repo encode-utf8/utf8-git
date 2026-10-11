@@ -53,7 +53,8 @@ export default defineConfig({
     storageState: path.resolve(process.cwd(), "e2e/.auth/state.json"),
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // 固定中文：E2E 断言用默认语言（中文）的文案，不随运行机器的 Accept-Language 漂移
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], locale: "zh-CN" } }],
   globalSetup: "./e2e/global-setup.ts",
   webServer: [
     {
