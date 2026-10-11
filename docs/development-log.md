@@ -33,6 +33,9 @@
 **问题与风险**
 
 - 根因修复需对生产库（Neon）直连串执行 `prisma migrate deploy`——本地无该凭据，无法代跑；执行后 `/api/health` 的 `required_tables` 应显示 7 张。
+- 生产库的表由早期 `db push` / 手工建表、无迁移历史，直接 `migrate deploy` 会报 `P3005`（schema is not empty）。
+  需先对 `20261004144043_init_auth` 与 `20261007081155_m1_6_shared_stores` 执行 `prisma migrate resolve --applied` 基线化，
+  再 `migrate deploy` 应用 M3 迁移；完整步骤见 `docs/deployment.md` §3.3。
 - `REQUIRED_TABLES` 是手工维护清单，新增迁移时需同步（本轮已加注释与测试提醒）。
 
 **下一步**

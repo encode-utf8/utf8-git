@@ -67,6 +67,7 @@
 | 警告 `non-standard "NODE_ENV" value`                                        | 在 Vercel 环境变量里手动设置了 `NODE_ENV`（含带引号 / 空值）                                                                     | 删除该变量，Vercel 会按环境自动注入 `production`                                                                                                                              |
 | 安装依赖慢或失败                                                            | 仓库 `.npmrc` 指向 `registry.npmmirror.com`，对海外构建机不友好                                                                  | 由 `installCommand` 的 `--registry` 覆盖；要永久移除可直接删 `.npmrc`（本地改为可直连官方源时）                                                                               |
 | 登录后报错 / 页面 500（如 `/repos`、操作历史）                              | 目标库未执行迁移（缺 `users` / `accounts` / `sessions` / 共享缓存等表，或 M3 新增的 `operation_audit`）                          | 本地执行 `prisma migrate deploy` 指向生产库直连串；用 `GET /api/health` 的 `required_tables` 确认缺哪张表                                                                     |
+| `prisma migrate deploy` 报 `P3005`（schema is not empty）                   | 目标库的表由 `db push` / 手工 SQL 建立，缺少 `_prisma_migrations` 迁移历史，deploy 因此拒绝执行                                  | 先基线化再部署：对库中已存在的迁移逐条 `prisma migrate resolve --applied <迁移名>`，再 `prisma migrate deploy`（见 §3.3）                                                     |
 | 翻页时随机报 409 `cursor_expired`，且每次操作都很慢                         | `STORE_BACKEND` 未设为 `postgres`：Serverless 多实例下缓存与游标链按实例隔离，第 2 页请求落到别的实例就读不到第 1 页写入的游标链 | 在 Vercel 设置 `STORE_BACKEND=postgres`（运行期 pooled 串）后 Redeploy；用 `pnpm deploy:selfcheck` 或 `GET /api/health` 确认已生效                                            |
 | 登录后 GitHub 报 `The redirect_uri is not associated with this application` | OAuth App 的 Authorization callback URL 与实际请求地址不一致（常见是仍留着 `localhost`，或线上域名拼写 / 结尾斜杠不一致）        | GitHub → Settings → Developer settings → OAuth Apps，打开 `AUTH_GITHUB_ID` 对应的那个 App，把回调地址改为 `https://<域名>/api/auth/callback/github`（无结尾斜杠、逐字符一致） |
 
@@ -88,6 +89,30 @@ node scripts/deploy-selfcheck.mjs --base=http://127.0.0.1:3100   # 校验本地�
 - **无法自动验证**：GitHub OAuth App 的 Authorization callback URL 是否已登记（GitHub 仅在已登录状态校验）。
   脚本会在结尾打印「应登记的地址」，需人工比对。
   | 所有操作都迟钝（每次点击 1 s+） | Vercel 函数区与数据库区不一致：一次请求串行执行 4~6 次数据库查询（数据库会话 + 令牌 + 缓存 + 限流 + 游标），每次跨区往返要 200 ms 以上 | 让两者同区：Neon 在 `ap-southeast-1` 时把函数区设为 `sin1`（Vercel 后台 Settings → Functions → Function Region，或 `vercel.json` 的 `regions`）；套餐不支持改区就把数据库建到函数的默认区（`aws-us-east-1`）。用 `pnpm deploy:selfcheck` 看函数区与数据库往返 |
+
+### 3.3 基线化已有数据库（`P3005`）
+
+`prisma migrate deploy` 报 `P3005 The database schema is not empty`，说明目标库的表不是由 Prisma Migrate 建的
+（例如早期用 `prisma db push` 或手工 SQL 建表），库里没有 `_prisma_migrations` 迁移历史。此时**不要删库重建**，
+按顺序把「库中已经存在」的迁移标记为已应用（baseline），再部署剩余迁移：
+
+```powershell
+# 1) 指向生产库直连串
+$env:DATABASE_URL="<生产库直连串>"
+
+# 2) 逐条标记「库中已有对应结构」的迁移（名字 = apps/web/prisma/migrations/ 下的目录名）
+pnpm --filter @utf8-git/web exec prisma migrate resolve --applied 20261004144043_init_auth
+pnpm --filter @utf8-git/web exec prisma migrate resolve --applied 20261007081155_m1_6_shared_stores
+
+# 3) 应用剩余迁移（含 M3 的 operation_audit）
+pnpm --filter @utf8-git/web exec prisma migrate deploy
+```
+
+- 原则：**只标记库里确实已具备对应结构的迁移**。上例假设目标库已有 `users` / `accounts` / `sessions` /
+  `verification_tokens` / `shared_cache_entries` / `rate_limit_states`（用 `GET /api/health` 的 `required_tables` 核对）；
+  若某迁移的表并不存在，就不要 resolve，交给 `migrate deploy` 正常建表。
+- `migrate resolve` 只写迁移历史表、不动业务表；执行完用 `prisma migrate status` 确认
+  `Database schema is up to date!`。
 
 ## 4. 连接池
 
