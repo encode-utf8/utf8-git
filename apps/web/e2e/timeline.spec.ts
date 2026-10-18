@@ -293,3 +293,34 @@ test("操作历史：审计记录含状态、等价命令与结果链接", async
     1,
   );
 });
+
+// P0 画布改造：拖提交节点到空白处 → 落点就地命名 → 走同一个 create-branch 接口。
+// 与按钮路径并存：拖拽是快路径，按钮是键盘 / 无障碍路径（上面几条用例覆盖）。
+test("拖提交节点到空白处 → 就地命名建分支", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  const row = page.getByRole("list", { name: "提交时间线" }).getByRole("button").first();
+  await expect(row).toBeVisible();
+  const box = await row.boundingBox();
+  if (!box) {
+    throw new Error("提交行没有可见区域，无法执行拖拽");
+  }
+
+  // 按住行向右下方拖：超过 8px 阈值才判定为拖动（不移动仍是一次点击）
+  const startX = box.x + 24;
+  const startY = box.y + box.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 40, startY + 40, { steps: 6 });
+  await page.mouse.move(startX + 220, startY + 60, { steps: 6 });
+  await page.mouse.up();
+
+  // 落点弹出命名气泡（不是工具栏下面的确认卡片）
+  const popover = page.getByRole("dialog", { name: /新建分支/ });
+  await expect(popover).toBeVisible();
+
+  const branch = `feature/drag-${Date.now().toString(36)}`;
+  await page.getByLabel("新分支名称").fill(branch);
+  await page.getByRole("button", { name: "建分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(`已创建分支 ${branch}`);
+});

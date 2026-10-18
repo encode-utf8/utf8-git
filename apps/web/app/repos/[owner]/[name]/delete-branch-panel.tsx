@@ -33,6 +33,8 @@ type DeleteBranchPanelProps = {
   defaultBranch: string | null;
   /** 时间线当前正在查看的分支（删除它会丢失浏览上下文） */
   currentBranch: string | null;
+  /** 由「拖分支芯片到删除区」带入的预选分支；为空时按默认候选规则挑选。 */
+  initialBranchName?: string | null;
   /** 术语解释模式（新手 / 进阶时在面板上方内联说明分支是什么）。 */
   mode: ExplainMode;
   /** 删除成功后由父组件展示提示并关闭面板。 */
@@ -67,12 +69,18 @@ export function DeleteBranchPanel({
   branches,
   defaultBranch,
   currentBranch,
+  initialBranchName = null,
   mode,
   onDeleted,
   onCancel,
 }: DeleteBranchPanelProps) {
   const { t } = useTranslator();
-  const [branch, setBranch] = useState(() => initialBranch(branches, defaultBranch, currentBranch));
+  const [branch, setBranch] = useState(
+    () =>
+      (initialBranchName && branches.some((item) => item.name === initialBranchName)
+        ? initialBranchName
+        : null) ?? initialBranch(branches, defaultBranch, currentBranch),
+  );
   const [check, setCheck] = useState<DeleteCheckState | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

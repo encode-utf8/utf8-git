@@ -275,17 +275,22 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/30" aria-hidden="true" onClick={onClose} />
+      {/* 轻遮罩：点击空白处关闭，但不把整张画布压暗（详情卡固定在右下角） */}
+      <div className="fixed inset-0 z-40 bg-black/10" aria-hidden="true" onClick={onClose} />
       <aside
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={t("commitDetail.label")}
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-zinc-950"
+        className="fixed bottom-4 right-4 z-50 flex max-h-[74vh] w-[min(26rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-black/[.12] bg-white shadow-2xl ring-1 ring-black/[.04] dark:border-white/[.18] dark:bg-zinc-950 dark:ring-white/[.06]"
       >
-        <header className="flex items-start justify-between gap-3 border-b border-black/[.08] px-5 py-4 dark:border-white/[.145]">
+        <header className="flex items-start justify-between gap-3 border-b border-black/[.08] bg-zinc-50 px-5 py-4 dark:border-white/[.145] dark:bg-zinc-900">
           <div className="min-w-0">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("commitDetail.label")}</p>
+            <p className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-600/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-400/15 dark:text-sky-300">
+                {t("commitDetail.label")}
+              </span>
+            </p>
             <h2 className="mt-1 break-words text-base font-semibold text-zinc-900 dark:text-zinc-50">
               {commit.headline || t("commitDetail.noHeadline")}
             </h2>
