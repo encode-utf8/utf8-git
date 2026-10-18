@@ -350,9 +350,16 @@ test("拖分支芯片到删除区 → 确认浮层 → 删除成功", async ({ p
 
   const chip = page.getByRole("button", { name: branch, exact: true });
   await expect(chip).toBeVisible();
+  // 分支多时芯片条横向溢出：新分支可能被裁在容器右侧之外（几何框仍在，
+  // 但屏幕坐标落在视口外，鼠标按下不会命中它）。先滚到可见再取坐标。
+  await chip.scrollIntoViewIfNeeded();
   const chipBox = await chip.boundingBox();
   if (!chipBox) {
     throw new Error("分支芯片没有可见区域，无法执行拖拽");
+  }
+  const viewport = page.viewportSize();
+  if (viewport && (chipBox.x < 0 || chipBox.x + chipBox.width > viewport.width)) {
+    throw new Error(`分支芯片在视口之外（x=${chipBox.x} w=${chipBox.width}）`);
   }
 
   await page.mouse.move(chipBox.x + chipBox.width / 2, chipBox.y + chipBox.height / 2);
