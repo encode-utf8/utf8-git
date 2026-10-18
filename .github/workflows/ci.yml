@@ -36,6 +36,11 @@ jobs:
       - name: Security audit (pnpm audit)
         run: pnpm audit --registry=https://registry.npmjs.org
 
+      # 格式化门禁：统一口径 prettier --check .（忽略清单见 .prettierignore），
+      # 存量漂移已于 M4-8 清零，此后任何未格式化提交在此拦下。
+      - name: Format (prettier --check)
+        run: pnpm format:check
+
       - name: Lint
         run: pnpm lint
 

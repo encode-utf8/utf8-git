@@ -1,7 +1,7 @@
 ---
 name: Bug 反馈
 about: 报告可复现的问题（页面、数据或部署）
-title: '[Bug] '
+title: "[Bug] "
 labels: bug
 ---
 

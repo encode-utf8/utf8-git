@@ -13,28 +13,28 @@
 
 ## 2. 结论总览
 
-| 维度 | 状态 | 说明 |
-| --- | --- | --- |
-| 键盘可达 | ⚠️ → ✅ | 全部交互元素原生 `button` / `a` / 表单控件，无 div 点击；本轮修复 2 处焦点不可见 |
-| 焦点管理 | ⚠️ → ✅ | 详情抽屉原本 Tab 可逃逸到背景；本轮加焦点陷阱与焦点还原 |
-| 表单标签 | ✅ | 全部输入有 `<label for>` 或 `aria-label`（含 6 个写操作面板） |
-| 地标 / 标题 | ⚠️ → ✅ | 时间线页与操作历史页缺 `main` 地标；本轮补齐；各页 h1 唯一 |
-| 跳过导航 | ⚠️ → ✅ | 原本无 skip link；本轮加入（i18n 双语） |
-| 对比度 | ⚠️ → ✅ | 占位符 zinc-400（2.6:1）与 2 处 zinc-400 正文不达标；本轮提升到 zinc-500 |
-| ARIA 语义 | ✅ | `role=status/alert/tooltip/list/dialog` 使用正确；确认卡片沿用 `role=dialog`（E2E 依赖，`aria-modal=false` 已区分非模态） |
+| 维度        | 状态    | 说明                                                                                                                      |
+| ----------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 键盘可达    | ⚠️ → ✅ | 全部交互元素原生 `button` / `a` / 表单控件，无 div 点击；本轮修复 2 处焦点不可见                                          |
+| 焦点管理    | ⚠️ → ✅ | 详情抽屉原本 Tab 可逃逸到背景；本轮加焦点陷阱与焦点还原                                                                   |
+| 表单标签    | ✅      | 全部输入有 `<label for>` 或 `aria-label`（含 6 个写操作面板）                                                             |
+| 地标 / 标题 | ⚠️ → ✅ | 时间线页与操作历史页缺 `main` 地标；本轮补齐；各页 h1 唯一                                                                |
+| 跳过导航    | ⚠️ → ✅ | 原本无 skip link；本轮加入（i18n 双语）                                                                                   |
+| 对比度      | ⚠️ → ✅ | 占位符 zinc-400（2.6:1）与 2 处 zinc-400 正文不达标；本轮提升到 zinc-500                                                  |
+| ARIA 语义   | ✅      | `role=status/alert/tooltip/list/dialog` 使用正确；确认卡片沿用 `role=dialog`（E2E 依赖，`aria-modal=false` 已区分非模态） |
 
 ## 3. 发现与修复明细
 
-| # | 严重度 | 位置 | 问题 | 修复 |
-| --- | --- | --- | --- | --- |
-| 1 | 高（2.4.7） | `timeline-view.tsx` 提交行遮罩按钮 | `focus-visible:outline-none`，仅以 4% 透明度背景色指示焦点，键盘用户几乎不可见 | 改为 inset 天蓝描边（`outline-2 outline-offset-[-2px] outline-sky-600`，暗色 `sky-400`）+ 保留背景反馈 |
-| 2 | 高（2.4.7） | `repo-list.tsx` 搜索框 | `focus:outline-none`，仅边框换色（zinc-400 边框对比度不足） | 改 `focus-visible:outline-2 outline-offset-1 outline-sky-600` |
-| 3 | 高（2.1.1 / 模态语义） | `commit-detail.tsx` 详情抽屉 | `aria-modal="true"` 但无焦点陷阱，Tab 可移动到背景时间线（焦点丢失且屏幕阅读器上下文混乱） | keydown 处理扩展 Tab：`panel.contains(active)` 守卫 + 首尾循环；打开聚焦关闭按钮、关闭还原焦点（原有） |
-| 4 | 中（1.4.3） | 6 处输入占位符（仓库搜索、新建分支、时间线搜索、三个面板 FIELD_CLASS） | `placeholder:text-zinc-400` 白底 ≈ 2.6:1 < 4.5:1 | 统一 `placeholder:text-zinc-500`（白底 4.6:1、暗色底 4.7:1） |
-| 5 | 中（1.4.3） | `commit-detail.tsx`「获取于」时间戳 | `text-zinc-400`（2.6:1） | 提升为 `text-zinc-500 dark:text-zinc-400` |
-| 6 | 中（1.4.3） | `markdown-preview.tsx` 空预览提示 | `text-zinc-400`（2.6:1） | 同上 |
-| 7 | 中（2.4.1） | `layout.tsx` | 无「跳到主要内容」，键盘用户须先过语言切换与断网横幅 | 新增 skip link（`sr-only` → 聚焦可见，i18n 键 `a11y.skipToContent`），内容容器 `#main-content`（`tabIndex=-1`） |
-| 8 | 低（1.3.1） | `repos/[owner]/[name]/page.tsx`、`operations/page.tsx` | 时间线页 / 操作历史页无 `main` 地标（其余页已有） | PageShell 与操作历史页内容容器改 `<main>` |
+| #   | 严重度                 | 位置                                                                   | 问题                                                                                       | 修复                                                                                                            |
+| --- | ---------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| 1   | 高（2.4.7）            | `timeline-view.tsx` 提交行遮罩按钮                                     | `focus-visible:outline-none`，仅以 4% 透明度背景色指示焦点，键盘用户几乎不可见             | 改为 inset 天蓝描边（`outline-2 outline-offset-[-2px] outline-sky-600`，暗色 `sky-400`）+ 保留背景反馈          |
+| 2   | 高（2.4.7）            | `repo-list.tsx` 搜索框                                                 | `focus:outline-none`，仅边框换色（zinc-400 边框对比度不足）                                | 改 `focus-visible:outline-2 outline-offset-1 outline-sky-600`                                                   |
+| 3   | 高（2.1.1 / 模态语义） | `commit-detail.tsx` 详情抽屉                                           | `aria-modal="true"` 但无焦点陷阱，Tab 可移动到背景时间线（焦点丢失且屏幕阅读器上下文混乱） | keydown 处理扩展 Tab：`panel.contains(active)` 守卫 + 首尾循环；打开聚焦关闭按钮、关闭还原焦点（原有）          |
+| 4   | 中（1.4.3）            | 6 处输入占位符（仓库搜索、新建分支、时间线搜索、三个面板 FIELD_CLASS） | `placeholder:text-zinc-400` 白底 ≈ 2.6:1 < 4.5:1                                           | 统一 `placeholder:text-zinc-500`（白底 4.6:1、暗色底 4.7:1）                                                    |
+| 5   | 中（1.4.3）            | `commit-detail.tsx`「获取于」时间戳                                    | `text-zinc-400`（2.6:1）                                                                   | 提升为 `text-zinc-500 dark:text-zinc-400`                                                                       |
+| 6   | 中（1.4.3）            | `markdown-preview.tsx` 空预览提示                                      | `text-zinc-400`（2.6:1）                                                                   | 同上                                                                                                            |
+| 7   | 中（2.4.1）            | `layout.tsx`                                                           | 无「跳到主要内容」，键盘用户须先过语言切换与断网横幅                                       | 新增 skip link（`sr-only` → 聚焦可见，i18n 键 `a11y.skipToContent`），内容容器 `#main-content`（`tabIndex=-1`） |
+| 8   | 低（1.3.1）            | `repos/[owner]/[name]/page.tsx`、`operations/page.tsx`                 | 时间线页 / 操作历史页无 `main` 地标（其余页已有）                                          | PageShell 与操作历史页内容容器改 `<main>`                                                                       |
 
 ## 4. 复测方式（人工核对清单）
 

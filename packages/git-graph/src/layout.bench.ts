@@ -28,11 +28,12 @@ const ROUNDS = 25;
 
 // 该文件只在 Node 下作为基准脚本运行。算法包本身浏览器无关（不引 @types/node），
 // 这里按需取用运行时已有的极小子集：高精度计时与标准输出。
-const now = (): number => (globalThis as unknown as { performance: { now(): number } }).performance.now();
+const now = (): number =>
+  (globalThis as unknown as { performance: { now(): number } }).performance.now();
 const writeOut = (chunk: string): void => {
-  (globalThis as unknown as { process: { stdout: { write(text: string): void } } }).process.stdout.write(
-    chunk,
-  );
+  (
+    globalThis as unknown as { process: { stdout: { write(text: string): void } } }
+  ).process.stdout.write(chunk);
 };
 
 /**

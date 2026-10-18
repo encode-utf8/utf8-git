@@ -22,10 +22,7 @@ test("提交行获得键盘焦点时有可见描边（回归 M4-4 修复 1）", 
   await page.getByRole("link", { name: "encode-utf8/utf8-git", exact: true }).click();
   await expect(page.getByRole("heading", { name: "encode-utf8/utf8-git" })).toBeVisible();
 
-  const firstRowButton = page
-    .getByRole("list", { name: "提交时间线" })
-    .getByRole("button")
-    .first();
+  const firstRowButton = page.getByRole("list", { name: "提交时间线" }).getByRole("button").first();
   // 先制造一次键盘交互再编程式聚焦，Chromium 才会对该元素应用 :focus-visible
   await page.keyboard.press("Tab");
   await firstRowButton.focus();

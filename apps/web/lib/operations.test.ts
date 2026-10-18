@@ -52,7 +52,9 @@ describe("确认视图", () => {
     expect(confirmationView(descriptor({ kind: "revokeAuthorization" })).confirmLabel).toBe(
       "撤销授权",
     );
-    expect(confirmationView(descriptor({ kind: "purgeAccountData" })).confirmLabel).toBe("清除数据");
+    expect(confirmationView(descriptor({ kind: "purgeAccountData" })).confirmLabel).toBe(
+      "清除数据",
+    );
   });
 
   it("创建类操作不算危险操作", () => {
