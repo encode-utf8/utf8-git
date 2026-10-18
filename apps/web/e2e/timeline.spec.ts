@@ -399,10 +399,24 @@ test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({
 
   const source = page.getByRole("button", { name: branch, exact: true });
   await expect(source).toBeVisible();
+  // 建完分支后还有一次 router.refresh()：等它落定再取坐标，
+  // 否则芯片条可能重排，鼠标按下会命中相邻的另一个芯片（run #124 就是这样）。
+  await page.waitForLoadState("networkidle");
   await source.scrollIntoViewIfNeeded();
   const sourceBox = await source.boundingBox();
   if (!sourceBox) {
     throw new Error("来源分支芯片没有可见区域");
+  }
+  const sourceCenter = {
+    x: sourceBox.x + sourceBox.width / 2,
+    y: sourceBox.y + sourceBox.height / 2,
+  };
+  const hitLabel = await page.evaluate(
+    ([x, y]) => document.elementFromPoint(x as number, y as number)?.closest("button")?.textContent,
+    [sourceCenter.x, sourceCenter.y],
+  );
+  if (!hitLabel?.includes(branch)) {
+    throw new Error(`按下位置命中的不是来源芯片：${hitLabel ?? "none"}`);
   }
 
   const target = page.getByRole("button", { name: /^main/ }).first();
@@ -412,7 +426,7 @@ test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({
     throw new Error("目标分支芯片没有可见区域");
   }
 
-  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.move(sourceCenter.x, sourceCenter.y);
   await page.mouse.down();
   await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
     steps: 10,
@@ -421,8 +435,6 @@ test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({
   await expect(page.getByText("松手向 main 开 PR")).toBeVisible();
   await page.mouse.up();
 
-  // 临时诊断：把面板收到的预填值打出来
-  expect(await page.locator("[data-debug]").first().getAttribute("data-debug")).toBe("DIAG");
   // 面板预填：来源 = 被拖的分支，目标 = 落点分支
   await expect(page.getByLabel("来源分支（head）")).toHaveValue(branch);
   await expect(page.getByLabel("目标分支（base）")).toHaveValue("main");
