@@ -46,60 +46,62 @@ export function BranchBar({
   onDragCancel,
 }: BranchBarProps) {
   const { t } = useTranslator();
-  const dragRef = useRef<{ name: string; startX: number; startY: number; moved: boolean } | null>(
-    null,
-  );
   // 拖动结束后浏览器仍会补发一次 click：用它把这次 click 吞掉，避免「拖完顺带切了分支」
   const suppressClickRef = useRef<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
 
+  // 用 window 监听而不是 setPointerCapture + React 合成事件：
+  // 与提交行拖拽同一套写法（那套已在 CI 验证可用），少一层指针捕获的行为差异。
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, name: string) => {
       if (disabled || event.pointerType !== "mouse" || event.button !== 0) {
         return;
       }
-      dragRef.current = { name, startX: event.clientX, startY: event.clientY, moved: false };
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    },
-    [disabled],
-  );
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let moved = false;
 
-  const handlePointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>, name: string) => {
-      const drag = dragRef.current;
-      if (!drag || drag.name !== name) {
-        return;
-      }
-      if (!drag.moved) {
-        const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
-        if (distance < DRAG_THRESHOLD) {
-          return;
+      const handleMove = (moveEvent: PointerEvent) => {
+        if (!moved) {
+          const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+          if (distance < DRAG_THRESHOLD) {
+            return;
+          }
+          moved = true;
+          setDragging(name);
+          onDragStart(name);
         }
-        drag.moved = true;
-        setDragging(name);
-        onDragStart(name);
-      }
-      onDragMove(name, { x: event.clientX, y: event.clientY });
-    },
-    [onDragMove, onDragStart],
-  );
+        onDragMove(name, { x: moveEvent.clientX, y: moveEvent.clientY });
+      };
 
-  const handlePointerUp = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>, name: string) => {
-      const drag = dragRef.current;
-      dragRef.current = null;
-      setDragging(null);
-      if (!drag || drag.name !== name) {
-        return;
-      }
-      if (drag.moved) {
-        suppressClickRef.current = name;
-        onDragEnd(name, { x: event.clientX, y: event.clientY });
-      } else {
+      const cleanup = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
+        window.removeEventListener("pointercancel", handleCancel);
+      };
+
+      const handleUp = (upEvent: PointerEvent) => {
+        cleanup();
+        setDragging(null);
+        if (moved) {
+          suppressClickRef.current = name;
+          onDragEnd(name, { x: upEvent.clientX, y: upEvent.clientY });
+        } else {
+          onDragCancel();
+        }
+      };
+
+      const handleCancel = () => {
+        cleanup();
+        setDragging(null);
         onDragCancel();
-      }
+      };
+
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleUp);
+      window.addEventListener("pointercancel", handleCancel);
     },
-    [onDragCancel, onDragEnd],
+    [disabled, onDragCancel, onDragEnd, onDragMove, onDragStart],
   );
 
   const handleClick = useCallback(
@@ -136,15 +138,8 @@ export function BranchBar({
               title={item.name}
               onClick={() => handleClick(item.name)}
               onPointerDown={(event) => handlePointerDown(event, item.name)}
-              onPointerMove={(event) => handlePointerMove(event, item.name)}
-              onPointerUp={(event) => handlePointerUp(event, item.name)}
-              onPointerCancel={() => {
-                dragRef.current = null;
-                setDragging(null);
-                onDragCancel();
-              }}
               className={[
-                "flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors",
+                "flex h-7 shrink-0 select-none items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors",
                 "cursor-grab active:cursor-grabbing disabled:opacity-60",
                 isCurrent
                   ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-50 dark:bg-zinc-50 dark:text-zinc-900"
