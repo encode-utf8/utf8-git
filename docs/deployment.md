@@ -2,6 +2,10 @@
 
 > 关联：`docs/roadmap.md` M1-6 · `docs/technical-analysis.md` §2 / §6.2 / §10 · `docs/todo.md` TODO-104
 > 状态：已在 Vercel + 托管 PostgreSQL（Neon）完成生产部署，推送到 `main` 自动发布
+>
+> 本文讲**为什么这么部署**（形态取舍、多实例一致性、连接池、回滚策略）。
+> 「从零到自己跑起来一份」的步骤（建 OAuth App、单机 Node + 反代、升级 / 备份 / 密钥轮换）见
+> [`docs/self-hosting.md`](self-hosting.md)。
 
 ## 1. 目标部署形态
 

@@ -35,3 +35,6 @@ apps/web/e2e/.auth/
 .idea/
 .DS_Store
 Thumbs.db
+
+# AI 协作工具的工作区元数据（会话记忆、临时脚本），不属于仓库内容
+.workbuddy-ai/

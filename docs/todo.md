@@ -115,7 +115,7 @@
 
 ### 3.6 文档与社区
 
-- [ ] TODO-251 部署与自建指南（含自建 OAuth App 步骤）
+- [x] TODO-251 部署与自建指南（含自建 OAuth App 步骤）（`docs/self-hosting.md`：三条路径对比并**标注验证状态**（Vercel 已用于生产站 / 单机 Node 的启动路径有 CI 覆盖 / 不提供未验证的 Docker 镜像）；自建 OAuth App 逐步（创建三项、回调地址「一个 App 只能填一个 + 逐字符一致 + 无结尾斜杠」、`read:user repo` 的取舍、5 类授权失败对照表）；单机部署全流程（建库 → 装依赖 → `.env` 最小集含 `AUTH_TRUST_HOST` / `AUTH_URL` → `migrate deploy` → `build` → `next start -H 127.0.0.1` → systemd unit → Nginx 反代透传 `Host` / `X-Forwarded-Proto` → certbot）；运维手册（升级顺序「先迁移后重启」、回滚靠前向兼容而非 down、`pg_dump` / 恢复演练、日志与 `x-request-id`、三个密钥的轮换后果差异、单实例 vs 多实例）；`deploy:selfcheck` 自检与人工关键路径；已知限制与 `deployment.md` 分工互链）
 - [ ] TODO-252 架构决策记录（ADR）目录化，迁移 development-log 中的 ADR
 - [ ] TODO-253 贡献指南与开发环境说明
 - [ ] TODO-254 用户手册 / 演示视频

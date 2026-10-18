@@ -66,6 +66,7 @@ utf8-git 的目标是：**把仓库的开发过程还原成一条可交互的时
 | [docs/technical-analysis.md](docs/technical-analysis.md) | 技术分析：架构选型、GitHub API 策略、提交图渲染、安全设计        |
 | [docs/roadmap.md](docs/roadmap.md)                       | 实现路线：能力蓝图与迭代节奏                                     |
 | [docs/deployment.md](docs/deployment.md)                 | 部署：Vercel + 托管 PostgreSQL、环境变量清单、多实例一致性与回滚 |
+| [docs/self-hosting.md](docs/self-hosting.md)             | 自建指南：建 OAuth App、单机 Node 部署、升级 / 备份 / 密钥轮换   |
 | [docs/development-log.md](docs/development-log.md)       | 开发记录：按时间记录目标、产出、决策与问题                       |
 | [docs/todo.md](docs/todo.md)                             | 待办日志：任务清单与分类 Backlog                                 |
 
@@ -115,6 +116,7 @@ pnpm dev                                                # 启动后访问 http:/
 - 本地联调 GitHub 登录：在 GitHub → Settings → Developer settings 创建 OAuth App，回调地址填 `http://localhost:3000/api/auth/callback/github`，把 Client ID / Secret 填入 `.env` 的 `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`。登录后从 `/repos` 进入仓库列表。
 - 访问令牌（access / refresh / id token）在数据库中一律为 AES-256-GCM 密文，加密密钥（`AUTH_TOKEN_ENC_KEY`）只存在于环境变量中，不会返回给浏览器；令牌临近过期时自动续期，无需重新授权。
 - 多实例部署（Vercel 等）：把 `STORE_BACKEND` 设为 `postgres`，缓存与 GitHub 配额快照即在实例间共享。环境变量清单、连接池与回滚见 [docs/deployment.md](docs/deployment.md)。
+- 自己部署一份实例（含自建 OAuth App 步骤、单机 Node + 反向代理、升级与备份）：见 [docs/self-hosting.md](docs/self-hosting.md)。
 
 > 网络说明：仓库根目录 `.npmrc` 已配置国内镜像（registry.npmmirror.com）；若可直连 npm 官方源，可删除该文件。
 

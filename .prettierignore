@@ -7,3 +7,4 @@ coverage
 pnpm-lock.yaml
 *.tsbuildinfo
 next-env.d.ts
+.workbuddy-ai
