@@ -18,7 +18,7 @@
 **完成内容**
 
 - 写操作 API 契约层 E2E（`e2e/operations-api.spec.ts`，4 条）：`timeline.spec.ts` 已覆盖六个写操作的 UI 流，真正的缺口在 UI 覆盖不到的服务端契约——
-  - 未登录直接 POST → 401 `unauthorized`（会话校验先于一切入参校验；`request` 夹具与浏览器上下文隔离，天然无 Cookie）；
+  - 未登录直接 POST → 401 `unauthorized`（会话校验先于一切入参校验）。**该用例不能用任何 Playwright 请求入口**：1.64 运行器会把 `use.storageState` 的会话 Cookie 注入 `request` 夹具、`page.request` 与 `playwright.request.newContext()`，改用脱离 Playwright 的 Node `fetch` 才真正无 Cookie（详见下方「问题与风险」）；
   - 入参校验 → 400（缺 `confirmed` → `confirmation_required`、SHA 形似而不合法 → `invalid_from`、分支名含空格 → `invalid_branch`、owner 非法字符 → `invalid_repo`、非 JSON 体 → `invalid_body`），异常参数在触达上游前拦下；
   - 成功 → 201（`status` / `branch` / `ref` / `sha` / `url` 五字段 + `cache-control: no-store`）；同负载重放 → 200 `replayed` 且逐字段一致——幂等键 = (actor, kind, repo, 排序后负载)，重放发生在写 `started` 之前；**若真的重复执行，mock 会以 422 "Reference already exists" 拒绝，因此 200 replayed 本身就是「未重复执行」的证明**；换分支名 → 键不同，另一次真实执行 201；
   - 上游冲突 → 422 `branch_conflict`（`feature/e2e` 为 mock 预置分支）。
@@ -31,21 +31,27 @@
 
 **关键决策**
 
-| 编号     | 决策                                              | 理由                                                                   | 备选与否决原因                                         |
-| -------- | ------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------ |
-| ADR-0134 | 契约层 E2E 只补 API 层、不重复 UI 流              | timeline.spec.ts 已覆盖六个写操作的 UI 成功 / 冲突全流程               | 重写 UI 流 E2E：重复覆盖、维护成本翻倍                 |
-| ADR-0135 | 不写 429 限流的 E2E                               | 触发限流需 200 次写，拖慢整条 E2E；判定逻辑已有单测覆盖                | 压测式 E2E：脆弱且无新信息                             |
-| ADR-0136 | 格式门禁直接 `prettier --check .`，不缩窄忽略范围 | 漂移多为文档表格，本就是仓库资产；显式清存量比悄悄忽略可追溯           | 把 docs / .github 加进 .prettierignore：把问题扫进地毯 |
-| ADR-0137 | 成功率分母排除重放与校验失败                      | 重放不新增执行（不写审计），校验失败未触达上游；否则指标被用户行为稀释 | 按所有请求计数：重复点击与误触都计入分母，失去告警意义 |
+| 编号     | 决策                                                          | 理由                                                                   | 备选与否决原因                                                                                                         |
+| -------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| ADR-0134 | 契约层 E2E 只补 API 层、不重复 UI 流                          | timeline.spec.ts 已覆盖六个写操作的 UI 成功 / 冲突全流程               | 重写 UI 流 E2E：重复覆盖、维护成本翻倍                                                                                 |
+| ADR-0135 | 不写 429 限流的 E2E                                           | 触发限流需 200 次写，拖慢整条 E2E；判定逻辑已有单测覆盖                | 压测式 E2E：脆弱且无新信息                                                                                             |
+| ADR-0136 | 格式门禁直接 `prettier --check .`，不缩窄忽略范围             | 漂移多为文档表格，本就是仓库资产；显式清存量比悄悄忽略可追溯           | 把 docs / .github 加进 .prettierignore：把问题扫进地毯                                                                 |
+| ADR-0137 | 成功率分母排除重放与校验失败                                  | 重放不新增执行（不写审计），校验失败未触达上游；否则指标被用户行为稀释 | 按所有请求计数：重复点击与误触都计入分母，失去告警意义                                                                 |
+| ADR-0138 | 「未登录」用例用裸 Node `fetch`，不用任何 Playwright 请求入口 | 运行器会把 `use.storageState` 注入所有请求入口，同进程内无法「登出」   | 显式传空 `storageState`：1.64 下仍被运行器默认值覆盖，不可靠；单开 `browser.newContext()`：成本高且仍受 `use` 选项影响 |
 
 **问题与风险**
 
+- **E2E 401 用例连续两轮 CI 失败（run #104 / #105，实际拿到 201）**，排查结论：**应用侧无缺陷**，问题在测试框架。
+  - 逐层排除：`lib/auth.ts`（database session 策略）、`lib/auth-adapter.ts`（`getSessionAndUser` 无记录即返回 null）、`@auth/core` 的 `session` action（无 Cookie 直接短路）、路由源码（`git show` 确认部署内容与本地一致）全部正确。
+  - 决定性证据来自一次性诊断分支（`diag/e2e-anon-auth`，跑完即删）：`playwright.request.newContext({ baseURL })` 的 **`jar-before` 已含 `authjs.session-token`**；同一上下文里 `GET /me` → 200、`POST create-branch` → 201 并真的在 mock 上建出引用、`/api/definitely-not-a-route` → 404（探针自证有效）。即运行器把 `use.storageState` 注入到了 `playwright.request` 新建的上下文，`set-cookie` 为空、`jar-after` 无变化说明应用自身不写 Cookie。
+  - 修法（ADR-0138）：用例内直接用 Node `fetch(new URL(API, baseURL))`，请求头只有 `content-type`，无 Cookie 可言。run #107 两个 job（verify / E2E）全绿。
+  - 顺带记住两条 GitHub API 的坑：`actions/runs/{id}` 要的是 **run ID（大整数）而非 run_number**，传错会 404 且响应体里带 `status:"404"`（轮询判据写成 `status !== "completed"` 就会死循环——本次后台观察器空转 1h41m 的原因）；job 日志下载需 admin 权限（403），失败详情改从 `/commits/{sha}/check-runs` 的 `annotations` 取，未认证也能读到用例级报错。
 - 退出标准 1 / 2 依赖真实部署后的观测数据：当前无线上流量，先把口径与工具链就位（清单 + 审计导出 + 日志），上线后照方抓数。
-- 本地无法运行 E2E（无 Docker / Postgres），新 spec 的最终验证在 CI；已用 `playwright test --list` 确认 4 条用例注册（全套 25 条 / 6 spec）。
+- 本地无法运行 E2E（无 Docker / Postgres，5432 拒绝连接），新 spec 的最终验证只能在 CI；本地用 `playwright test --list` 确认 4 条用例注册（全套 25 条 / 6 spec）。
 
 **下一步**
 
-- 提交本批（`test:` 契约 E2E、`chore:` 格式化门禁、`docs:` 退出标准清单）并推 CI 验证 E2E job。
+- 本批已全部推送并通过 CI（`test:` 契约 E2E → `chore:` 格式化门禁 → `docs:` 退出标准清单 → `fix:` 401 用例请求方式，run #107 全绿）。
 - TODO-256 发布说明留待上线版本；TODO-251 部署指南完成后即可安排首次真实部署，启动退出标准 1 / 2 的观察时钟。
 
 ---
