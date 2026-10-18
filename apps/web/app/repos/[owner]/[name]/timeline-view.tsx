@@ -4,7 +4,12 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { LaneComputation, sliceLaneLayout, type CommitLike, type LaneLayout } from "@utf8-git/git-graph";
+import {
+  LaneComputation,
+  sliceLaneLayout,
+  type CommitLike,
+  type LaneLayout,
+} from "@utf8-git/git-graph";
 
 import {
   createBranchDescriptor,
@@ -49,8 +54,7 @@ const EXPLAIN_MODE_STORAGE_KEY = "utf8-git:explain-mode";
 
 // 泳道布局回填走 layout effect：同帧内生效，不会出现「先渲染无泳道、下一帧才有」的闪帧；
 // 服务端渲染时退化为 useEffect（避免 useLayoutEffect 的 SSR 告警）。
-const useIsomorphicLayoutEffect =
-  typeof window === "undefined" ? useEffect : useLayoutEffect;
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 // 布局尚未计算（深页首帧、集合为空）时的占位布局。
 const EMPTY_LANE_LAYOUT: LaneLayout = {
@@ -483,9 +487,7 @@ export function TimelineView({
   // 布局推导成本高但依赖集合，故在 layout effect 中计算并经 setState 回填：
   // 增量计算实例只从 effect 读写（react-hooks/refs 规则），push 幂等，
   // StrictMode 双次执行与并发重入都安全。首帧布局直接以服务端下发值播种（SSR/注水一致）。
-  const [laneLayout, setLaneLayout] = useState<LaneLayout | null>(
-    initialLaneLayout ?? null,
-  );
+  const [laneLayout, setLaneLayout] = useState<LaneLayout | null>(initialLaneLayout ?? null);
   const laneComputationRef = useRef<LaneComputation | null>(null);
   const laneInputRef = useRef<CommitLike[]>([]);
   const serverLaneLayout = fetchedLaneLayout ?? initialLaneLayout ?? null;

@@ -67,7 +67,13 @@ export function laneLayoutFingerprint(commits: CommitLike[]): string {
       hashB = (Math.imul(hashB ^ 0x1f, 0x85ebca6b) + 0x27d4eb2f) >>> 0;
     }
   }
-  return cacheKey(length, first, last, hashA.toString(16).padStart(8, "0"), hashB.toString(16).padStart(8, "0"));
+  return cacheKey(
+    length,
+    first,
+    last,
+    hashA.toString(16).padStart(8, "0"),
+    hashB.toString(16).padStart(8, "0"),
+  );
 }
 
 export type CachedLaneLayout = {

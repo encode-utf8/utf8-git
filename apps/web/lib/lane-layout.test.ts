@@ -38,7 +38,7 @@ describe("laneLayoutFingerprint", () => {
     );
   });
 
-  it("字段边界不歧义（[\"ab\",\"c\"] 与 [\"a\",\"bc\"]）", () => {
+  it('字段边界不歧义（["ab","c"] 与 ["a","bc"]）', () => {
     expect(laneLayoutFingerprint([{ oid: "ab", parents: ["c"] }])).not.toBe(
       laneLayoutFingerprint([{ oid: "a", parents: ["bc"] }]),
     );
