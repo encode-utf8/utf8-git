@@ -6,8 +6,44 @@
 | 项       | 内容                                         |
 | -------- | -------------------------------------------- |
 | 文档版本 | v0.1                                         |
-| 更新日期 | 2026-10-11                                   |
+| 更新日期 | 2026-10-18                                   |
 | 关联文档 | [实现路线](roadmap.md) · [待办日志](todo.md) |
+
+---
+
+## 2026-10-18 · M4-4 可访问性审查与修复（TODO-244）
+
+**目标**：对齐路线图 M4「体验：键盘可达性」——对已登录链路与公开页做一轮 WCAG 2.2 AA 级审查，修复发现的问题。
+
+**完成内容**
+
+- 审查：覆盖全部 24 个组件与布局，口径见 `docs/reports/tech-analysis/M4-4-a11y-audit.md`（键盘可达 / 焦点管理 / 表单标签 / 地标标题 / skip link / 对比度 / ARIA 语义七项）。
+- 修复（8 项，其中高优先 3 项）：
+  - `timeline-view.tsx` 提交行遮罩按钮恢复可见焦点（原来 `focus-visible:outline-none`，只剩 4% 透明度背景反馈）；
+  - `repo-list.tsx` 搜索框同样补 `focus-visible` 描边；
+  - `commit-detail.tsx` 详情抽屉加 Tab 焦点陷阱（`panel.contains` 守卫 + 首尾循环），打开聚焦关闭 / 关闭还原焦点沿用原实现；
+  - 6 处输入占位符 `text-zinc-400` → `text-zinc-500`（白底 2.6:1 → 4.6:1）；
+  - 提交详情「获取于」与 Markdown 空预览提示文字同步提升对比度；
+  - `layout.tsx` 新增「跳到主要内容」skip link（i18n 双语键 `a11y.skipToContent`）+ `#main-content` 容器；
+  - 时间线页与操作历史页补 `main` 地标（其余页原本已有）。
+- 验证：`pnpm lint` / `pnpm typecheck` / `pnpm test`（385 通过）全绿；浏览器人工核对清单写入报告 §4。
+
+**关键决策**
+
+| 编号 | 决策 | 理由 | 备选与否决原因 |
+| --- | --- | --- | --- |
+| ADR-0121 | 确认卡片保持 `role="dialog"`（不改 group） | E2E（`me.spec.ts` / `timeline.spec.ts`）以 `getByRole("dialog")` 定位确认卡片；且卡片已有 `aria-modal="false"` 区分非模态 | 改 group：需同步改全部 E2E 选择器，收益仅是语义更准 |
+| ADR-0122 | 焦点指示统一用天蓝 inset/outset 描边（`sky-600`，暗色 `sky-400`） | 与既有术语「?」提示的焦点样式一致，形成全站一致的焦点语言 | 浏览器默认 outline：与界面风格冲突且部分场景被裁切 |
+| ADR-0123 | skip link 指向包装容器 `#main-content`（`tabIndex=-1`）而非各页 `<main>` | 各页 main 存在情况不一（登录/账号页有、时间线页原本没有），容器方案不动页面结构 | 改造各页补 main id：改动面大且与本轮地标修复重复 |
+
+**问题与风险**
+
+- 审查为静态代码级，未跑 axe / Lighthouse 自动化；两种暗色路径（系统偏好）按 Tailwind 调色板推算对比度，建议后续把 `eslint-plugin-jsx-a11y` 与 Lighthouse 接入 CI（与 TODO-245 依赖更新一并评估）。
+- 客户端 bundle 中英文目录问题、时间格式未本地化仍沿用 M4-3 记录，未在本次范围内。
+
+**下一步**
+
+- M4 剩余：覆盖率接入 CI + 写操作链路 E2E（M4-5）、服务端泳道缓存（TODO-246）、Dependabot + audit（TODO-245）。
 
 ---
 
