@@ -207,10 +207,7 @@ export function CreatePullPanel({
       onCancel={onCancel}
     >
       <ConceptNote id="pull-request" mode={mode} className="mt-3" />
-      <div
-        className="mt-3 space-y-1"
-        data-debug={`${presetHead ?? "null"}|${presetBase ?? "null"}|${head}|${base}`}
-      >
+      <div className="mt-3 space-y-1">
         <label className="block text-xs text-zinc-600 dark:text-zinc-300" htmlFor="pr-base">
           {t("panels.createPull.base")}
         </label>
