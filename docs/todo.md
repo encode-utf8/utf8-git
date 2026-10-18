@@ -111,6 +111,7 @@
 - [x] TODO-246 服务端泳道缓存 / 增量布局（commit `0b3ed6c`：`git-graph` 新增 `LaneComputation`（push 幂等续算 / snapshot 中途快照 / finish 与全量逐字段一致，8 组分片等价性用例）；`apps/web/lib/lane-layout.ts` 内容指纹（双 FNV-1a + 长度 + 首尾 oid）键控内存 LRU + TTL 缓存，仅首页布局随响应下发（`meta.laneLayoutCached`），深页客户端增量续算；客户端三路复用：服务端布局采用 → 无过滤尾部追加增量续算 → 其余全量重算，布局经 layout effect 回填）
 - [x] TODO-247 已登录界面文案迁移到消息目录（仓库列表 / 时间线 / 提交详情 / 各操作面板 / 账号页与操作历史页，含 `lib/error-state.ts` 与 `client-fetch` 的错误与空状态文案）：纯逻辑层加 `Translate = sourceTranslate` 末位可选参数，组件传当前语言、API 路由与单测不传；`ops.history` / `ops.link` / `ops.export` / `ops.account` / `errors.*` / `me.*` / `commitDetail.*` 等键补齐，`apps/web/app/**` 已无硬编码中文；英文路径暂无 E2E，时间格式未本地化）
 - [x] TODO-248 覆盖率门禁进 CI 与关键路径 E2E 补强（M4-5：各包新增 vitest coverage 阈值——git-graph 85%（96.06 / 87.8 / 100 / 97.27）、github-client 与 ui 70%（均 100%）、apps/web lib 70%（88.18 / 81.19 / 80.42 / 88.37，排除 i18n messages / prisma / auth），根 `test:coverage` 脚本 + CI verify 步骤改为 `pnpm test:coverage`，覆盖率不达标即 CI 失败；新增 `e2e/a11y.spec.ts` 3 条（skip link 首聚焦 + 回车进主内容、提交行键盘焦点描边 ≥2px、已登录英文路径切换）；skip link 移至文档首位。commit `c07f3a9` CI verify / e2e 双 job 全绿）
+- [x] TODO-255 质量收尾（M4-8：① 写操作 API 契约层 E2E——`timeline.spec.ts` 已覆盖六个写操作的 UI 流，新增 `e2e/operations-api.spec.ts` 4 条补服务端契约：未登录 401（先于一切校验）、入参校验 400（确认位 / SHA / 分支名 / 仓库名 / 非 JSON 体，异常参数不进上游）、成功 201 + 同负载重放 200 `replayed` 且逐字段一致（若重复执行 mock 会 422，故 200 即「未重复执行」的证明）、异名幂等键另一次真实执行、上游冲突 422 `branch_conflict`；分支名带运行 nonce + 重试序号，规避本地复用 webServer 与 CI 重试的状态残留；② prettier 存量漂移清零（10 个文件：3 份 docs、2 个 Issue 模板、2 个测试、bench）+ CI verify 新增 `Format (prettier --check)` 门禁；③ M4 退出标准核对清单——「2 周无 P0」定义事故分级与数据源（withObservability 日志 / ERROR_REPORT_ENDPOINT）、「核心操作成功率 ≥ 99%」定口径为审计按幂等键收敛后 succeeded ÷ (succeeded + failed)（重放与 4xx 校验失败不进分母）、确认贡献指南已具备而发布说明缺失 → TODO-256；清单见 `docs/reports/tech-analysis/M4-exit-criteria-checklist.md`）
 
 ### 3.6 文档与社区
 
@@ -118,6 +119,7 @@
 - [ ] TODO-252 架构决策记录（ADR）目录化，迁移 development-log 中的 ADR
 - [ ] TODO-253 贡献指南与开发环境说明
 - [ ] TODO-254 用户手册 / 演示视频
+- [ ] TODO-256 对外发布说明（Release Notes，M4 退出标准第 3 条缺口）：上线时随版本在 GitHub Releases 产出首篇，结构为版本亮点（M0–M4 能力一览）→ 破坏性变更 / 升级步骤 → 已知问题与限制（英文路径 E2E 未覆盖、时间格式未本地化）→ 致谢与反馈入口；口径见 `docs/reports/tech-analysis/M4-exit-criteria-checklist.md`
 
 ## 4. 阻塞与依赖
 
