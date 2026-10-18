@@ -417,6 +417,8 @@ test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({
   await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
     steps: 10,
   });
+  // 松手前先确认落点被识别成 main（跟手浮标出现）：否则说明坐标没落在芯片上
+  await expect(page.getByText("松手向 main 开 PR")).toBeVisible();
   await page.mouse.up();
 
   // 面板预填：来源 = 被拖的分支，目标 = 落点分支

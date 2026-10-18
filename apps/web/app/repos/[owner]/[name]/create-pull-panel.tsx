@@ -67,14 +67,26 @@ export function CreatePullPanel({
   onCancel,
 }: CreatePullPanelProps) {
   const { t } = useTranslator();
+  // 手势带入的分支可能比服务端分支列表更新（刚建完分支就拖它）：
+  // 缺了就补进选项，避免预填值落在 <select> 之外被静默丢弃。
+  const options = useMemo(() => {
+    const list = [...branches];
+    for (const preset of [presetBase, presetHead]) {
+      if (preset && !list.includes(preset)) {
+        list.unshift(preset);
+      }
+    }
+    return list;
+  }, [branches, presetBase, presetHead]);
+
   const [base, setBase] = useState(() =>
-    presetBase && branches.includes(presetBase) ? presetBase : initialBase(branches, defaultBase),
+    presetBase ? presetBase : initialBase(options, defaultBase),
   );
   const [head, setHead] = useState(() => {
-    if (presetHead && branches.includes(presetHead) && presetHead !== presetBase) {
+    if (presetHead && presetHead !== presetBase) {
       return presetHead;
     }
-    return initialHead(branches, initialBase(branches, defaultBase));
+    return initialHead(options, initialBase(options, defaultBase));
   });
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -205,7 +217,7 @@ export function CreatePullPanel({
           onChange={(event) => setBase(event.target.value)}
           className={`h-9 max-w-sm ${FIELD_CLASS}`}
         >
-          {branches.map((branch) => (
+          {options.map((branch) => (
             <option key={branch} value={branch}>
               {branch}
             </option>
@@ -221,7 +233,7 @@ export function CreatePullPanel({
           onChange={(event) => setHead(event.target.value)}
           className={`h-9 max-w-sm ${FIELD_CLASS}`}
         >
-          {branches.map((branch) => (
+          {options.map((branch) => (
             <option key={branch} value={branch}>
               {branch}
             </option>

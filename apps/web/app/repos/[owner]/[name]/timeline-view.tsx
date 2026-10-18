@@ -1126,6 +1126,8 @@ export function TimelineView({
       {pullOpen ? (
         <div className="mt-3">
           <CreatePullPanel
+            // 预填分支变化时强制重挂，避免面板沿用上一次的初始状态
+            key={`${pullPreset?.head ?? ""}:${pullPreset?.base ?? ""}`}
             owner={owner}
             name={name}
             mode={explainMode}
