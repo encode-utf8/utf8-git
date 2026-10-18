@@ -385,3 +385,85 @@ test("拖分支芯片到删除区 → 确认浮层 → 删除成功", async ({ p
   await dialog.getByRole("button", { name: "删除分支", exact: true }).click();
   await expect(page.getByRole("status")).toContainText(`已删除分支 ${branch}`);
 });
+
+// P1 手势：拖分支芯片到另一个分支芯片 = 从被拖的分支向目标分支开 PR。
+// 落点方向即语义（head → base），面板预填后由用户补标题再执行。
+test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  const branch = `feature/drag-pr-${Date.now().toString(36)}`;
+  await page.getByRole("button", { name: "新建分支" }).click();
+  await page.getByLabel("新分支名称").fill(branch);
+  await page.getByRole("button", { name: "创建分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(`已创建分支 ${branch}`);
+
+  const source = page.getByRole("button", { name: branch, exact: true });
+  await expect(source).toBeVisible();
+  await source.scrollIntoViewIfNeeded();
+  const sourceBox = await source.boundingBox();
+  if (!sourceBox) {
+    throw new Error("来源分支芯片没有可见区域");
+  }
+
+  const target = page.getByRole("button", { name: /^main/ }).first();
+  await target.scrollIntoViewIfNeeded();
+  const targetBox = await target.boundingBox();
+  if (!targetBox) {
+    throw new Error("目标分支芯片没有可见区域");
+  }
+
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
+    steps: 10,
+  });
+  await page.mouse.up();
+
+  // 面板预填：来源 = 被拖的分支，目标 = 落点分支
+  await expect(page.getByLabel("来源分支（head）")).toHaveValue(branch);
+  await expect(page.getByLabel("目标分支（base）")).toHaveValue("main");
+
+  await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
+  await expect(page.getByLabel("来源分支（head）")).toHaveCount(0);
+});
+
+// P1 手势：拖分支芯片到另一个分支芯片 = 从被拖的分支向目标分支开 PR。
+// 落点方向即语义（head → base），面板预填后由用户补标题再执行。
+test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  const branch = `feature/drag-pr-${Date.now().toString(36)}`;
+  await page.getByRole("button", { name: "新建分支" }).click();
+  await page.getByLabel("新分支名称").fill(branch);
+  await page.getByRole("button", { name: "创建分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(`已创建分支 ${branch}`);
+
+  const source = page.getByRole("button", { name: branch, exact: true });
+  await expect(source).toBeVisible();
+  await source.scrollIntoViewIfNeeded();
+  const sourceBox = await source.boundingBox();
+  if (!sourceBox) {
+    throw new Error("来源分支芯片没有可见区域");
+  }
+
+  const target = page.getByRole("button", { name: /^main/ }).first();
+  await target.scrollIntoViewIfNeeded();
+  const targetBox = await target.boundingBox();
+  if (!targetBox) {
+    throw new Error("目标分支芯片没有可见区域");
+  }
+
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
+    steps: 10,
+  });
+  await page.mouse.up();
+
+  // 面板预填：来源 = 被拖的分支，目标 = 落点分支
+  await expect(page.getByLabel("来源分支（head）")).toHaveValue(branch);
+  await expect(page.getByLabel("目标分支（base）")).toHaveValue("main");
+
+  await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
+  await expect(page.getByLabel("来源分支（head）")).toHaveCount(0);
+});

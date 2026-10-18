@@ -26,6 +26,10 @@ type CreatePullPanelProps = {
   branches: string[];
   /** 默认目标分支（通常是仓库默认分支）。 */
   defaultBase: string | null;
+  /** 预填的目标分支（拖分支芯片到另一个芯片时由手势给出）。 */
+  presetBase?: string | null;
+  /** 预填的来源分支（同上）。 */
+  presetHead?: string | null;
   /** 术语解释模式（新手 / 进阶时在表单上方内联说明 PR 是什么）。 */
   mode: ExplainMode;
   /** 创建成功后由父组件展示提示并关闭面板。 */
@@ -56,13 +60,22 @@ export function CreatePullPanel({
   name,
   branches,
   defaultBase,
+  presetBase = null,
+  presetHead = null,
   mode,
   onCreated,
   onCancel,
 }: CreatePullPanelProps) {
   const { t } = useTranslator();
-  const [base, setBase] = useState(() => initialBase(branches, defaultBase));
-  const [head, setHead] = useState(() => initialHead(branches, initialBase(branches, defaultBase)));
+  const [base, setBase] = useState(() =>
+    presetBase && branches.includes(presetBase) ? presetBase : initialBase(branches, defaultBase),
+  );
+  const [head, setHead] = useState(() => {
+    if (presetHead && branches.includes(presetHead) && presetHead !== presetBase) {
+      return presetHead;
+    }
+    return initialHead(branches, initialBase(branches, defaultBase));
+  });
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [draft, setDraft] = useState(false);

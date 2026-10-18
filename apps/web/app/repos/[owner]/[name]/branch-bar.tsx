@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import type { ExplainMode } from "@/lib/glossary";
 import type { TimelineBranch } from "@/lib/github-timeline";
@@ -19,8 +25,10 @@ type BranchBarProps = {
   mode: ExplainMode;
   onSelect: (name: string) => void;
   onDragStart: (name: string) => void;
-  onDragMove: (name: string, point: DragPoint) => void;
-  onDragEnd: (name: string, point: DragPoint) => void;
+  /** 拖动中持续回调：`target` 是当前指针悬停的另一个分支芯片（用于「开 PR」落点）。 */
+  onDragMove: (name: string, point: DragPoint, target: string | null) => void;
+  /** 松手：`target` 非空表示落在了另一个分支芯片上。 */
+  onDragEnd: (name: string, point: DragPoint, target: string | null) => void;
   onDragCancel: () => void;
 };
 
@@ -49,6 +57,30 @@ export function BranchBar({
   // 拖动结束后浏览器仍会补发一次 click：用它把这次 click 吞掉，避免「拖完顺带切了分支」
   const suppressClickRef = useRef<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
+  // 指针悬停的另一个分支芯片：既是落点高亮，也是「松手开 PR」的目标
+  const [hovered, setHovered] = useState<string | null>(null);
+  const chipRefs = useRef(new Map<string, HTMLButtonElement | null>());
+
+  // 当前分支被切到视口外时自动滚回来（分支多时芯片条横向溢出）
+  useEffect(() => {
+    if (!current) {
+      return;
+    }
+    chipRefs.current.get(current)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [current]);
+
+  const targetAt = useCallback((x: number, y: number, source: string): string | null => {
+    for (const [name, element] of chipRefs.current) {
+      if (name === source || !element) {
+        continue;
+      }
+      const rect = element.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return name;
+      }
+    }
+    return null;
+  }, []);
 
   // 用 window 监听而不是 setPointerCapture + React 合成事件：
   // 与提交行拖拽同一套写法（那套已在 CI 验证可用），少一层指针捕获的行为差异。
@@ -71,7 +103,9 @@ export function BranchBar({
           setDragging(name);
           onDragStart(name);
         }
-        onDragMove(name, { x: moveEvent.clientX, y: moveEvent.clientY });
+        const target = targetAt(moveEvent.clientX, moveEvent.clientY, name);
+        setHovered(target);
+        onDragMove(name, { x: moveEvent.clientX, y: moveEvent.clientY }, target);
       };
 
       const cleanup = () => {
@@ -83,9 +117,11 @@ export function BranchBar({
       const handleUp = (upEvent: PointerEvent) => {
         cleanup();
         setDragging(null);
+        setHovered(null);
         if (moved) {
           suppressClickRef.current = name;
-          onDragEnd(name, { x: upEvent.clientX, y: upEvent.clientY });
+          const target = targetAt(upEvent.clientX, upEvent.clientY, name);
+          onDragEnd(name, { x: upEvent.clientX, y: upEvent.clientY }, target);
         } else {
           onDragCancel();
         }
@@ -94,6 +130,7 @@ export function BranchBar({
       const handleCancel = () => {
         cleanup();
         setDragging(null);
+        setHovered(null);
         onDragCancel();
       };
 
@@ -101,7 +138,7 @@ export function BranchBar({
       window.addEventListener("pointerup", handleUp);
       window.addEventListener("pointercancel", handleCancel);
     },
-    [disabled, onDragCancel, onDragEnd, onDragMove, onDragStart],
+    [disabled, onDragCancel, onDragEnd, onDragMove, onDragStart, targetAt],
   );
 
   const handleClick = useCallback(
@@ -132,6 +169,9 @@ export function BranchBar({
           return (
             <button
               key={item.name}
+              ref={(element) => {
+                chipRefs.current.set(item.name, element);
+              }}
               type="button"
               disabled={disabled}
               aria-pressed={isCurrent}
@@ -145,6 +185,9 @@ export function BranchBar({
                   ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-50 dark:bg-zinc-50 dark:text-zinc-900"
                   : "border-black/[.12] bg-white text-zinc-700 hover:bg-black/[.04] dark:border-white/[.16] dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-white/[.08]",
                 dragging === item.name ? "opacity-40" : "",
+                hovered === item.name
+                  ? "ring-2 ring-sky-500 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950"
+                  : "",
               ]
                 .filter(Boolean)
                 .join(" ")}

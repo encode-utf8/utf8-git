@@ -334,7 +334,12 @@ export function TimelineView({
   const rowHeight = timelineRowHeight(density);
 
   // 分支芯片拖动：拖到删除区即删除该分支（删除仍走确认面板，不静默执行）
-  const [branchDrag, setBranchDrag] = useState<{ name: string; point: DragPoint } | null>(null);
+  const [branchDrag, setBranchDrag] = useState<{
+    name: string;
+    point: DragPoint;
+    /** 指针当前悬停的另一个分支芯片（松手即「从 name 向 target 开 PR」）。 */
+    target: string | null;
+  } | null>(null);
   const [branchDragOverTrash, setBranchDragOverTrash] = useState(false);
 
   // 提交节点拖动：拖动中显示跟手 ghost，松手后在落点弹出就地命名气泡
@@ -351,6 +356,8 @@ export function TimelineView({
   const [namingPending, setNamingPending] = useState(false);
   // 由拖拽删除带进确认面板的预选分支（按钮路径为 null，沿用面板自己的默认候选）
   const [deleteInitialBranch, setDeleteInitialBranch] = useState<string | null>(null);
+  // 由「拖分支芯片到另一个芯片」带进新建 PR 面板的预填分支
+  const [pullPreset, setPullPreset] = useState<{ head: string; base: string } | null>(null);
 
   // 打开任写操作面板时清掉上一次的成功提示，避免旧横幅误导当前操作
   const resetOperationAlerts = useCallback(() => {
@@ -526,6 +533,7 @@ export function TimelineView({
   const handlePullCreated = useCallback(
     (message: string) => {
       setPullOpen(false);
+      setPullPreset(null);
       setPullSuccess(message);
       router.refresh();
     },
@@ -753,23 +761,31 @@ export function TimelineView({
 
   const handleBranchDragStart = useCallback((branchName: string) => {
     // 一开始拖动就把删除区浮出来（平时隐藏，避免常驻占位）
-    setBranchDrag({ name: branchName, point: { x: 0, y: 0 } });
+    setBranchDrag({ name: branchName, point: { x: 0, y: 0 }, target: null });
     setBranchDragOverTrash(false);
   }, []);
 
   const handleBranchDragMove = useCallback(
-    (branchName: string, point: DragPoint) => {
-      setBranchDrag({ name: branchName, point });
+    (branchName: string, point: DragPoint, target: string | null) => {
+      setBranchDrag({ name: branchName, point, target });
       setBranchDragOverTrash(pointOverTrash(point));
     },
     [pointOverTrash],
   );
 
   const handleBranchDragEnd = useCallback(
-    (branchName: string, point: DragPoint) => {
+    (branchName: string, point: DragPoint, target: string | null) => {
       const dropped = pointOverTrash(point);
       setBranchDrag(null);
       setBranchDragOverTrash(false);
+
+      // 落在另一个分支芯片上：从被拖的分支向目标分支开 PR（方向即语义）
+      if (target && target !== branchName) {
+        resetOperationAlerts();
+        setPullPreset({ head: branchName, base: target });
+        setPullOpen(true);
+        return;
+      }
       if (!dropped) {
         return;
       }
@@ -1115,8 +1131,13 @@ export function TimelineView({
             mode={explainMode}
             branches={branches.map((branch) => branch.name)}
             defaultBase={initialBranch}
+            presetBase={pullPreset?.base ?? null}
+            presetHead={pullPreset?.head ?? null}
             onCreated={handlePullCreated}
-            onCancel={() => setPullOpen(false)}
+            onCancel={() => {
+              setPullOpen(false);
+              setPullPreset(null);
+            }}
           />
         </div>
       ) : null}
@@ -1312,6 +1333,23 @@ export function TimelineView({
                   onConfirm={() => void submitNaming()}
                   onCancel={cancelNaming}
                 />
+              ) : null}
+
+              {branchDrag && (branchDrag.target || branchDragOverTrash) ? (
+                <div
+                  aria-hidden="true"
+                  style={{ left: branchDrag.point.x + 14, top: branchDrag.point.y + 14 }}
+                  className={[
+                    "pointer-events-none fixed z-40 rounded-full border px-2.5 py-1 text-[11px] shadow-lg",
+                    branchDrag.target
+                      ? "border-sky-500 bg-white text-sky-700 dark:bg-zinc-900 dark:text-sky-300"
+                      : "border-red-500 bg-white text-red-700 dark:bg-zinc-900 dark:text-red-300",
+                  ].join(" ")}
+                >
+                  {branchDrag.target
+                    ? t("timeline.dragToPull", { branch: branchDrag.target })
+                    : t("timeline.trashDrop")}
+                </div>
               ) : null}
 
               {commitDrag ? (

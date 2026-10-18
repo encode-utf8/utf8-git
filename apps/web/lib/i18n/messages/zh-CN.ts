@@ -265,11 +265,12 @@ export const zhCN = {
     densityCompact: "紧凑",
     densityComfy: "舒适",
     actionsLabel: "操作",
-    canvasHint: "拖提交到空白处建分支 · 拖分支芯片到右下角删除",
+    canvasHint: "拖提交到空白处建分支 · 拖分支芯片到另一个分支开 PR · 拖到右下角删除",
     canvasLabel: "提交画布",
     dragCommitHint: "松手在这里建分支",
     trashZone: "删除区",
     trashDrop: "松手删除",
+    dragToPull: "松手向 {branch} 开 PR",
   },
   commitDetail: {
     label: "提交详情",

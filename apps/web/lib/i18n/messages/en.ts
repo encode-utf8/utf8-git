@@ -274,11 +274,13 @@ export const en: Messages = {
     densityCompact: "Compact",
     densityComfy: "Comfortable",
     actionsLabel: "Actions",
-    canvasHint: "Drag a commit to empty space to branch · drag a branch chip to the trash",
+    canvasHint:
+      "Drag a commit to empty space to branch · drag a branch chip onto another to open a PR · drag to the trash to delete",
     canvasLabel: "Commit canvas",
     dragCommitHint: "Release to branch here",
     trashZone: "Trash",
     trashDrop: "Release to delete",
+    dragToPull: "Release to open a PR into {branch}",
   },
   commitDetail: {
     label: "Commit details",
