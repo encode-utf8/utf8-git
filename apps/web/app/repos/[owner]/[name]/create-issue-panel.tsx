@@ -32,7 +32,7 @@ type CreateIssuePanelProps = {
 };
 
 const FIELD_CLASS =
-  "w-full rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-400 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200";
+  "w-full rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-500 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200";
 
 /**
  * 创建 Issue 面板（M3-3）：标题 / 正文（Markdown 预览）/ 标签三段表单，

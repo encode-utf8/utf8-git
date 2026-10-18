@@ -123,7 +123,7 @@ function CommitRow({
         type="button"
         onClick={() => onSelect(commit)}
         aria-label={t("timeline.viewCommitDetail", { sha: shortSha(commit.oid) })}
-        className="absolute inset-0 z-0 transition-colors hover:bg-black/[.03] focus-visible:bg-black/[.04] focus-visible:outline-none dark:hover:bg-white/[.05]"
+        className="absolute inset-0 z-0 transition-colors hover:bg-black/[.03] focus-visible:bg-black/[.04] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-600 dark:hover:bg-white/[.05] dark:focus-visible:outline-sky-400"
       />
       <div className="pointer-events-none relative z-10 flex h-full w-full items-start gap-3 px-4 py-3">
         {commit.author.avatarUrl ? (
@@ -707,7 +707,7 @@ export function TimelineView({
               value={newBranchName}
               onChange={(event) => setNewBranchName(event.target.value)}
               placeholder="feature/demo"
-              className="mt-1 h-9 w-full max-w-sm rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-400 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
+              className="mt-1 h-9 w-full max-w-sm rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-500 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
             />
             <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
               {branchNameError ??
@@ -777,7 +777,7 @@ export function TimelineView({
           onChange={(event) => applyFilterPatch({ query: event.target.value })}
           placeholder={t("timeline.searchPlaceholder")}
           aria-label={t("timeline.searchLabel")}
-          className="h-9 w-56 rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-400 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
+          className="h-9 w-56 rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-500 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
         />
         <select
           value={filters.author}

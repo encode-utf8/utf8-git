@@ -29,6 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const locale = await getLocale();
+  const { t } = await getTranslator();
   return (
     <html
       lang={locale}
@@ -38,7 +39,15 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <LocaleProvider locale={locale}>
           <OnlineBanner />
           <LocaleSwitcher />
-          {children}
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:border focus:border-black/[.08] focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-zinc-900 focus:shadow-sm dark:focus:border-white/[.145] dark:focus:bg-zinc-900 dark:focus:text-zinc-50"
+          >
+            {t("a11y.skipToContent")}
+          </a>
+          <div id="main-content" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">
+            {children}
+          </div>
         </LocaleProvider>
       </body>
     </html>

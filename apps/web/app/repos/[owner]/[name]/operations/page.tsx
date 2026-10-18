@@ -121,7 +121,7 @@ export default async function RepoOperationsPage({
 
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 px-6 py-12 font-sans dark:bg-black">
-      <div className="w-full max-w-4xl">
+      <main className="w-full max-w-4xl">
         <header>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             <Link href="/repos" className="underline-offset-4 hover:underline">
@@ -297,7 +297,7 @@ export default async function RepoOperationsPage({
             ) : null}
           </>
         )}
-      </div>
+      </main>
     </div>
   );
 }

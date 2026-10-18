@@ -127,6 +127,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
   );
 
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const copyTimerRef = useRef<number | null>(null);
 
@@ -178,7 +179,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
     return () => controller.abort();
   }, [owner, name, sha, reloadKey, t]);
 
-  // Esc 关闭
+  // Esc 关闭；Tab 在面板内循环（焦点陷阱），避免键盘焦点绕到背后的时间线
   useEffect(() => {
     if (!commit) {
       return;
@@ -186,6 +187,37 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const panel = panelRef.current;
+      if (!panel) {
+        return;
+      }
+      const focusable = [
+        ...panel.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ].filter((element) => element.offsetParent !== null);
+      if (focusable.length === 0) {
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!panel.contains(active)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -245,6 +277,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
     <>
       <div className="fixed inset-0 z-40 bg-black/30" aria-hidden="true" onClick={onClose} />
       <aside
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={t("commitDetail.label")}
@@ -509,7 +542,7 @@ export function CommitDetailPanel({ owner, name, commit, onClose }: CommitDetail
                   </p>
                 ) : null}
 
-                <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500">
+                <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
                   {t("commitDetail.fetchedAt", {
                     time: `${formatUtcDateTime(detail.meta.fetchedAt)}${t("common.utcSuffix")}`,
                   })}

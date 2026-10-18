@@ -29,6 +29,9 @@ export const en: Messages = {
     label: "Interface language",
     switchTo: "Switch to {language}",
   },
+  a11y: {
+    skipToContent: "Skip to main content",
+  },
   offline: {
     before: "You are offline, so GitHub cannot be reached. Check your connection and",
     after: ".",

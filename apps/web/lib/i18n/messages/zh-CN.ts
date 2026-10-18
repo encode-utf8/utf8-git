@@ -31,6 +31,9 @@ export const zhCN = {
     label: "界面语言",
     switchTo: "切换到{language}",
   },
+  a11y: {
+    skipToContent: "跳到主要内容",
+  },
   offline: {
     before: "网络已断开，无法连接 GitHub。请检查网络后",
     after: "。",

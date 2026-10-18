@@ -34,7 +34,7 @@ type CreatePullPanelProps = {
 };
 
 const FIELD_CLASS =
-  "w-full rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-400 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200";
+  "w-full rounded-lg border border-black/[.08] bg-white px-3 text-xs text-zinc-700 placeholder:text-zinc-500 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200";
 
 function initialBase(branches: string[], defaultBase: string | null): string {
   if (defaultBase && branches.includes(defaultBase)) {

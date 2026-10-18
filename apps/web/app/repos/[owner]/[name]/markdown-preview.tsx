@@ -39,7 +39,7 @@ export function MarkdownPreview({ source }: { source: string }) {
   const blocks = parseMarkdownLite(source);
   if (blocks.length === 0) {
     return (
-      <p className="text-xs text-zinc-400 dark:text-zinc-500">{t("panels.bodyPreviewEmpty")}</p>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("panels.bodyPreviewEmpty")}</p>
     );
   }
   return (

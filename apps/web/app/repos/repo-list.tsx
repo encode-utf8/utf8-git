@@ -94,7 +94,7 @@ export function RepoList({ initialRepos, initialHasMore, initialNextPage }: Repo
           onChange={(event) => setQuery(event.target.value)}
           placeholder={t("repoList.searchPlaceholder")}
           aria-label={t("repoList.searchLabel")}
-          className="h-10 w-full rounded-lg border border-black/[.08] bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-100 sm:max-w-xs"
+          className="h-10 w-full rounded-lg border border-black/[.08] bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 focus:border-zinc-400 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sky-600 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-100 dark:focus-visible:outline-sky-400 sm:max-w-xs"
         />
         <div
           className="flex items-center gap-2"

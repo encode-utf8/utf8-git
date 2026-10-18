@@ -26,7 +26,7 @@ const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 function PageShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 px-6 py-12 font-sans dark:bg-black">
-      <div className="w-full max-w-5xl">{children}</div>
+      <main className="w-full max-w-5xl">{children}</main>
     </div>
   );
 }
