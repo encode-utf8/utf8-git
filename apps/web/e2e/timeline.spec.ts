@@ -391,17 +391,10 @@ test("拖分支芯片到删除区 → 确认浮层 → 删除成功", async ({ p
 test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({ page }) => {
   await page.goto("/repos/encode-utf8/utf8-git");
 
-  const branch = `feature/drag-pr-${Date.now().toString(36)}`;
-  await page.getByRole("button", { name: "新建分支" }).click();
-  await page.getByLabel("新分支名称").fill(branch);
-  await page.getByRole("button", { name: "创建分支", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText(`已创建分支 ${branch}`);
-
-  const source = page.getByRole("button", { name: branch, exact: true });
+  // 用 mock 预置的 feature/e2e 作来源：不在用例里现建分支，
+  // 避免建完分支的 router.refresh() 在取坐标与按下之间重排芯片条（run #124/#126 的坑）。
+  const source = page.getByRole("button", { name: "feature/e2e", exact: true });
   await expect(source).toBeVisible();
-  // 建完分支后还有一次 router.refresh()：等它落定再取坐标，
-  // 否则芯片条可能重排，鼠标按下会命中相邻的另一个芯片（run #124 就是这样）。
-  await page.waitForLoadState("networkidle");
   await source.scrollIntoViewIfNeeded();
   const sourceBox = await source.boundingBox();
   if (!sourceBox) {
@@ -415,7 +408,7 @@ test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({
     ([x, y]) => document.elementFromPoint(x as number, y as number)?.closest("button")?.textContent,
     [sourceCenter.x, sourceCenter.y],
   );
-  if (!hitLabel?.includes(branch)) {
+  if (!hitLabel?.includes("feature/e2e")) {
     throw new Error(`按下位置命中的不是来源芯片：${hitLabel ?? "none"}`);
   }
 
@@ -436,7 +429,7 @@ test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({
   await page.mouse.up();
 
   // 面板预填：来源 = 被拖的分支，目标 = 落点分支
-  await expect(page.getByLabel("来源分支（head）")).toHaveValue(branch);
+  await expect(page.getByLabel("来源分支（head）")).toHaveValue("feature/e2e");
   await expect(page.getByLabel("目标分支（base）")).toHaveValue("main");
 
   await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
