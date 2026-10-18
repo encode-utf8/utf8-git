@@ -536,6 +536,7 @@ export function TimelineView({
   const handleBranchDeleted = useCallback(
     (message: string) => {
       setDeleteOpen(false);
+      setDeleteInitialBranch(null);
       setDeleteSuccess(message);
       router.refresh();
     },
@@ -835,7 +836,18 @@ export function TimelineView({
         window.removeEventListener("pointerup", handleUp);
         setCommitDrag(null);
         if (moved) {
-          openNamingAt(commit, { x: upEvent.clientX, y: upEvent.clientY });
+          // 只认画布内的落点：拖到画布外（工具栏、页脚）不产生任何操作，
+          // 避免「拖到哪儿都是新建分支」这种说不清的语义
+          const rect = canvasRef.current?.getBoundingClientRect();
+          const inside =
+            rect !== undefined &&
+            upEvent.clientX >= rect.left &&
+            upEvent.clientX <= rect.right &&
+            upEvent.clientY >= rect.top &&
+            upEvent.clientY <= rect.bottom;
+          if (inside) {
+            openNamingAt(commit, { x: upEvent.clientX, y: upEvent.clientY });
+          }
         }
         // click 紧随 pointerup 同步触发，宏任务里复位即可吞掉这一次
         window.setTimeout(() => {
@@ -1116,11 +1128,15 @@ export function TimelineView({
             name={name}
             mode={explainMode}
             initialBranchName={deleteInitialBranch}
+            variant={deleteInitialBranch ? "overlay" : "inline"}
             branches={branches}
             defaultBranch={defaultBranch}
             currentBranch={branch}
             onDeleted={handleBranchDeleted}
-            onCancel={() => setDeleteOpen(false)}
+            onCancel={() => {
+              setDeleteOpen(false);
+              setDeleteInitialBranch(null);
+            }}
           />
         </div>
       ) : null}
@@ -1225,6 +1241,7 @@ export function TimelineView({
                   ref={trashRef}
                   // 纯鼠标手势的落点提示：键盘等价路径是「删除分支」按钮，故对读屏隐藏
                   aria-hidden="true"
+                  data-testid="branch-trash"
                   className={[
                     "absolute bottom-3 right-3 z-20 flex h-16 w-32 items-center justify-center rounded-xl border text-xs transition-colors",
                     branchDragOverTrash

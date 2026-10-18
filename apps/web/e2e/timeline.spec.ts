@@ -335,3 +335,46 @@ test("拖提交节点到空白处 → 就地命名建分支", async ({ page }) =
   await page.getByRole("button", { name: "建分支", exact: true }).click();
   await expect(page.getByRole("status")).toContainText(`已创建分支 ${branch}`);
 });
+
+// 拖分支芯片到删除区：删除区平时隐藏，拖动时才浮出；拖入只是「发起删除」，
+// 仍弹出确认浮层（带预选分支 + 服务端可删除性预检），确认后才真正执行。
+test("拖分支芯片到删除区 → 确认浮层 → 删除成功", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  // 先建一个专属分支（按钮路径），避免动到其它用例依赖的分支
+  const branch = `feature/drag-del-${Date.now().toString(36)}`;
+  await page.getByRole("button", { name: "新建分支" }).click();
+  await page.getByLabel("新分支名称").fill(branch);
+  await page.getByRole("button", { name: "创建分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(`已创建分支 ${branch}`);
+
+  const chip = page.getByRole("button", { name: branch, exact: true });
+  await expect(chip).toBeVisible();
+  const chipBox = await chip.boundingBox();
+  if (!chipBox) {
+    throw new Error("分支芯片没有可见区域，无法执行拖拽");
+  }
+
+  await page.mouse.move(chipBox.x + chipBox.width / 2, chipBox.y + chipBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(chipBox.x + 40, chipBox.y + 40, { steps: 6 });
+
+  // 拖动中删除区才出现
+  const trash = page.getByTestId("branch-trash");
+  await expect(trash).toBeVisible();
+  const trashBox = await trash.boundingBox();
+  if (!trashBox) {
+    throw new Error("删除区没有可见区域，无法完成拖拽");
+  }
+  await page.mouse.move(trashBox.x + trashBox.width / 2, trashBox.y + trashBox.height / 2, {
+    steps: 8,
+  });
+  await page.mouse.up();
+
+  // 浮层确认：预选就是被拖的那个分支
+  const dialog = page.getByRole("dialog", { name: /删除分支/ });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByLabel("要删除的分支")).toHaveValue(branch);
+  await dialog.getByRole("button", { name: "删除分支", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(`已删除分支 ${branch}`);
+});

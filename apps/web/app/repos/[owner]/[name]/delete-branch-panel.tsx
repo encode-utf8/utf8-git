@@ -35,6 +35,11 @@ type DeleteBranchPanelProps = {
   currentBranch: string | null;
   /** 由「拖分支芯片到删除区」带入的预选分支；为空时按默认候选规则挑选。 */
   initialBranchName?: string | null;
+  /**
+   * 呈现方式：inline 跟在工具栏下方（按钮路径）；overlay 浮在视口中央（拖拽路径）。
+   * 拖拽时用户视线在画布底部，内联面板会长在画布上方、落在视野外，看起来像「没反应」。
+   */
+  variant?: "inline" | "overlay";
   /** 术语解释模式（新手 / 进阶时在面板上方内联说明分支是什么）。 */
   mode: ExplainMode;
   /** 删除成功后由父组件展示提示并关闭面板。 */
@@ -70,6 +75,7 @@ export function DeleteBranchPanel({
   defaultBranch,
   currentBranch,
   initialBranchName = null,
+  variant = "inline",
   mode,
   onDeleted,
   onCancel,
@@ -161,8 +167,14 @@ export function DeleteBranchPanel({
     }
   }, [branch, currentBranch, endpoint, headSha, onDeleted, pending, t]);
 
-  return (
-    <div className="rounded-xl border border-black/[.08] p-4 dark:border-white/[.145]">
+  const content = (
+    <div
+      className={
+        variant === "overlay"
+          ? "w-full"
+          : "rounded-xl border border-black/[.08] p-4 dark:border-white/[.145]"
+      }
+    >
       <ConceptNote id="branch" mode={mode} className="mb-3" />
       <div className="space-y-1">
         <label
@@ -241,4 +253,19 @@ export function DeleteBranchPanel({
       </div>
     </div>
   );
+
+  if (variant === "overlay") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4">
+        <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-black/[.12] bg-white p-5 shadow-2xl dark:border-white/[.18] dark:bg-zinc-950">
+          <p className="mb-3 text-sm font-medium text-zinc-900 dark:text-zinc-50">
+            {t("timeline.actions.deleteBranch")}
+          </p>
+          {content}
+        </div>
+      </div>
+    );
+  }
+
+  return content;
 }
