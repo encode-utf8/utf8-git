@@ -221,9 +221,12 @@ function CommitRow({
             {commit.headline || t("timeline.noHeadline")}
           </span>
           <span className="flex shrink-0 items-center gap-1.5">{badges}</span>
-          <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
             <span className="max-w-[7rem] truncate">{authorLabel}</span>
+            {/* 概念提示在两种密度下都要在：新手模式的说明不能因为切换密度就消失 */}
+            <GlossaryHint id="author" mode={mode} />
             <code className="font-mono">{shortSha(commit.oid)}</code>
+            <GlossaryHint id="sha" mode={mode} />
             <time
               suppressHydrationWarning
               title={`${formatUtcDateTime(commit.committedDate)}${t("common.utcSuffix")}`}
