@@ -11,6 +11,42 @@
 
 ---
 
+## 2026-10-18 · M4-7 依赖更新与安全扫描（TODO-245）
+
+**目标**：补齐 M4 工程化缺的最后一块——依赖更新自动化（Dependabot）+ 安全漏洞 CI 门禁（`pnpm audit`），并落实 M4-4 审查报告中「评估接入 `eslint-plugin-jsx-a11y`」的建议。
+
+**完成内容**
+
+- 依赖更新自动化：`.github/dependabot.yml` 两条 ecosystem——`pnpm`（根锁文件覆盖全 workspace，`directory: "/"`）+ `github-actions`（CI 里的 actions 版本）；每周一 09:00（Asia/Shanghai），minor/patch 合并为一条组 PR、major 单独成条便于逐个评估破坏性变更；提交信息带 `chore(deps):` / `chore(ci):` 前缀，符合仓库 Conventional Commits 约定（commitlint 放行 Dependabot 的机器提交）。
+- 安全扫描门禁：CI verify job 新增 `Security audit (pnpm audit)` 步骤；等级与容忍清单集中在 `pnpm-workspace.yaml` 的 `audit:` 段（level: high）。因仓库 `.npmrc` 指向国内镜像（其审计端点不可用），CI 步骤显式 `--registry=https://registry.npmjs.org`。
+- 现存 2 个 high 漏洞的处置：
+  - `deepmerge-ts@7.1.5`（GHSA-ggr8-5vv4-36mx，合并递归对象图时栈耗尽）：prisma 6.x 全系（含最新 6.19.3）锁死 7.1.5，无升级路径；用 `overrides: deepmerge-ts: ^8.0.2` 强制升级。@prisma/config 只用 deepmerge 基础导出、v8 未改签名，且 `apps/web` 的 `postinstall: prisma generate` 是现成的兼容性金丝雀——实测安装即验证。
+  - `braces <=3.0.3`（GHSA-vfj7-8cjw-p6xm，栈耗尽 DoS）：上游 micromatch 依赖的 braces **无补丁版本**（npm 最新即 3.0.3），且路径仅存在于 eslint 开发链（`eslint-config-next → fast-glob → micromatch`），不进生产运行时。以显式 `audit.ignore` 登记容忍项并注释原因，上游发版后即可删除；不因此把门禁降到 critical。
+- jsx-a11y：接入 `eslint-plugin-jsx-a11y` 的 recommended 规则集（现行 34 条规则启用）。因 `eslint-config-next` 已注册同名插件，配置里只叠加 `rules`、不重复声明 `plugins`（否则 `Cannot redefine plugin`）。接入前实测全仓 **0 违规**——M4-4 的可访问性修复已经把代码洗干净了。
+- 本地全量验证：`pnpm lint` / `typecheck` / `test:coverage` / `build` 全绿（397 + 4 跳过，覆盖率阈值不变）；`pnpm audit --registry=https://registry.npmjs.org` 退出 0（1 ignored: 1 high）；新增文件 prettier 自查通过。
+
+**关键决策**
+
+| 编号 | 决策 | 理由 | 备选与否决原因 |
+| --- | --- | --- | --- |
+| ADR-0130 | deepmerge-ts 用 pnpm overrides 强制 8.x，不等 prisma | prisma 6 全系锁 7.1.5；overrides 是 pnpm 官方建议的路径 | 等 prisma 7：主版本升级牵连过大；忽略漏洞：本来可以修 |
+| ADR-0131 | 审计门禁 level=high + 显式 `audit.ignore` 容忍项，而非降到 critical | 高严重度漏洞真实存在但不可修（无补丁），显式登记让容忍可追溯 | `--audit-level=critical`：门禁形同虚设；`--ignore-unfixable`：未来所有不可修漏洞都被静默吞掉 |
+| ADR-0132 | Dependabot 只配 pnpm + github-actions 两条，minor/patch 合组 | 依赖洪流会淹没评审；workspace 单锁文件无需按包拆分 | 按子包拆分配置：重复且无收益；不合组：每周 PR 数量失控 |
+| ADR-0133 | jsx-a11y 只叠加 rules、不重复声明 plugins | eslint-config-next 已注册同名插件，重复声明直接 ConfigError | 直接 spread `flatConfigs.recommended`：报 `Cannot redefine plugin "jsx-a11y"` |
+
+**问题与风险**
+
+- pnpm 12.9.1 的增量安装连续两次丢链接（deepmerge-ts override、jsx-a11y 新装依赖均出现「锁文件有记录但 `node_modules` 无链接」）。处置沿用 M4-5 记录的结论：删 `node_modules` 全新安装即恢复，不手工补链接。
+- Dependabot 的 PR 需要 CI 通过才能合并；审计门禁未来可能因依赖升级引出的新漏洞而红——这是设计意图，但意味着 Dependabot PR 有时需要连带处理漏洞或补容忍项。
+- `braces` 容忍项需要定期复查（每次 Dependabot 带来 micromatch / braces 更新时核对）：若上游发布修复版，删除 `audit.ignore` 条目。
+
+**下一步**
+
+- M4 全部条目（TODO-244 ~ TODO-248）已收官：更新 roadmap 状态为已完成，核对退出标准。
+- 遗留非门禁事项：E2E 写操作链路覆盖、`format:check` 的存量漂移（docs / ISSUE_TEMPLATE 等 10 个文件，未进 CI 门禁）。
+
+---
+
 ## 2026-10-18 · M4-6 增量泳道布局与服务端布局缓存（TODO-246）
 
 **目标**：消除时间线深分页 / 切分支时 `computeLaneLayout` 的全量重算（M4-2 基准：万级满并发单次约 190ms），同时不改变「泳道布局在前端计算」的既定架构。
