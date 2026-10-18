@@ -13,7 +13,8 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint src",
     "test": "vitest run",
-    "bench": "vitest bench --run"
+    "bench": "vitest bench --run",
+    "test:coverage": "vitest run --coverage"
   }
 }

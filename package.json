@@ -17,17 +17,19 @@
     "format:check": "prettier --check .",
     "perf": "node scripts/perf-validate.mjs",
     "deploy:selfcheck": "node scripts/deploy-selfcheck.mjs",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:coverage": "pnpm -r test:coverage"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
+    "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "prettier": "^3.9.9",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.71.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }
