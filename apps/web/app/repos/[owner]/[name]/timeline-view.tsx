@@ -2,9 +2,9 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { computeLaneLayout, sliceLaneLayout } from "@utf8-git/git-graph";
+import { LaneComputation, sliceLaneLayout, type CommitLike, type LaneLayout } from "@utf8-git/git-graph";
 
 import {
   createBranchDescriptor,
@@ -47,9 +47,24 @@ const ROW_HEIGHT = 76;
 const AUTO_LOAD_THRESHOLD = 8;
 const EXPLAIN_MODE_STORAGE_KEY = "utf8-git:explain-mode";
 
+// 泳道布局回填走 layout effect：同帧内生效，不会出现「先渲染无泳道、下一帧才有」的闪帧；
+// 服务端渲染时退化为 useEffect（避免 useLayoutEffect 的 SSR 告警）。
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+// 布局尚未计算（深页首帧、集合为空）时的占位布局。
+const EMPTY_LANE_LAYOUT: LaneLayout = {
+  nodes: [],
+  segments: [],
+  edges: [],
+  laneCount: 0,
+};
+
 type TimelinePageResponse = {
   commits: TimelineCommit[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  /** 仅首页下发：服务端算好并缓存的泳道布局（TODO-246） */
+  laneLayout?: LaneLayout | null;
 };
 
 type TimelineViewProps = {
@@ -60,6 +75,8 @@ type TimelineViewProps = {
   initialBranch: string | null;
   branches: TimelineBranch[];
   defaultBranch: string | null;
+  /** 服务端下发的首页泳道布局（TODO-246，内容指纹缓存）；null 时客户端自行计算 */
+  initialLaneLayout?: LaneLayout | null;
 };
 
 const PR_STATE_LABEL: Record<string, MessageKey> = {
@@ -211,6 +228,7 @@ export function TimelineView({
   initialBranch,
   branches,
   defaultBranch,
+  initialLaneLayout,
 }: TimelineViewProps) {
   const { t } = useTranslator();
   const [commits, setCommits] = useState(initialCommits);
@@ -221,6 +239,8 @@ export function TimelineView({
   // 否则服务端的游标链 key（user / owner / name / branch）不一致，会返回 409 cursor_expired。
   // 用户手动切换分支后，这里同步为具体分支名。
   const [branchParam, setBranchParam] = useState<string | null>(null);
+  // 切换分支时服务端随第 1 页下发的泳道布局（TODO-246）；未切换时为 null，回落到 SSR 下发的初始布局
+  const [fetchedLaneLayout, setFetchedLaneLayout] = useState<LaneLayout | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<OnlineErrorInfo | null>(null);
   const [selectedCommit, setSelectedCommit] = useState<TimelineCommit | null>(null);
@@ -454,17 +474,59 @@ export function TimelineView({
   );
   const visibleCommits = filteredCommits.slice(windowRange.start, windowRange.end);
 
-  // 泳道布局：只依赖 commits（切换分支 / 加载更多时重算），窗口滚动不触发。
-  const laneLayout = useMemo(
-    () =>
-      computeLaneLayout(
-        filteredCommits.map((commit) => ({ oid: commit.oid, parents: commit.parents })),
-      ),
-    [filteredCommits],
+  // 泳道布局（TODO-246：增量续算 + 服务端下发缓存布局）：
+  // 1. 集合与「服务端下发的首页布局」逐条一致（挂载 / 切换分支后的首帧）→ 直接采用，
+  //    省掉客户端一次全量 computeLaneLayout；
+  // 2. 无过滤且集合只是「尾部追加」（加载更多）→ 从上一份增量计算续算，只处理新页，
+  //    深分页时避免万级提交每次全量重算（M4-2 基准：万级满并发 ~190ms/次）；
+  // 3. 其余情况（过滤变化 / 切换分支重置集合）→ 全量重算，过滤后集合通常更小。
+  // 布局推导成本高但依赖集合，故在 layout effect 中计算并经 setState 回填：
+  // 增量计算实例只从 effect 读写（react-hooks/refs 规则），push 幂等，
+  // StrictMode 双次执行与并发重入都安全。首帧布局直接以服务端下发值播种（SSR/注水一致）。
+  const [laneLayout, setLaneLayout] = useState<LaneLayout | null>(
+    initialLaneLayout ?? null,
   );
+  const laneComputationRef = useRef<LaneComputation | null>(null);
+  const laneInputRef = useRef<CommitLike[]>([]);
+  const serverLaneLayout = fetchedLaneLayout ?? initialLaneLayout ?? null;
+  useIsomorphicLayoutEffect(() => {
+    const input = filteredCommits.map((commit) => ({
+      oid: commit.oid,
+      parents: commit.parents,
+    }));
+
+    const matchesServerLayout =
+      serverLaneLayout !== null &&
+      input.length === serverLaneLayout.nodes.length &&
+      input.every((commit, index) => commit.oid === serverLaneLayout.nodes[index]?.oid);
+    if (matchesServerLayout && serverLaneLayout) {
+      // 同步维护增量计算，后续「加载更多」才能从这份集合续算
+      const computation = new LaneComputation();
+      computation.push(input);
+      laneComputationRef.current = computation;
+      laneInputRef.current = input;
+      setLaneLayout(serverLaneLayout);
+      return;
+    }
+
+    const previous = laneInputRef.current;
+    const canExtend =
+      !hasActiveTimelineFilter(filters) &&
+      input.length >= previous.length &&
+      previous.every((commit, index) => commit.oid === input[index]?.oid);
+    if (canExtend && laneComputationRef.current) {
+      laneComputationRef.current.push(input.slice(previous.length));
+    } else {
+      const computation = new LaneComputation();
+      computation.push(input);
+      laneComputationRef.current = computation;
+    }
+    laneInputRef.current = input;
+    setLaneLayout(laneComputationRef.current.snapshot());
+  }, [filteredCommits, filters, serverLaneLayout]);
   // 只切出当前窗口内的节点与连线，保证每帧 SVG 元素量恒定（不随总提交数增长）。
   const laneSlice = useMemo(
-    () => sliceLaneLayout(laneLayout, windowRange.start, windowRange.end),
+    () => sliceLaneLayout(laneLayout ?? EMPTY_LANE_LAYOUT, windowRange.start, windowRange.end),
     [laneLayout, windowRange.start, windowRange.end],
   );
   // 泳道几何：列宽只随整体 laneCount 变化，滚动时稳定。
@@ -493,6 +555,9 @@ export function TimelineView({
       setCommits((previous) => mergeCommits(previous, data.commits));
       setHasNextPage(data.pageInfo.hasNextPage);
       setPage(nextPage);
+      // 深页不下发布局：上面 setCommits 会让集合超出服务端布局覆盖范围，
+      // 布局 memo 自动转入「增量续算」路径；这里清掉旧布局避免无谓的比对
+      setFetchedLaneLayout(null);
     } catch (error) {
       const info =
         error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null, t);
@@ -543,6 +608,8 @@ export function TimelineView({
         setBranch(nextBranch);
         setBranchParam(nextBranch);
         setSelectedCommit(null);
+        // 切换分支 → 第 1 页携带服务端算好并缓存的布局，客户端首帧直接采用（TODO-246）
+        setFetchedLaneLayout(data.laneLayout ?? null);
         containerRef.current?.scrollTo({ top: 0 });
       } catch (error) {
         setLoadError(

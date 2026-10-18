@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pickBranchColor } from "./color";
-import { computeLaneLayout, sliceLaneLayout } from "./layout";
-import { makeBranchyHistory } from "./synthetic-history";
+import { LaneComputation, computeLaneLayout, sliceLaneLayout } from "./layout";
+import { makeBranchyHistory, makeLinearHistory } from "./synthetic-history";
 import type { CommitLike, LaneLayout, LaneSegment } from "./types";
 
 /** 按 oid 查找节点，便于断言。 */
@@ -446,5 +446,154 @@ describe("makeBranchyHistory", () => {
     expect(layout.laneCount).toBeGreaterThan(1);
     expect(layout.laneCount).toBeLessThanOrEqual(10);
     expect(layout.segments.length).toBeGreaterThan(5000);
+  });
+});
+
+describe("LaneComputation", () => {
+  /** 代表性输入：线性 / 多分支 / 多父合并都要覆盖。 */
+  function samples(): Array<{ name: string; commits: CommitLike[] }> {
+    return [
+      { name: "空输入", commits: [] },
+      { name: "单提交", commits: [{ oid: "A", parents: [] }] },
+      {
+        name: "线性历史",
+        commits: makeLinearHistory(120),
+      },
+      {
+        name: "多分支历史",
+        commits: makeBranchyHistory({ branches: 8, commitsPerBranch: 12, concurrent: 4 }),
+      },
+      {
+        name: "含截断父提交（分页场景）",
+        commits: [
+          { oid: "A", parents: ["B", "MISSING"] },
+          { oid: "B", parents: ["C"] },
+          { oid: "C", parents: [] },
+        ],
+      },
+    ];
+  }
+
+  it("任意分段粒度下 finish() 与全量 computeLaneLayout 完全一致", () => {
+    for (const { name, commits } of samples()) {
+      const expected = computeLaneLayout(commits);
+      for (const chunk of [1, 2, 7, 50, 1000]) {
+        const computation = new LaneComputation();
+        for (let index = 0; index < commits.length; index += chunk) {
+          computation.push(commits.slice(index, index + chunk));
+          // 每个中间快照的渲染面（节点 / 线段 / 泳道数）== 当前前缀的全量计算结果；
+          // 语义边只含已可解析部分（未喂入父提交的边在 finish 时补齐，见下）
+          const loaded = commits.slice(0, Math.min(index + chunk, commits.length));
+          const snapshot = computation.snapshot();
+          const prefixLayout = computeLaneLayout(loaded);
+          expect(
+            {
+              nodes: snapshot.nodes,
+              segments: snapshot.segments,
+              laneCount: snapshot.laneCount,
+            },
+            `${name} / chunk=${chunk} / prefix=${loaded.length}`,
+          ).toEqual({
+            nodes: prefixLayout.nodes,
+            segments: prefixLayout.segments,
+            laneCount: prefixLayout.laneCount,
+          });
+        }
+        expect(computation.finish(), `${name} / chunk=${chunk}`).toEqual(expected);
+      }
+    }
+  });
+
+  it("快照随分段推进：临时悬挂段在父提交喂入后转为正式线段", () => {
+    const commits: CommitLike[] = [
+      { oid: "A", parents: ["B"] },
+      { oid: "B", parents: ["C"] },
+      { oid: "C", parents: [] },
+    ];
+    const computation = new LaneComputation();
+    computation.push(commits.slice(0, 2));
+    const midSnapshot = computation.snapshot();
+    // 只喂了 A、B：C 尚未出现 → 末行有一条临时悬挂线段（ truncated ）
+    expect(midSnapshot.nodes.map((node) => node.oid)).toEqual(["A", "B"]);
+    const hanging = midSnapshot.segments.filter((segment) => segment.truncated);
+    expect(hanging).toHaveLength(1);
+    expect(hanging[0]).toMatchObject({ row: 1, oid: "C" });
+    computation.push(commits.slice(2));
+    const final = computation.finish();
+    // C 出现后：row 1 的线段不再是悬挂段，且整体与全量计算一致
+    expect(final.segments.filter((segment) => segment.truncated)).toEqual([]);
+    expect(final).toEqual(computeLaneLayout(commits));
+  });
+
+  it("快照对象在无新喂入时保持同一引用（React memo 友好）", () => {
+    const computation = new LaneComputation();
+    computation.push(makeLinearHistory(10));
+    const first = computation.snapshot();
+    expect(computation.snapshot()).toBe(first);
+    computation.push(makeLinearHistory(20).slice(10));
+    const second = computation.snapshot();
+    expect(second).not.toBe(first);
+    expect(computation.snapshot()).toBe(second);
+  });
+
+  it("前缀稳定性：追加更旧的提交不改变已有节点的列号与颜色", () => {
+    const commits = makeBranchyHistory({ branches: 6, commitsPerBranch: 10, concurrent: 3 });
+    const computation = new LaneComputation();
+    computation.push(commits.slice(0, 37));
+    const prefix = computation.snapshot();
+    computation.push(commits.slice(37));
+    const full = computation.finish();
+    // 已喂入行的列号 / 颜色在追加后逐字段不变
+    expect(full.nodes.slice(0, 37)).toEqual(prefix.nodes);
+    // 最终截断段集合与全量计算一致
+    expect(full.segments.filter((segment) => segment.truncated)).toEqual(
+      computeLaneLayout(commits).segments.filter((segment) => segment.truncated),
+    );
+  });
+
+  it("父提交在后续分段出现时，悬挂线段自动解除截断标记", () => {
+    const commits: CommitLike[] = [
+      { oid: "A", parents: ["B", "X"] }, // 第二条父线等待 X（第 3 行才喂入）
+      { oid: "B", parents: [] },
+      { oid: "X", parents: [] },
+    ];
+    const computation = new LaneComputation();
+    computation.push(commits.slice(0, 2));
+    const prefix = computation.snapshot();
+    // X 尚未喂入：A 分叉出的那条线是悬挂段
+    expect(prefix.segments.some((segment) => segment.truncated)).toBe(true);
+
+    computation.push(commits.slice(2));
+    const full = computation.finish();
+    // X 出现后该线段不再是悬挂段，且整体与全量计算一致
+    expect(full.segments.filter((segment) => segment.truncated)).toEqual([]);
+    expect(full).toEqual(computeLaneLayout(commits));
+  });
+
+  it("重复 oid 的喂入被跳过（幂等）", () => {
+    const commits = makeLinearHistory(5);
+    const computation = new LaneComputation();
+    computation.push(commits);
+    computation.push(commits.slice(0, 3));
+    computation.push([]);
+    expect(computation.finish()).toEqual(computeLaneLayout(commits));
+  });
+
+  it("finish 之后重复 finish 返回同一布局，push 抛错", () => {
+    const computation = new LaneComputation().push(makeLinearHistory(4));
+    const first = computation.finish();
+    expect(computation.finish()).toBe(first);
+    expect(() => computation.push([{ oid: "X", parents: [] }])).toThrow(/已 finish/);
+  });
+
+  it("size / isFinished 反映喂入进度", () => {
+    const computation = new LaneComputation();
+    expect(computation.size).toBe(0);
+    expect(computation.isFinished).toBe(false);
+    computation.push(makeLinearHistory(3));
+    expect(computation.size).toBe(3);
+    computation.finish();
+    expect(computation.isFinished).toBe(true);
+    expect(computation.size).toBe(3);
   });
 });

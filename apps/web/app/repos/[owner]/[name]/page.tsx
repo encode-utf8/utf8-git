@@ -293,6 +293,7 @@ export default async function RepoTimelinePage({
           initialBranch={timeline.branch}
           branches={timeline.branches}
           defaultBranch={timeline.repo.defaultBranch}
+          initialLaneLayout={result.laneLayout}
         />
       </div>
     </PageShell>

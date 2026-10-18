@@ -57,7 +57,9 @@ async function handleGET(
   try {
     const result = await loadTimelinePage({ userId, token, owner, name, branch, page: pageRaw });
     return NextResponse.json(
-      { ...result.timeline, meta: result.meta },
+      // laneLayout 仅首页下发：客户端挂载 / 切换分支直接消费，省一次本地全量重算；
+      // 深页客户端增量续算，不需要服务端布局（见 lib/timeline-data.ts）
+      { ...result.timeline, meta: result.meta, laneLayout: result.laneLayout },
       { headers: { "cache-control": "no-store" } },
     );
   } catch (error) {

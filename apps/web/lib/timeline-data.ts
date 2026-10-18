@@ -1,5 +1,7 @@
 // 时间线数据服务：TTL 缓存（2 min）+ cursor 链分页 + 限流降级。
 
+import type { LaneLayout } from "@utf8-git/git-graph";
+
 import {
   getDataStores,
   getRateLimitThreshold,
@@ -9,6 +11,7 @@ import {
 } from "./data-stores";
 import { GitHubRateLimitError } from "./github-errors";
 import { fetchTimelinePage, TIMELINE_PAGE_SIZE, type TimelineData } from "./github-timeline";
+import { computeCachedLaneLayout } from "./lane-layout";
 import { cacheKey, type CacheLookup } from "./server-cache";
 import type { RateLimitStoreLike, TtlCacheLike } from "./shared-store";
 
@@ -29,11 +32,19 @@ export type TimelinePageMeta = {
   fetchedAt: string | null;
   resetAt: string | null;
   warnings: string[];
+  /** 本次响应附带的泳道布局是否命中服务端缓存（TODO-246 观测用）。 */
+  laneLayoutCached: boolean;
 };
 
 export type TimelinePageResult = {
   timeline: TimelineData;
   meta: TimelinePageMeta;
+  /**
+   * 首页附带的泳道布局（TODO-246）：服务端按提交集合内容指纹算好并缓存，
+   * 客户端挂载 / 切换分支时直接用它，免去本地全量重算。
+   * 深页（page > 1）为 null——客户端对已加载集合做增量续算，不需要服务端布局。
+   */
+  laneLayout: LaneLayout | null;
 };
 
 export type TimelineDataDeps = {
@@ -54,6 +65,7 @@ function buildMeta(params: {
   fetchedAt: number | null;
   resetAt: Date | null;
   warnings: string[];
+  laneLayoutCached?: boolean;
 }): TimelinePageMeta {
   return {
     page: params.page,
@@ -64,6 +76,36 @@ function buildMeta(params: {
     fetchedAt: params.fetchedAt === null ? null : new Date(params.fetchedAt).toISOString(),
     resetAt: params.resetAt?.toISOString() ?? null,
     warnings: params.warnings,
+    laneLayoutCached: params.laneLayoutCached ?? false,
+  };
+}
+
+/** 提交记录 → 泳道布局输入（oid + parents 即布局所需的全部信息）。 */
+function toLaneInput(timeline: TimelineData): Array<{ oid: string; parents: string[] }> {
+  return timeline.commits.map((commit) => ({ oid: commit.oid, parents: commit.parents }));
+}
+
+/**
+ * 为首页响应附带服务端泳道布局（TODO-246）。
+ *
+ * - 只对 page 1 计算：客户端挂载与「切换分支」都落在第 1 页，直接消费该布局，
+ *   省掉本地一次全量 computeLaneLayout；
+ * - 深页返回 null：客户端对已加载集合做增量续算（LaneComputation.push），
+ *   服务端布局对不上累积集合，传了反而是浪费；
+ * - 布局按内容指纹走内存 LRU 缓存（lib/lane-layout.ts），命中时近乎零成本。
+ */
+function withLaneLayout(
+  result: { timeline: TimelineData; meta: TimelinePageMeta },
+  page: number,
+): TimelinePageResult {
+  if (page !== 1) {
+    return { ...result, laneLayout: null };
+  }
+  const { layout, cached } = computeCachedLaneLayout(toLaneInput(result.timeline));
+  return {
+    ...result,
+    laneLayout: layout,
+    meta: { ...result.meta, laneLayoutCached: cached },
   };
 }
 
@@ -72,18 +114,21 @@ function serveCached(
   page: number,
   resetAt: Date | null,
 ): TimelinePageResult {
-  return {
-    timeline: cached.value.timeline,
-    meta: buildMeta({
-      page,
-      cached: true,
-      stale: !cached.fresh,
-      degraded: true,
-      fetchedAt: cached.value.fetchedAt,
-      resetAt,
-      warnings: cached.value.warnings,
-    }),
-  };
+  return withLaneLayout(
+    {
+      timeline: cached.value.timeline,
+      meta: buildMeta({
+        page,
+        cached: true,
+        stale: !cached.fresh,
+        degraded: true,
+        fetchedAt: cached.value.fetchedAt,
+        resetAt,
+        warnings: cached.value.warnings,
+      }),
+    },
+    page,
+  );
 }
 
 /**
@@ -129,18 +174,21 @@ export async function loadTimelinePage(
 
   // 新鲜缓存直接命中，不再访问 GitHub
   if (cached?.fresh) {
-    return {
-      timeline: cached.value.timeline,
-      meta: buildMeta({
-        page,
-        cached: true,
-        stale: false,
-        degraded: false,
-        fetchedAt: cached.value.fetchedAt,
-        resetAt: null,
-        warnings: cached.value.warnings,
-      }),
-    };
+    return withLaneLayout(
+      {
+        timeline: cached.value.timeline,
+        meta: buildMeta({
+          page,
+          cached: true,
+          stale: false,
+          degraded: false,
+          fetchedAt: cached.value.fetchedAt,
+          resetAt: null,
+          warnings: cached.value.warnings,
+        }),
+      },
+      page,
+    );
   }
 
   // 深页依赖上一页 endCursor；链缺失时让客户端回到第 1 页
@@ -167,22 +215,25 @@ export async function loadTimelinePage(
         // 来不及读到上一页数据（缓存已过期）→ 让客户端回到第 1 页重建游标链
         throw new TimelineCursorExpiredError();
       }
-      return {
-        timeline: {
-          ...previousPage.value.timeline,
-          commits: [],
-          pageInfo: { hasNextPage: false, endCursor: null },
+      return withLaneLayout(
+        {
+          timeline: {
+            ...previousPage.value.timeline,
+            commits: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+          meta: buildMeta({
+            page,
+            cached: false,
+            stale: false,
+            degraded: false,
+            fetchedAt: now(),
+            resetAt: null,
+            warnings: [],
+          }),
         },
-        meta: buildMeta({
-          page,
-          cached: false,
-          stale: false,
-          degraded: false,
-          fetchedAt: now(),
-          resetAt: null,
-          warnings: [],
-        }),
-      };
+        page,
+      );
     }
     cursor = previous.endCursor;
   }
@@ -216,18 +267,21 @@ export async function loadTimelinePage(
     pages[page - 1] = { endCursor: result.data.pageInfo.endCursor, fetchedAt };
     await cursorCache.set(cursorKey, { pages });
 
-    return {
-      timeline: result.data,
-      meta: buildMeta({
-        page,
-        cached: false,
-        stale: false,
-        degraded: false,
-        fetchedAt,
-        resetAt: null,
-        warnings: result.warnings,
-      }),
-    };
+    return withLaneLayout(
+      {
+        timeline: result.data,
+        meta: buildMeta({
+          page,
+          cached: false,
+          stale: false,
+          degraded: false,
+          fetchedAt,
+          resetAt: null,
+          warnings: result.warnings,
+        }),
+      },
+      page,
+    );
   } catch (error) {
     if (error instanceof GitHubRateLimitError) {
       const resetAt = error.resetAt ?? new Date(now() + RATE_LIMIT_FALLBACK_MS);
