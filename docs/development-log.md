@@ -11,6 +11,42 @@
 
 ---
 
+## 2026-10-18 · M4-5 覆盖率门禁进 CI 与关键路径 E2E 补强
+
+**目标**：把路线图 M4 质量目标「单测覆盖率 ≥ 70%（核心包 ≥ 85%）、E2E 覆盖关键路径」从口头目标变成 CI 硬门禁；顺带补齐可访问性与英文路径的 E2E 回归。
+
+**完成内容**
+
+- 覆盖率配置与阈值：
+  - `packages/git-graph/vitest.config.ts`（核心包 85%，四指标）+ `packages/github-client` / `packages/ui`（70%）+ `apps/web/vitest.config.mts`（lib 70%，`include: lib/**`，排除 `lib/i18n/messages/**`、`lib/prisma.ts`、`lib/auth.ts`）；
+  - 根 `package.json` 新增 `test:coverage`（`pnpm -r test:coverage`），CI verify 步骤由 `pnpm test` 改为 `pnpm test:coverage`，覆盖率不达标即 CI 失败。
+- 本地全量基线（C07f3a9 提交前）：`pnpm lint` / `typecheck` / `test:coverage` 全绿——git-graph 96.06 / 87.8 / 100 / 97.27（阈值 85），github-client 与 ui 100 / 100 / 100 / 100，apps/web lib 88.18 / 81.19 / 80.42 / 88.37（阈值 70）；单测 385 + 4 跳过不变。
+- E2E 补强：新增 `apps/web/e2e/a11y.spec.ts`（3 条）——skip link 是首个可聚焦元素且回车进入 `#main-content`；提交行键盘焦点有 ≥2px 可见描边（回归 M4-4 修复）；已登录英文路径切换（标题 / `lang` / 搜索框占位符断言）后切回中文。
+- `layout.tsx` skip link 移到文档首位，成为第一个可聚焦元素（原位置在断网横幅之后）。
+- 依赖对齐：vitest 与 `@vitest/coverage-v8` 统一 `^5.0.5`，消除混用版本告警。
+- CI（commit `c07f3a9`）：verify 与 e2e 两个 job 均 success——新增的 3 条可访问性 / i18n 断言首次在 Postgres service 环境下验证通过。
+
+**关键决策**
+
+| 编号 | 决策 | 理由 | 备选与否决原因 |
+| --- | --- | --- | --- |
+| ADR-0124 | 覆盖率阈值分级：核心包（git-graph）85%，业务包与 web lib 70% | 对齐路线图质量目标原文；核心算法包测试收益最高 | 全局统一 70%：核心包约束不足；统一 85%：现有 app 层达不到 |
+| ADR-0125 | CI 用 `pnpm test:coverage` 直接替换 `pnpm test` | 覆盖率失败即 CI 失败，门禁不依赖人看报告 | 并行两个 job：CI 时长翻倍，收益相同 |
+
+**问题与风险**
+
+- 本地无法跑 E2E（无 Docker / PostgreSQL），全部依赖 CI 验证；本次 3 条新断言已在 CI 首次跑绿。
+- 排障记录：pnpm 增量安装把 `vitest@5.0.5` / `@vitest/coverage-v8@5.0.5` 的 `.pnpm` 存储目录链坏（缺 `obug` 等依赖链接，报 `ERR_MODULE_NOT_FOUND`），手工补链接会被 pnpm 回收；全新安装（与 CI `--frozen-lockfile` 等价）后恢复。后续若复现，直接删 `node_modules` 重装，不要手工补链接。
+- 整体阈值下仍有 0% 覆盖文件（`auth-adapter.ts` / `pg-stores.ts` / `permissions.ts` 等依赖数据库或 Auth.js 运行时），当前按「lib 整体达标」口径接受；后续可考虑按文件阈值或集成测试补齐。
+
+**下一步**
+
+- TODO-246 服务端泳道缓存 / 增量布局。
+- TODO-245 Dependabot + `pnpm audit`（含评估接入 `eslint-plugin-jsx-a11y`）。
+- E2E 继续补写操作链路（建分支 / 提 Issue / 合并 / 删分支）的关键路径覆盖。
+
+---
+
 ## 2026-10-18 · M4-4 可访问性审查与修复（TODO-244）
 
 **目标**：对齐路线图 M4「体验：键盘可达性」——对已登录链路与公开页做一轮 WCAG 2.2 AA 级审查，修复发现的问题。

@@ -110,6 +110,7 @@
 - [ ] TODO-245 依赖更新与安全扫描（Dependabot + audit）
 - [ ] TODO-246 服务端泳道缓存 / 增量布局（大仓库切换分支时避免 `computeLaneLayout` 全量重算；万级满并发布局约 120ms 的一次性成本可作缓存粒度参考）
 - [x] TODO-247 已登录界面文案迁移到消息目录（仓库列表 / 时间线 / 提交详情 / 各操作面板 / 账号页与操作历史页，含 `lib/error-state.ts` 与 `client-fetch` 的错误与空状态文案）：纯逻辑层加 `Translate = sourceTranslate` 末位可选参数，组件传当前语言、API 路由与单测不传；`ops.history` / `ops.link` / `ops.export` / `ops.account` / `errors.*` / `me.*` / `commitDetail.*` 等键补齐，`apps/web/app/**` 已无硬编码中文；英文路径暂无 E2E，时间格式未本地化）
+- [x] TODO-248 覆盖率门禁进 CI 与关键路径 E2E 补强（M4-5：各包新增 vitest coverage 阈值——git-graph 85%（96.06 / 87.8 / 100 / 97.27）、github-client 与 ui 70%（均 100%）、apps/web lib 70%（88.18 / 81.19 / 80.42 / 88.37，排除 i18n messages / prisma / auth），根 `test:coverage` 脚本 + CI verify 步骤改为 `pnpm test:coverage`，覆盖率不达标即 CI 失败；新增 `e2e/a11y.spec.ts` 3 条（skip link 首聚焦 + 回车进主内容、提交行键盘焦点描边 ≥2px、已登录英文路径切换）；skip link 移至文档首位。commit `c07f3a9` CI verify / e2e 双 job 全绿）
 
 ### 3.6 文档与社区
 
