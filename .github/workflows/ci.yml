@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # 门禁等级（high）与容忍清单（见 pnpm-workspace.yaml 的 audit 段注释）
+      # 由 pnpm-workspace.yaml 统一配置；仓库 .npmrc 指向国内镜像、其审计
+      # 端点不可用，故显式走 npmjs 的 advisory 接口。
+      - name: Security audit (pnpm audit)
+        run: pnpm audit --registry=https://registry.npmjs.org
+
       - name: Lint
         run: pnpm lint
 

@@ -1,0 +1,35 @@
+version: 2
+updates:
+  # pnpm workspace：根目录一份 pnpm-lock.yaml 覆盖 apps/* 与 packages/*，
+  # 一条 ecosystem 配置即可，无需按子包拆分。
+  - package-ecosystem: "pnpm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    # 同时打开的依赖 PR 上限，避免周一刷屏
+    open-pr-limit: 5
+    # minor / patch 合并为一条 PR 降噪；major 单独成条，便于逐个评估破坏性变更
+    groups:
+      pnpm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "chore"
+      prefix-scope: "deps"
+
+  # CI 工作流中 actions/* 的版本（checkout / setup-node / setup-pnpm 等）
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pr-limit: 3
+    commit-message:
+      prefix: "chore"
+      prefix-scope: "ci"
