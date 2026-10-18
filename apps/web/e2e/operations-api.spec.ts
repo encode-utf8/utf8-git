@@ -26,15 +26,21 @@ function createBranch(api: APIRequestContext, body: unknown, path = API): Promis
   return api.post(path, { data: body });
 }
 
-test("未登录调用写接口 → 401 unauthorized（先于入参校验）", async ({ request }) => {
-  // request 夹具与浏览器上下文隔离，不带 storageState 的会话 Cookie
-  const response = await createBranch(request, {
-    branch: `${BRANCH_PREFIX}/anon`,
-    from: FROM_SHA,
-    confirmed: true,
-  });
-  expect(response.status()).toBe(401);
-  expect(await response.json()).toEqual({ error: "unauthorized" });
+test("未登录调用写接口 → 401 unauthorized（先于入参校验）", async ({ playwright, baseURL }) => {
+  // 不能用默认的 request 夹具：它会继承 use.storageState 的会话 Cookie（CI 实测会 201）。
+  // 这里显式建一个全新 APIRequestContext（无 Cookie）+ baseURL，重试时同样干净。
+  const api = await playwright.request.newContext({ baseURL });
+  try {
+    const response = await createBranch(api, {
+      branch: `${BRANCH_PREFIX}/anon-${RUN_NONCE}`,
+      from: FROM_SHA,
+      confirmed: true,
+    });
+    expect(response.status()).toBe(401);
+    expect(await response.json()).toEqual({ error: "unauthorized" });
+  } finally {
+    await api.dispose();
+  }
 });
 
 test("入参校验在触达上游前完成 → 400（确认位 / SHA / 分支名 / 仓库名 / 请求体）", async ({
