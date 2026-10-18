@@ -421,6 +421,8 @@ test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({
   await expect(page.getByText("松手向 main 开 PR")).toBeVisible();
   await page.mouse.up();
 
+  // 临时诊断：把面板收到的预填值打出来
+  expect(await page.locator("[data-debug]").first().getAttribute("data-debug")).toBe("DIAG");
   // 面板预填：来源 = 被拖的分支，目标 = 落点分支
   await expect(page.getByLabel("来源分支（head）")).toHaveValue(branch);
   await expect(page.getByLabel("目标分支（base）")).toHaveValue("main");
