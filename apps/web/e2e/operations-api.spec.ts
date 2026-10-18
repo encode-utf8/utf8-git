@@ -26,21 +26,23 @@ function createBranch(api: APIRequestContext, body: unknown, path = API): Promis
   return api.post(path, { data: body });
 }
 
-test("未登录调用写接口 → 401 unauthorized（先于入参校验）", async ({ playwright, baseURL }) => {
-  // 不能用默认的 request 夹具：它会继承 use.storageState 的会话 Cookie（CI 实测会 201）。
-  // 这里显式建一个全新 APIRequestContext（无 Cookie）+ baseURL，重试时同样干净。
-  const api = await playwright.request.newContext({ baseURL });
-  try {
-    const response = await createBranch(api, {
+test("未登录调用写接口 → 401 unauthorized（先于入参校验）", async ({ baseURL }) => {
+  // 不能用任何 Playwright 请求入口：1.64 运行器会把 use.storageState 的会话 Cookie
+  // 注入 request 夹具、page.request，也注入 playwright.request.newContext()——
+  // CI 诊断实测后者的 jar-before 已含 authjs.session-token，于是「未登录」用例拿到 201。
+  // 这里改用脱离 Playwright 的 Node fetch，请求头里绝对没有 Cookie。
+  if (!baseURL) throw new Error("playwright.config.ts 缺少 use.baseURL 配置");
+  const response = await fetch(new URL(API, baseURL), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
       branch: `${BRANCH_PREFIX}/anon-${RUN_NONCE}`,
       from: FROM_SHA,
       confirmed: true,
-    });
-    expect(response.status()).toBe(401);
-    expect(await response.json()).toEqual({ error: "unauthorized" });
-  } finally {
-    await api.dispose();
-  }
+    }),
+  });
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({ error: "unauthorized" });
 });
 
 test("入参校验在触达上游前完成 → 400（确认位 / SHA / 分支名 / 仓库名 / 请求体）", async ({
