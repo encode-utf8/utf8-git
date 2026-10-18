@@ -1,4 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+// 打开首条提交的详情：整行是一个遮罩按钮，行内还浮着 PR / Issue 徽标链接。
+// 默认点「元素几何中心」在短行高下可能正好落在徽标上（链接会拦掉点击），
+// 因此固定点在行的左上内边距处——那里只有遮罩按钮，两种密度下都稳定。
+async function openFirstCommit(page: Page) {
+  await page
+    .getByRole("list", { name: "提交时间线" })
+    .getByRole("button")
+    .first()
+    .click({ position: { x: 10, y: 10 } });
+}
 
 // 登录态由 playwright.config.ts 的 storageState 提供（globalSetup 落库的数据库会话）。
 // 覆盖 TODO-142：登录（mock）→ 选仓库 → 浏览时间线。
@@ -53,7 +64,7 @@ test("仓库列表 → 时间线 → 翻页（只读最小闭环）", async ({ p
   await page.getByLabel("时间范围").selectOption("month");
   await expect(page.getByText("筛选后 10 / 60 条")).toBeVisible();
   // 缩放保持选中上下文：选中最新提交后切换范围，详情面板不关闭
-  await page.getByRole("list", { name: "提交时间线" }).getByRole("button").first().click();
+  await openFirstCommit(page);
   await expect(page.getByText("文件变更（1）")).toBeVisible();
   await page.getByLabel("时间范围").selectOption("all");
   await expect(page.getByText("文件变更（1）")).toBeVisible();
@@ -62,7 +73,7 @@ test("仓库列表 → 时间线 → 翻页（只读最小闭环）", async ({ p
 
 test("点击提交节点打开文件变更详情面板", async ({ page }) => {
   await page.goto("/repos/encode-utf8/utf8-git");
-  await page.getByRole("list", { name: "提交时间线" }).getByRole("button").first().click();
+  await openFirstCommit(page);
   await expect(page.getByText("文件变更（1）")).toBeVisible();
   await expect(page.getByText("src/index.ts")).toBeVisible();
 });
@@ -151,7 +162,7 @@ test("创建 Issue：确认卡片 → Markdown 预览 → 调上游创建 → �
 
 test("合并 PR：可合并性检查 → 确认合并 → 冲突提示", async ({ page }) => {
   await page.goto("/repos/encode-utf8/utf8-git");
-  await page.getByRole("list", { name: "提交时间线" }).getByRole("button").first().click();
+  await openFirstCommit(page);
   const detail = page.getByRole("dialog", { name: "提交详情" });
   await expect(detail).toBeVisible();
 

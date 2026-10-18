@@ -145,17 +145,66 @@ function CommitRow({
   nowMs,
   mode,
   repoUrl,
+  compact,
   onSelect,
 }: {
   commit: TimelineCommit;
   nowMs: number | null;
   mode: ExplainMode;
   repoUrl: string;
+  /** 紧凑密度：单行、不显示头像；舒适密度保留两行与头像。 */
+  compact: boolean;
   onSelect: (commit: TimelineCommit) => void;
 }) {
   const { t } = useTranslator();
   const authorLabel = commit.author.login ?? commit.author.name ?? t("timeline.unknownAuthor");
   const issues = collectIssues(commit.pullRequests);
+  const timeLabel = commit.committedDate
+    ? nowMs === null
+      ? formatUtcDateTime(commit.committedDate)
+      : formatRelativeTime(Date.parse(commit.committedDate), nowMs, t)
+    : "—";
+
+  // 徽标与概念提示在两种密度下共用，避免两套实现走偏
+  const badges = (
+    <>
+      {commit.parents.length > 1 ? (
+        <>
+          <span className="shrink-0 rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[11px] text-orange-800 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200">
+            merge
+          </span>
+          <GlossaryHint id="merge" mode={mode} />
+        </>
+      ) : null}
+      {commit.pullRequests.map((pullRequest) => (
+        <a
+          key={`pr-${pullRequest.number}`}
+          href={pullRequest.url ?? `${repoUrl}/pull/${pullRequest.number}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={pullRequest.title}
+          className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${prBadgeClass(pullRequest.state)}`}
+        >
+          #{pullRequest.number} {prStateLabel(pullRequest.state, t)}
+        </a>
+      ))}
+      {issues.map((issue) => (
+        <a
+          key={`issue-${issue.number}`}
+          href={issue.url ?? `${repoUrl}/issues/${issue.number}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={t("timeline.issueLinkTitle", { title: issue.title })}
+          className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${issueBadgeClass(issue.state)}`}
+        >
+          #{issue.number} {issueStateLabel(issue.state, t)}
+        </a>
+      ))}
+      {commit.pullRequests.length > 0 ? <GlossaryHint id="pull-request" mode={mode} /> : null}
+      {issues.length > 0 ? <GlossaryHint id="issue" mode={mode} /> : null}
+    </>
+  );
+
   return (
     <div className="relative h-full w-full border-b border-black/[.06] dark:border-white/[.08]">
       {/* 整行可点：遮罩按钮负责选中；内容层 pointer-events-none，链接再单独放开 */}
@@ -165,80 +214,63 @@ function CommitRow({
         aria-label={t("timeline.viewCommitDetail", { sha: shortSha(commit.oid) })}
         className="absolute inset-0 z-0 transition-colors hover:bg-black/[.03] focus-visible:bg-black/[.04] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-600 dark:hover:bg-white/[.05] dark:focus-visible:outline-sky-400"
       />
-      <div className="pointer-events-none relative z-10 flex h-full w-full items-start gap-3 px-4 py-3">
-        {commit.author.avatarUrl ? (
-          <Image
-            src={commit.author.avatarUrl}
-            alt=""
-            width={32}
-            height={32}
-            className="mt-0.5 h-8 w-8 shrink-0 rounded-full"
-          />
-        ) : (
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-            {authorLabel.slice(0, 1).toUpperCase()}
+      {compact ? (
+        // 紧凑：单行。行高只有 36px，塞不下头像与第二行，强行复用两行布局会互相压住
+        <div className="pointer-events-none relative z-10 flex h-full w-full items-center gap-2 px-4">
+          <span className="min-w-0 truncate text-xs font-medium text-zinc-900 dark:text-zinc-50">
+            {commit.headline || t("timeline.noHeadline")}
           </span>
-        )}
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-              {commit.headline || t("timeline.noHeadline")}
-            </span>
-            {commit.parents.length > 1 ? (
-              <>
-                <span className="shrink-0 rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[11px] text-orange-800 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200">
-                  merge
-                </span>
-                <GlossaryHint id="merge" mode={mode} />
-              </>
-            ) : null}
-            {commit.pullRequests.map((pullRequest) => (
-              <a
-                key={`pr-${pullRequest.number}`}
-                href={pullRequest.url ?? `${repoUrl}/pull/${pullRequest.number}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={pullRequest.title}
-                className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${prBadgeClass(pullRequest.state)}`}
-              >
-                #{pullRequest.number} {prStateLabel(pullRequest.state, t)}
-              </a>
-            ))}
-            {issues.map((issue) => (
-              <a
-                key={`issue-${issue.number}`}
-                href={issue.url ?? `${repoUrl}/issues/${issue.number}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={t("timeline.issueLinkTitle", { title: issue.title })}
-                className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${issueBadgeClass(issue.state)}`}
-              >
-                #{issue.number} {issueStateLabel(issue.state, t)}
-              </a>
-            ))}
-            {commit.pullRequests.length > 0 ? <GlossaryHint id="pull-request" mode={mode} /> : null}
-            {issues.length > 0 ? <GlossaryHint id="issue" mode={mode} /> : null}
-          </span>
-          <span className="mt-1 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-            <span className="truncate">{authorLabel}</span>
-            <GlossaryHint id="author" mode={mode} />
-            <span>·</span>
+          <span className="flex shrink-0 items-center gap-1.5">{badges}</span>
+          <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+            <span className="max-w-[7rem] truncate">{authorLabel}</span>
             <code className="font-mono">{shortSha(commit.oid)}</code>
-            <GlossaryHint id="sha" mode={mode} />
-            <span>·</span>
             <time
               suppressHydrationWarning
               title={`${formatUtcDateTime(commit.committedDate)}${t("common.utcSuffix")}`}
             >
-              {commit.committedDate
-                ? nowMs === null
-                  ? formatUtcDateTime(commit.committedDate)
-                  : formatRelativeTime(Date.parse(commit.committedDate), nowMs, t)
-                : "—"}
+              {timeLabel}
             </time>
           </span>
-        </span>
-      </div>
+        </div>
+      ) : (
+        <div className="pointer-events-none relative z-10 flex h-full w-full items-start gap-3 px-4 py-2">
+          {commit.author.avatarUrl ? (
+            <Image
+              src={commit.author.avatarUrl}
+              alt=""
+              width={28}
+              height={28}
+              className="mt-0.5 h-7 w-7 shrink-0 rounded-full"
+            />
+          ) : (
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              {authorLabel.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                {commit.headline || t("timeline.noHeadline")}
+              </span>
+              {badges}
+            </span>
+            <span className="mt-1 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="truncate">{authorLabel}</span>
+              <GlossaryHint id="author" mode={mode} />
+              <span>·</span>
+              <code className="font-mono">{shortSha(commit.oid)}</code>
+              <GlossaryHint id="sha" mode={mode} />
+              <span>·</span>
+              <time
+                suppressHydrationWarning
+                title={`${formatUtcDateTime(commit.committedDate)}${t("common.utcSuffix")}`}
+              >
+                {timeLabel}
+              </time>
+            </span>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1237,6 +1269,7 @@ export function TimelineView({
                           nowMs={nowMs}
                           mode={explainMode}
                           repoUrl={`https://github.com/${owner}/${name}`}
+                          compact={density === "compact"}
                           onSelect={selectCommit}
                         />
                       </div>
