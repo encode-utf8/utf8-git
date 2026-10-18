@@ -11,6 +11,45 @@
 
 ---
 
+## 2026-10-18 · M4-6 增量泳道布局与服务端布局缓存（TODO-246）
+
+**目标**：消除时间线深分页 / 切分支时 `computeLaneLayout` 的全量重算（M4-2 基准：万级满并发单次约 190ms），同时不改变「泳道布局在前端计算」的既定架构。
+
+**完成内容**
+
+- `packages/git-graph`：`layout.ts` 重写为 `LaneComputation` 类 + `computeLaneLayout` 薄封装：
+  - `push(commits)` 幂等续算（已见 oid 跳过）、`snapshot()` 产出含临时底部悬挂线段的中途快照（两次 push 之间引用稳定，供 React memo）、`finish()` 补齐悬挂线段与悬挂语义边，与全量计算逐字段一致；
+  - 前缀因果性（第 N 行泳道状态只依赖前 N-1 行）是续算安全的理论依据；悬挂段的 `truncated` 标记在后续分片补到父提交时自动复位；
+  - 边草稿解析顺序以 `seq` 记录、`finish()` 时排序，保证与全量计算的边顺序一致。
+- 8 组增量等价性用例（分片大小 1 / 2 / 7 / 50 / 1000 × 空 / 单点 / 线性 120 / 分支 / 悬挂父提交五类样本），逐前缀比对 nodes / segments / laneCount，`finish()` 后全字段比对；git-graph 39 用例全绿。
+- `apps/web/lib/lane-layout.ts`：内容指纹（双 FNV-1a + 长度 + 首尾 oid）键控的内存 LRU（20 条）+ TTL（10 分钟）缓存；过期同指纹条目仍照常服务——布局是指定纯函数，同集合结果确定，直接返回胜过重算。
+- `timeline-data.ts`：仅第 1 页计算布局并随响应下发（`meta.laneLayoutCached` 观测命中），深页下发 `null`——第 N 页布局对累计集合没有意义，由客户端增量续算。
+- 客户端三路复用（`timeline-view.tsx`）：服务端布局逐条匹配（挂载 / 切分支首帧）→ 无过滤且集合仅尾部追加时从上一份增量计算续算（加载更多）→ 其余情况（过滤变化 / 集合重置）全量重算。
+- 本地 `pnpm lint` / `typecheck` / `test:coverage` 全绿（397 + 4 跳过；git-graph 96.06 / 87.8 / 100 / 97.27 ≥ 85，web lib 88.18 / 81.19 / 80.42 / 88.37 ≥ 70）。
+
+**关键决策**
+
+| 编号 | 决策 | 理由 | 备选与否决原因 |
+| --- | --- | --- | --- |
+| ADR-0126 | 增量布局实现在纯算法包 `git-graph`（`LaneComputation`），缓存与服务端下发留在 web 层 | 算法无 IO 依赖，可被单测与基准直接覆盖；web 层只做策略 | 放进 web lib：核心算法失去 85% 覆盖率门禁保护 |
+| ADR-0127 | 布局缓存仅内存（LRU/TTL），不落 Postgres 共享缓存表 | 万级布局 JSON 约 500KB，落库会撑爆共享缓存表 | 落 Postgres：表体积与序列化成本失控 |
+| ADR-0128 | 服务端只下发第 1 页布局，深页由客户端增量续算 | 第 N 页布局对「已加载累计集合」无意义，增量续算已覆盖深页成本 | 每页下发：响应体积与语义都不成立 |
+| ADR-0129 | 客户端布局经 layout effect + setState 回填，refs 只在 effect 内读写 | 满足 `react-hooks/refs`（禁渲染期读写 ref）；layout effect 同帧生效不闪帧，服务端布局播种首帧保证 SSR / 注水一致 | 渲染期 memo 内维护增量状态：被 `react-hooks/refs` 与 `react-hooks/immutability` 规则拦截 |
+
+**问题与风险**
+
+- 渲染期维护增量计算实例被 `eslint-plugin-react-hooks` v7 连拦两次：先用两个 `useRef` 在 memo 内读写 → `react-hooks/refs`；改用 `useMemo([])` 持有可变容器 → `react-hooks/immutability`（不得修改作为 hook 参数传入的值）。结论：增量状态只能在 effect 里养，布局经 setState 回填。
+- 中途 `snapshot()` 的 `edges` 语义与全量不同（未解析的边草稿暂缺），已在校验测试中固定：中途只比对 nodes / segments / laneCount，`finish()` 后全字段比对；渲染层只消费节点与线段，不受影响。
+- 浏览器端深分页收益仍依赖 CI E2E 间接覆盖（本地无 Docker / PostgreSQL），尚未做端到端计时对比。
+
+**下一步**
+
+- TODO-245 Dependabot + `pnpm audit`（含评估接入 `eslint-plugin-jsx-a11y`）。
+- 深分页补一次「万级增量 vs 全量」的浏览器端计时对比。
+- E2E 继续补写操作链路（建分支 / 提 Issue / 合并 / 删分支）的关键路径覆盖。
+
+---
+
 ## 2026-10-18 · M4-5 覆盖率门禁进 CI 与关键路径 E2E 补强
 
 **目标**：把路线图 M4 质量目标「单测覆盖率 ≥ 70%（核心包 ≥ 85%）、E2E 覆盖关键路径」从口头目标变成 CI 硬门禁；顺带补齐可访问性与英文路径的 E2E 回归。
