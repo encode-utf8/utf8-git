@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-density="compact" data-node="label">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>仓库详情页 · 画布式改造 · 视觉方案 v1</title>
+    <style>
+      :root {
+        --lane-1: #378add;
+        --lane-2: #1d9e75;
+        --lane-3: #ba7517;
+        --lane-4: #7f77dd;
+        --lane-5: #d4537e;
+        --ok: #1d9e75;
+        --danger: #e24b4a;
+        --warn: #ba7517;
+        --row: 36px;
+        --radius: 10px;
+        --font:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+          sans-serif;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      html[data-theme="light"] {
+        --bg: #f7f7f5;
+        --surface: #ffffff;
+        --surface-2: #f2f2ef;
+        --line: rgba(0, 0, 0, 0.09);
+        --line-strong: rgba(0, 0, 0, 0.18);
+        --text: #17171a;
+        --muted: #63636b;
+        --faint: #93939b;
+        --ghost: rgba(55, 138, 221, 0.08);
+        --edge: rgba(0, 0, 0, 0.26);
+      }
+      html[data-theme="dark"] {
+        --bg: #0b0b0c;
+        --surface: #151517;
+        --surface-2: #1d1d20;
+        --line: rgba(255, 255, 255, 0.12);
+        --line-strong: rgba(255, 255, 255, 0.26);
+        --text: #f0f0f2;
+        --muted: #a2a2aa;
+        --faint: #74747c;
+        --ghost: rgba(55, 138, 221, 0.16);
+        --edge: rgba(255, 255, 255, 0.34);
+      }
+      html[data-density="comfy"] {
+        --row: 52px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px 28px 56px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 13px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap {
+        max-width: 1080px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 20px;
+        font-weight: 500;
+        margin: 0 0 6px;
+        letter-spacing: -0.01em;
+      }
+      h2 {
+        font-size: 14px;
+        font-weight: 500;
+        margin: 0 0 10px;
+      }
+      h3 {
+        font-size: 13px;
+        font-weight: 500;
+        margin: 0 0 6px;
+      }
+      p {
+        margin: 0;
+      }
+      .sub {
+        color: var(--muted);
+        max-width: 720px;
+      }
+      .top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+      }
+      .controls {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+      }
+      .ctrl {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ctrl span {
+        font-size: 11px;
+        color: var(--faint);
+      }
+      .seg {
+        display: inline-flex;
+        border: 0.5px solid var(--line-strong);
+        border-radius: 999px;
+        padding: 2px;
+        background: var(--surface);
+      }
+      .seg button {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-family: inherit;
+        font-size: 12px;
+        padding: 3px 11px;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--text);
+        color: var(--bg);
+      }
+      .panel {
+        background: var(--surface);
+        border: 0.5px solid var(--line);
+        border-radius: 14px;
+        padding: 16px;
+      }
+      .branchbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .branchbar .label {
+        font-size: 11px;
+        color: var(--faint);
+        letter-spacing: 0.02em;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 0.5px solid var(--line-strong);
+        background: var(--surface);
+        cursor: grab;
+        user-select: none;
+      }
+      .chip i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .chip.is-default i {
+        box-shadow: 0 0 0 3px var(--ghost);
+      }
+      .chip .def {
+        color: var(--faint);
+        font-size: 10px;
+      }
+      .chip.is-active {
+        border-color: var(--text);
+      }
+      .spacer {
+        flex: 1;
+      }
+      .zoom {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        border: 0.5px solid var(--line);
+        border-radius: 999px;
+        padding: 2px;
+      }
+      .zoom button {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 13px;
+        width: 24px;
+        height: 22px;
+        cursor: pointer;
+        border-radius: 999px;
+      }
+      .zoom em {
+        font-style: normal;
+        font-size: 11px;
+        color: var(--muted);
+        min-width: 34px;
+        text-align: center;
+      }
+      .canvas {
+        position: relative;
+        height: 470px;
+        border: 0.5px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface);
+        overflow: hidden;
+        background-image: radial-gradient(var(--line) 0.8px, transparent 0.8px);
+        background-size: 18px 18px;
+      }
+      html[data-theme="dark"] .canvas {
+        background-image: radial-gradient(var(--line) 0.8px, transparent 0.8px);
+      }
+      .stage {
+        position: absolute;
+        inset: 0;
+        transform-origin: 0 0;
+      }
+      .node {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        height: var(--row);
+        cursor: grab;
+        padding-right: 10px;
+        border-radius: 8px;
+      }
+      .node:hover {
+        background: var(--surface-2);
+      }
+      .node.is-selected .dot {
+        box-shadow:
+          0 0 0 5px var(--ghost),
+          0 0 0 0.5px var(--line-strong);
+      }
+      .node.is-selected .msg {
+        font-weight: 500;
+      }
+      .dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        flex: none;
+        border: 2px solid var(--surface);
+        box-shadow: 0 0 0 0.5px var(--line-strong);
+      }
+      .msg {
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 300px;
+        color: var(--text);
+      }
+      .meta {
+        font-size: 11px;
+        color: var(--faint);
+        white-space: nowrap;
+      }
+      .badge {
+        font-size: 10px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        border: 0.5px solid var(--line-strong);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .badge.pr {
+        border-color: rgba(127, 119, 221, 0.5);
+        color: #7f77dd;
+      }
+      .badge.issue {
+        border-color: rgba(29, 158, 117, 0.5);
+        color: #1d9e75;
+      }
+      .badge.merge {
+        border-color: rgba(186, 117, 23, 0.5);
+        color: #ba7517;
+      }
+      html[data-node="card"] .node {
+        height: auto;
+        padding: calc((var(--row) - 30px) / 2) 10px calc((var(--row) - 30px) / 2) 0;
+      }
+      html[data-node="card"] .nodecard {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 0.5px solid var(--line);
+        background: var(--surface);
+        border-radius: 8px;
+        padding: 5px 9px;
+        max-width: 320px;
+      }
+      html[data-node="card"] .avatar {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--surface-2);
+        border: 0.5px solid var(--line-strong);
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        color: var(--muted);
+      }
+      html[data-node="label"] .nodecard {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      html[data-node="label"] .avatar {
+        display: none;
+      }
+      .trash {
+        position: absolute;
+        right: 14px;
+        bottom: 14px;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        border: 0.5px dashed var(--line-strong);
+        background: var(--surface);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        color: var(--faint);
+        text-align: center;
+        line-height: 1.2;
+        transition:
+          width 0.14s ease,
+          height 0.14s ease;
+      }
+      .trash.is-hot {
+        width: 132px;
+        height: 68px;
+        border-style: solid;
+        border-color: var(--danger);
+        color: var(--danger);
+        background: rgba(226, 75, 74, 0.07);
+      }
+      .brush {
+        position: absolute;
+        left: 16px;
+        right: 70px;
+        bottom: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--faint);
+        font-size: 10px;
+      }
+      .track {
+        position: relative;
+        flex: 1;
+        height: 2px;
+        background: var(--line);
+        border-radius: 2px;
+      }
+      .sel {
+        position: absolute;
+        left: 34%;
+        right: 18%;
+        top: -2px;
+        height: 6px;
+        background: var(--lane-1);
+        opacity: 0.28;
+        border-radius: 3px;
+      }
+      .handle {
+        position: absolute;
+        top: -6px;
+        width: 10px;
+        height: 14px;
+        border-radius: 3px;
+        background: var(--surface);
+        border: 0.5px solid var(--line-strong);
+        cursor: ew-resize;
+      }
+      .canvas-hint {
+        position: absolute;
+        top: 12px;
+        right: 14px;
+        font-size: 10.5px;
+        color: var(--faint);
+        letter-spacing: 0.01em;
+        pointer-events: none;
+      }
+      .pop {
+        position: absolute;
+        z-index: 6;
+        width: 232px;
+        background: var(--surface);
+        border: 0.5px solid var(--line-strong);
+        border-radius: 10px;
+        padding: 10px 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      }
+      .pop .ph {
+        font-size: 11px;
+        color: var(--faint);
+        margin-bottom: 6px;
+      }
+      .pop input {
+        width: 100%;
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 5px 7px;
+        border-radius: 7px;
+        border: 0.5px solid var(--line-strong);
+        background: var(--surface-2);
+        color: var(--text);
+      }
+      .pop .row {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+        margin-top: 8px;
+      }
+      .btn {
+        font-family: inherit;
+        font-size: 11px;
+        padding: 4px 11px;
+        border-radius: 999px;
+        border: 0.5px solid var(--line-strong);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .btn.primary {
+        background: var(--text);
+        color: var(--bg);
+        border-color: var(--text);
+      }
+      .btn.danger {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: #fff;
+      }
+      .card {
+        position: absolute;
+        z-index: 5;
+        width: 268px;
+        background: var(--surface);
+        border: 0.5px solid var(--line-strong);
+        border-radius: 12px;
+        padding: 12px 14px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+      }
+      .card .title {
+        font-size: 12.5px;
+        font-weight: 500;
+        margin-bottom: 3px;
+      }
+      .card .byline {
+        font-size: 11px;
+        color: var(--muted);
+        font-family: var(--mono);
+      }
+      .card .stat {
+        display: flex;
+        gap: 10px;
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .card .add {
+        color: var(--ok);
+      }
+      .card .del {
+        color: var(--danger);
+      }
+      .card .files {
+        margin-top: 8px;
+        border-top: 0.5px solid var(--line);
+        padding-top: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--muted);
+      }
+      .card .files span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .caption {
+        margin-top: 10px;
+        font-size: 11.5px;
+        color: var(--faint);
+      }
+      .states {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 14px;
+        margin-top: 26px;
+      }
+      .statebox {
+        background: var(--surface);
+        border: 0.5px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .statebox h3 {
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+      .statebox p {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 8px;
+        line-height: 1.55;
+      }
+      .crop {
+        position: relative;
+        height: 132px;
+        border-radius: 8px;
+        background: var(--surface-2);
+        overflow: hidden;
+        padding: 10px;
+      }
+      .ghost {
+        border: 1px dashed var(--lane-1);
+        border-radius: 8px;
+        padding: 6px 9px;
+        font-size: 11px;
+        color: var(--lane-1);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--ghost);
+      }
+      .ring {
+        position: absolute;
+        width: 132px;
+        height: 74px;
+        border: 1px dashed var(--lane-1);
+        border-radius: 10px;
+        background: var(--ghost);
+        right: 12px;
+        bottom: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        color: var(--lane-1);
+        text-align: center;
+        padding: 6px;
+      }
+      .spec {
+        margin-top: 28px;
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: 16px;
+      }
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+        gap: 8px;
+      }
+      .sw {
+        border: 0.5px solid var(--line);
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 10.5px;
+        color: var(--muted);
+      }
+      .sw b {
+        display: block;
+        height: 22px;
+        border-radius: 5px;
+        margin-bottom: 6px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11.5px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 0.5px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        font-weight: 500;
+        color: var(--faint);
+        font-size: 11px;
+      }
+      td code {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .decide {
+        margin-top: 30px;
+        border-top: 0.5px solid var(--line);
+        padding-top: 18px;
+      }
+      .decide ol {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+      }
+      .decide li {
+        margin-bottom: 6px;
+      }
+      .decide b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top">
+        <div>
+          <h1>仓库详情页 · 画布式改造（视觉方案 v1）</h1>
+          <p class="sub">
+            把「工具栏 + 表单 + 列表」换成「画布 +
+            手势」。这一页只定视觉与状态，不含交互实现。右侧三个开关可以现场对比形态与密度。
+          </p>
+          <p class="sub" style="margin-top: 8px; color: var(--text)">
+            已确认（2026-10-18）：① 点 + 标签为唯一形态 ② 36 / 52 两档密度做成用户可选项 ③
+            删除区平时隐藏 ④ 详情固定右下角并加强视觉 ⑤ 时间刷子留到
+            P1。卡片节点形态未采用，仅供对照。
+          </p>
+        </div>
+        <div class="controls">
+          <div class="ctrl">
+            <span>主题</span>
+            <div class="seg" data-key="theme">
+              <button data-val="light" aria-pressed="true">浅色</button>
+              <button data-val="dark" aria-pressed="false">深色</button>
+            </div>
+          </div>
+          <div class="ctrl">
+            <span>密度</span>
+            <div class="seg" data-key="density">
+              <button data-val="compact" aria-pressed="true">紧凑 36</button>
+              <button data-val="comfy" aria-pressed="false">舒适 52</button>
+            </div>
+          </div>
+          <div class="ctrl">
+            <span>节点形态</span>
+            <div class="seg" data-key="node">
+              <button data-val="label" aria-pressed="true">点 + 标签</button>
+              <button data-val="card" aria-pressed="false">卡片</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="branchbar">
+          <span class="label">分支</span>
+          <span class="chip is-default is-active" draggable="true">
+            <i style="background: var(--lane-1)"></i>main <span class="def">默认</span>
+          </span>
+          <span class="chip" draggable="true"
+            ><i style="background: var(--lane-2)"></i>feature/ops</span
+          >
+          <span class="chip" draggable="true"
+            ><i style="background: var(--lane-3)"></i>docs/self-hosting</span
+          >
+          <span class="chip" draggable="true"
+            ><i style="background: var(--lane-4)"></i>fix/e2e-401</span
+          >
+          <span class="spacer"></span>
+          <span class="zoom">
+            <button type="button" aria-label="缩小">−</button><em>100%</em>
+            <button type="button" aria-label="放大">+</button>
+          </span>
+        </div>
+
+        <div class="canvas" id="canvas">
+          <p class="canvas-hint">拖动空白处平移 · 滚轮缩放 · 拖节点到空白处建分支</p>
+          <div class="stage" id="stage">
+            <svg
+              id="links"
+              width="1200"
+              height="560"
+              style="position: absolute; inset: 0; overflow: visible"
+            ></svg>
+            <div id="nodes"></div>
+          </div>
+
+          <div class="trash" id="trash">删除</div>
+
+          <div class="brush">
+            <span>范围</span>
+            <div class="track">
+              <div class="sel"></div>
+              <div class="handle" style="left: calc(34% - 5px)"></div>
+              <div class="handle" style="right: calc(18% - 5px)"></div>
+            </div>
+            <span>全部</span>
+          </div>
+        </div>
+
+        <p class="caption">
+          画布：提交是节点（不是行），分支是芯片（不是下拉框），删除区常驻但只有
+          40px、拖动时展开；底部刷子把「近一周 / 近一月」变成可拖的范围。
+        </p>
+      </div>
+
+      <div class="states">
+        <div class="statebox">
+          <h3>① 拖动提交节点</h3>
+          <div class="crop">
+            <div class="ghost" style="position: absolute; left: 12px; top: 26px">
+              <i style="width: 8px; height: 8px; border-radius: 50%; background: var(--lane-1)"></i>
+              c3d09f5
+            </div>
+            <div class="ring">松手 → 在这里建分支</div>
+          </div>
+          <p>
+            原节点降透明度 45%，跟手出现 ghost 芯片；落点显示虚线环。松手才出现命名气泡，不跳页面。
+          </p>
+        </div>
+
+        <div class="statebox">
+          <h3>② 就地命名</h3>
+          <div class="crop">
+            <div class="pop" style="position: absolute; left: 14px; top: 16px; box-shadow: none">
+              <p class="ph">从 c3d09f5 新建分支</p>
+              <input value="feature/c3d09" readonly />
+              <div class="row">
+                <button class="btn" type="button">取消</button>
+                <button class="btn primary" type="button">建分支 ⏎</button>
+              </div>
+            </div>
+          </div>
+          <p>
+            气泡锚在落点，输入框自动聚焦并选中前缀，Enter 确认、Esc 取消。这是唯一需要打字的地方。
+          </p>
+        </div>
+
+        <div class="statebox">
+          <h3>③ 拖分支到删除区</h3>
+          <div class="crop">
+            <div class="ghost" style="position: absolute; left: 12px; top: 16px">
+              <i style="width: 8px; height: 8px; border-radius: 50%; background: var(--lane-3)"></i>
+              docs/self-hosting
+            </div>
+            <div class="trash is-hot" style="right: 12px; bottom: 12px">松手删除</div>
+          </div>
+          <p>
+            进入删除区才变红并扩大；松手后仍需一次确认（默认分支与受保护分支直接拒绝并说明原因）。
+          </p>
+        </div>
+
+        <div class="statebox">
+          <h3>④ 点击节点就地展开</h3>
+          <div class="crop">
+            <div
+              class="card"
+              style="position: absolute; left: 10px; top: 8px; box-shadow: none; width: 210px"
+            >
+              <p class="title">feat: 写操作管线</p>
+              <p class="byline">c3d09f5 · 昨天</p>
+              <div class="stat">
+                <span>3 个文件</span><span class="add">+42</span><span class="del">−7</span>
+              </div>
+            </div>
+          </div>
+          <p>卡片贴着节点长出，不遮全图；详情里再点才进入完整页。右侧抽屉在窄屏才启用。</p>
+        </div>
+      </div>
+
+      <div class="spec">
+        <div class="panel">
+          <h2>色板</h2>
+          <div class="swatches">
+            <div class="sw"><b style="background: var(--lane-1)"></b>泳道 1 · #378ADD</div>
+            <div class="sw"><b style="background: var(--lane-2)"></b>泳道 2 · #1D9E75</div>
+            <div class="sw"><b style="background: var(--lane-3)"></b>泳道 3 · #BA7517</div>
+            <div class="sw"><b style="background: var(--lane-4)"></b>泳道 4 · #7F77DD</div>
+            <div class="sw"><b style="background: var(--lane-5)"></b>泳道 5 · #D4537E</div>
+            <div class="sw"><b style="background: var(--ok)"></b>成功 / 合并 · #1D9E75</div>
+            <div class="sw"><b style="background: var(--danger)"></b>危险 / 删除 · #E24B4A</div>
+            <div class="sw">
+              <b style="background: var(--surface-2); border: 0.5px solid var(--line)"></b>画布底 ·
+              surface-2
+            </div>
+          </div>
+          <p class="caption">
+            泳道色沿用现有布局算法输出的色板，只保留 5
+            档；节点与连线段同色，靠形状而不是颜色区分「提交 / 分支头」。
+          </p>
+        </div>
+
+        <div class="panel">
+          <h2>组件规格</h2>
+          <table>
+            <tr>
+              <th>元素</th>
+              <th>规格</th>
+            </tr>
+            <tr>
+              <td>行高（紧凑 / 舒适）</td>
+              <td><code>36px / 52px</code>，仍是固定行高，虚拟窗口逻辑不变</td>
+            </tr>
+            <tr>
+              <td>提交节点</td>
+              <td>圆点 <code>11px</code> + 消息 <code>12px</code>，单行截断 300px</td>
+            </tr>
+            <tr>
+              <td>分支芯片</td>
+              <td>
+                高 <code>24px</code>，圆角 <code>999px</code>，色点 <code>6px</code>，默认分支加光晕
+              </td>
+            </tr>
+            <tr>
+              <td>就地气泡 / 详情卡</td>
+              <td>
+                宽 <code>232 / 268px</code>，圆角 <code>10 / 12px</code>，边框 <code>0.5px</code>
+              </td>
+            </tr>
+            <tr>
+              <td>删除区</td>
+              <td>收起 <code>40×40</code>，命中 <code>132×68</code>，进入后变实线红</td>
+            </tr>
+            <tr>
+              <td>时间刷子</td>
+              <td>轨道 <code>2px</code>，选区 <code>4px</code>，把手 <code>10×12</code></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="decide">
+        <h2>五处取舍与结论</h2>
+        <ol>
+          <li><b>节点形态</b> → 点 + 标签（已定；卡片形态未采用，仅在上方开关里保留对照）。</li>
+          <li>
+            <b>密度</b> → 36 / 52 两档都做，作为用户可切换的界面选项并记住选择（已定，默认 36）。
+          </li>
+          <li><b>删除区</b> → 平时隐藏，拖动分支芯片时才浮出（已定）。</li>
+          <li><b>详情卡</b> → 固定贴画布右下角，用边框 + 阴影 + 浅色标题栏强化存在感（已定）。</li>
+          <li>
+            <b>时间刷子</b> → 不进 P0，P1 再做（牵扯现有 range 过滤与「选中提交重新锚定」逻辑）。
+          </li>
+        </ol>
+        <p class="caption">
+          P0 落地范围：画布容器 + 分支芯片条 + 拖拽建分支（落点命名）+ 拖拽删除（仍走确认面板）+
+          右下角详情卡 + 密度选项；旧按钮工具栏保留为键盘与无障碍路径。缩放、时间刷子、径向菜单进
+          P1。
+        </p>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var rows = [
+          {
+            lane: 0,
+            sha: "9f2c1a8",
+            msg: "feat: 时间线泳道渲染与虚拟窗口",
+            meta: "ada",
+            pr: "#212",
+          },
+          { lane: 0, sha: "4b71e02", msg: "fix: 游标过期时回退到第一页", meta: "ada" },
+          {
+            lane: 1,
+            sha: "c3d09f5",
+            msg: "feat: 写操作统一管线（确认 + 幂等 + 审计）",
+            meta: "lin",
+            pr: "#208",
+            selected: true,
+          },
+          { lane: 0, sha: "88a1b47", msg: "chore: 依赖更新与安全扫描", meta: "bot" },
+          { lane: 1, sha: "1e6c7d3", msg: "fix: 幂等重放窗口收敛到 10 分钟", meta: "lin" },
+          { lane: 2, sha: "a05f9c1", msg: "feat: 概念解释层与术语卡片", meta: "ada", merge: true },
+          { lane: 0, sha: "6d2b8e4", msg: "docs: 自建与自部署指南", meta: "ada", issue: "#301" },
+          { lane: 1, sha: "e47a0c6", msg: "test: 写接口契约层 E2E", meta: "lin" },
+          { lane: 0, sha: "2f9d3b7", msg: "feat: 服务端泳道布局缓存", meta: "ada" },
+          { lane: 3, sha: "7c1e5a9", msg: "chore: prettier 门禁进 CI", meta: "bot" },
+        ];
+        var COLORS = [
+          "var(--lane-1)",
+          "var(--lane-2)",
+          "var(--lane-3)",
+          "var(--lane-4)",
+          "var(--lane-5)",
+        ];
+        var LANE_LABEL = [64, 148, 232, 316, 400];
+        var LANE_CARD = [64, 372, 680, 680, 680];
+        var TOP = 22;
+
+        var stage = document.getElementById("stage");
+        var nodes = document.getElementById("nodes");
+        var links = document.getElementById("links");
+        var canvasEl = document.getElementById("canvas");
+
+        function rowHeight() {
+          return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--row"), 10);
+        }
+
+        function laneXs() {
+          return document.documentElement.getAttribute("data-node") === "card"
+            ? LANE_CARD
+            : LANE_LABEL;
+        }
+
+        function render() {
+          var RH = rowHeight();
+          var LANE_X = laneXs();
+          canvasEl.style.height = Math.min(600, TOP + rows.length * RH + 68) + "px";
+          nodes.innerHTML = "";
+          var d = "";
+          rows.forEach(function (r, i) {
+            var x = LANE_X[r.lane];
+            var y = TOP + i * RH + RH / 2;
+            if (i > 0) {
+              var p = rows[i - 1];
+              var px = LANE_X[p.lane];
+              var py = TOP + (i - 1) * RH + RH / 2;
+              d +=
+                "M " +
+                px +
+                " " +
+                py +
+                " C " +
+                px +
+                " " +
+                (py + RH * 0.55) +
+                ", " +
+                x +
+                " " +
+                (y - RH * 0.55) +
+                ", " +
+                x +
+                " " +
+                y +
+                " ";
+            }
+            var el = document.createElement("div");
+            el.className = "node" + (r.selected ? " is-selected" : "");
+            el.style.left = x - 6 + "px";
+            el.style.top = TOP + i * RH + "px";
+            var badges =
+              (r.pr ? '<span class="badge pr">PR ' + r.pr + "</span>" : "") +
+              (r.issue ? '<span class="badge issue">Issue ' + r.issue + "</span>" : "") +
+              (r.merge ? '<span class="badge merge">merge</span>' : "");
+            el.innerHTML =
+              '<span class="dot" style="background:' +
+              COLORS[r.lane] +
+              '"></span>' +
+              '<span class="nodecard"><span class="avatar">' +
+              r.meta.slice(0, 1).toUpperCase() +
+              "</span>" +
+              '<span class="msg">' +
+              r.msg +
+              "</span>" +
+              badges +
+              '<span class="meta">' +
+              r.sha +
+              "</span></span>";
+            nodes.appendChild(el);
+          });
+          var guides = "";
+          LANE_X.forEach(function (gx, gi) {
+            if (gi > 0 && LANE_X[gi] === LANE_X[gi - 1]) return;
+            guides +=
+              '<line x1="' +
+              gx +
+              '" y1="0" x2="' +
+              gx +
+              '" y2="' +
+              (TOP + rows.length * RH + 40) +
+              '" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 8"></line>';
+          });
+          links.innerHTML =
+            guides +
+            '<path d="' +
+            d +
+            '" fill="none" stroke="var(--edge)" stroke-width="1.6" stroke-linecap="round"></path>';
+        }
+
+        document.querySelectorAll(".seg").forEach(function (seg) {
+          seg.addEventListener("click", function (e) {
+            var btn = e.target.closest("button");
+            if (!btn) return;
+            seg.querySelectorAll("button").forEach(function (b) {
+              b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+            });
+            var key = seg.dataset.key;
+            var val = btn.dataset.val;
+            if (key === "theme") {
+              document.documentElement.setAttribute("data-theme", val);
+            } else if (key === "density") {
+              document.documentElement.setAttribute("data-density", val);
+              render();
+            } else {
+              document.documentElement.setAttribute("data-node", val);
+              render();
+            }
+          });
+        });
+
+        document.getElementById("trash").addEventListener("mouseenter", function () {
+          this.classList.add("is-hot");
+          this.textContent = "松手删除";
+        });
+        document.getElementById("trash").addEventListener("mouseleave", function () {
+          this.classList.remove("is-hot");
+          this.textContent = "删除";
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>
