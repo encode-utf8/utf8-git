@@ -314,7 +314,8 @@ export function TimelineView({
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
   const [issueOpen, setIssueOpen] = useState(false);
   const [issueSuccess, setIssueSuccess] = useState<string | null>(null);
-  const [pullOpen, setPullOpen] = useState(false);
+  // 新建 PR 面板：null = 关闭；{head, base} = 打开（按钮路径给空串，手势路径带预填）
+  const [pullPreset, setPullPreset] = useState<{ head: string; base: string } | null>(null);
   const [pullSuccess, setPullSuccess] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
@@ -356,8 +357,6 @@ export function TimelineView({
   const [namingPending, setNamingPending] = useState(false);
   // 由拖拽删除带进确认面板的预选分支（按钮路径为 null，沿用面板自己的默认候选）
   const [deleteInitialBranch, setDeleteInitialBranch] = useState<string | null>(null);
-  // 由「拖分支芯片到另一个芯片」带进新建 PR 面板的预填分支
-  const [pullPreset, setPullPreset] = useState<{ head: string; base: string } | null>(null);
 
   // 打开任写操作面板时清掉上一次的成功提示，避免旧横幅误导当前操作
   const resetOperationAlerts = useCallback(() => {
@@ -532,7 +531,6 @@ export function TimelineView({
   // 创建 PR（M3-4）：成功后关闭面板、展示提示并刷新服务端数据。
   const handlePullCreated = useCallback(
     (message: string) => {
-      setPullOpen(false);
       setPullPreset(null);
       setPullSuccess(message);
       router.refresh();
@@ -783,7 +781,6 @@ export function TimelineView({
       if (target && target !== branchName) {
         resetOperationAlerts();
         setPullPreset({ head: branchName, base: target });
-        setPullOpen(true);
         return;
       }
       if (!dropped) {
@@ -1030,7 +1027,7 @@ export function TimelineView({
               type="button"
               onClick={() => {
                 resetOperationAlerts();
-                setPullOpen(true);
+                setPullPreset({ head: "", base: "" });
               }}
               className="h-8 rounded-full border border-black/[.08] px-3 text-xs text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-white/[.08]"
             >
@@ -1123,23 +1120,18 @@ export function TimelineView({
         </div>
       ) : null}
 
-      {pullOpen ? (
+      {pullPreset ? (
         <div className="mt-3">
           <CreatePullPanel
-            // 预填分支变化时强制重挂，避免面板沿用上一次的初始状态
-            key={`${pullPreset?.head ?? ""}:${pullPreset?.base ?? ""}`}
             owner={owner}
             name={name}
             mode={explainMode}
             branches={branches.map((branch) => branch.name)}
             defaultBase={initialBranch}
-            presetBase={pullPreset?.base ?? null}
-            presetHead={pullPreset?.head ?? null}
+            presetBase={pullPreset.base || null}
+            presetHead={pullPreset.head || null}
             onCreated={handlePullCreated}
-            onCancel={() => {
-              setPullOpen(false);
-              setPullPreset(null);
-            }}
+            onCancel={() => setPullPreset(null)}
           />
         </div>
       ) : null}
