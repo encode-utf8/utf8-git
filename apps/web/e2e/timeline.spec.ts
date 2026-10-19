@@ -435,3 +435,24 @@ test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({
   await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
   await expect(page.getByLabel("来源分支（head）")).toHaveCount(0);
 });
+
+// P1 时间刷子：两端手柄可拖/可用方向键，收窄窗口即按绝对时间过滤；
+// 「自定义区间」与下拉互斥，重置回到全量。
+test("时间刷子：收窄时间窗 → 过滤 + 自定义区间 → 重置回全量", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+  await expect(page.getByText("已加载 60 条提交")).toBeVisible();
+
+  const end = page.getByRole("slider", { name: "时间窗右端" });
+  await end.focus();
+  // Shift + 方向键 = 粗调（1/8 域宽），几下就把右端拉到中段，窗口明显变窄
+  for (let index = 0; index < 4; index += 1) {
+    await end.press("Shift+ArrowLeft");
+  }
+
+  await expect(page.getByLabel("时间范围")).toHaveValue("custom");
+  await expect(page.getByText(/筛选后 \d+ \/ 60 条/)).toBeVisible();
+
+  await page.getByRole("button", { name: "重置", exact: true }).click();
+  await expect(page.getByLabel("时间范围")).toHaveValue("all");
+  await expect(page.getByText(/筛选后 \d+ \/ 60 条/)).toHaveCount(0);
+});

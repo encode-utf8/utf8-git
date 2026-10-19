@@ -55,6 +55,7 @@ import {
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { BranchBar, type DragPoint } from "./branch-bar";
+import { TimeBrush } from "./time-brush";
 import { BranchPopover } from "./branch-popover";
 import { CommitDetailPanel } from "./commit-detail";
 import { ConceptNote } from "./concept-note";
@@ -563,6 +564,13 @@ export function TimelineView({
   const applyFilterPatch = useCallback(
     (patch: Partial<TimelineFilterState>) => {
       const next = { ...filters, ...patch };
+      // 预设区间与自定义时间窗互斥：选预设就清掉窗口，设了窗口就一定是 custom
+      if (patch.range && patch.range !== "custom") {
+        next.window = null;
+      }
+      if (patch.window) {
+        next.range = "custom";
+      }
       setFilters(next);
       const container = containerRef.current;
       if (!container) {
@@ -580,6 +588,21 @@ export function TimelineView({
     },
     [commits, filters, nowMs, rowHeight, selectedCommit],
   );
+
+  // 时间刷子的域：已加载提交的最早 / 最晚时间戳；不足两个有效时间点就不渲染刷子
+  const timeDomain = useMemo(() => {
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    for (const commit of commits) {
+      const timestamp = Date.parse(commit.committedDate);
+      if (!Number.isFinite(timestamp)) {
+        continue;
+      }
+      min = Math.min(min, timestamp);
+      max = Math.max(max, timestamp);
+    }
+    return Number.isFinite(min) && min < max ? { min, max } : null;
+  }, [commits]);
 
   const windowRange = useMemo(
     () =>
@@ -1208,6 +1231,9 @@ export function TimelineView({
           className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-xs text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
         >
           <option value="all">{t("timeline.rangeAll")}</option>
+          {filters.range === "custom" ? (
+            <option value="custom">{t("timeline.rangeCustom")}</option>
+          ) : null}
           <option value="week">{t("timeline.rangeWeek")}</option>
           <option value="month">{t("timeline.rangeMonth")}</option>
         </select>
@@ -1358,6 +1384,16 @@ export function TimelineView({
               ) : null}
             </div>
           )}
+
+          {timeDomain ? (
+            <TimeBrush
+              min={timeDomain.min}
+              max={timeDomain.max}
+              value={filters.window ? { from: filters.window.from, to: filters.window.to } : null}
+              onChange={(next) => applyFilterPatch({ range: "custom", window: next })}
+              onReset={() => applyFilterPatch({ range: "all", window: null })}
+            />
+          ) : null}
 
           <div className="mt-3 flex items-center justify-between gap-3 text-xs">
             <span className="text-zinc-500 dark:text-zinc-400">

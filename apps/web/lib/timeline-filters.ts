@@ -6,11 +6,17 @@ import type { TimelineCommit } from "./github-timeline";
 /** 事件类型过滤：全部 / 仅合并提交 / 仅关联 PR / 仅关联 Issue。 */
 export type TimelineEventKind = "all" | "merge" | "pullRequest" | "issue";
 
-/** 时间范围缩放：全部 / 近一周 / 近一月（相对当前时刻）。 */
-export type TimelineRange = "all" | "week" | "month";
+/** 时间范围：全部 / 近一周 / 近一月（相对当前时刻）/ 自定义时间窗（时间刷子拖出来的区间）。 */
+export type TimelineRange = "all" | "week" | "month" | "custom";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const RANGE_DAYS: Record<Exclude<TimelineRange, "all">, number> = { week: 7, month: 30 };
+const RANGE_DAYS: Record<Exclude<TimelineRange, "all" | "custom">, number> = {
+  week: 7,
+  month: 30,
+};
+
+/** 自定义时间窗（毫秒时间戳，闭区间）。 */
+export type TimelineWindow = { from: number; to: number };
 
 export type TimelineFilterState = {
   /** 关键词：匹配提交标题、SHA、作者（大小写不敏感）。 */
@@ -19,8 +25,10 @@ export type TimelineFilterState = {
   author: string;
   /** 事件类型过滤。 */
   kind: TimelineEventKind;
-  /** 时间范围过滤（相对 now）。 */
+  /** 时间范围过滤（相对 now）；custom 时由 window 决定区间。 */
   range: TimelineRange;
+  /** 时间刷子拖出的自定义窗口；null 表示未启用。 */
+  window: TimelineWindow | null;
 };
 
 export const EMPTY_TIMELINE_FILTER: TimelineFilterState = {
@@ -28,14 +36,18 @@ export const EMPTY_TIMELINE_FILTER: TimelineFilterState = {
   author: "",
   kind: "all",
   range: "all",
+  window: null,
 };
 
 export function hasActiveTimelineFilter(state: TimelineFilterState): boolean {
+  // custom 且没有窗口时并不裁剪任何提交（见 withinRange），因此不算「已激活」
+  const rangeActive = state.range === "custom" ? state.window !== null : state.range !== "all";
   return (
     state.query.trim().length > 0 ||
     state.author.length > 0 ||
     state.kind !== "all" ||
-    state.range !== "all"
+    rangeActive ||
+    state.window !== null
   );
 }
 
@@ -63,13 +75,32 @@ export function timelineAuthors(commits: TimelineCommit[]): string[] {
  * 提交是否落在相对 nowMs 的时间范围内。
  * nowMs 为 null（时间基准未就绪，如 SSR / 首帧）时不做裁剪；时间戳非法时视为范围外。
  */
-function withinRange(commit: TimelineCommit, range: TimelineRange, nowMs: number | null): boolean {
-  if (range === "all" || nowMs === null) {
+function withinRange(
+  commit: TimelineCommit,
+  state: TimelineFilterState,
+  nowMs: number | null,
+): boolean {
+  const { range, window } = state;
+  if (range === "all") {
     return true;
   }
   const committedAt = Date.parse(commit.committedDate);
   if (!Number.isFinite(committedAt)) {
     return false;
+  }
+  // 自定义窗口不依赖 now，SSR 首帧也能给出稳定的过滤结果
+  if (range === "custom") {
+    if (window === null) {
+      // 没有窗口就不裁剪（防御：不该出现，但别变成「全空」）
+      return true;
+    }
+    // 容忍两端顺序被调换
+    const low = Math.min(window.from, window.to);
+    const high = Math.max(window.from, window.to);
+    return committedAt >= low && committedAt <= high;
+  }
+  if (nowMs === null) {
+    return true;
   }
   return committedAt >= nowMs - RANGE_DAYS[range] * DAY_MS;
 }
@@ -95,7 +126,7 @@ export function filterTimelineCommits(
 ): TimelineCommit[] {
   const query = state.query.trim().toLowerCase();
   return commits.filter((commit) => {
-    if (!withinRange(commit, state.range, nowMs)) {
+    if (!withinRange(commit, state, nowMs)) {
       return false;
     }
     if (state.author && authorLabelOf(commit) !== state.author) {

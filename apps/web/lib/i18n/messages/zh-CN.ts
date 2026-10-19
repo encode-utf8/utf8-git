@@ -271,6 +271,11 @@ export const zhCN = {
     trashZone: "删除区",
     trashDrop: "松手删除",
     dragToPull: "松手向 {branch} 开 PR",
+    brushLabel: "时间窗",
+    brushLeft: "时间窗左端",
+    brushRight: "时间窗右端",
+    brushReset: "重置",
+    rangeCustom: "自定义区间",
   },
   commitDetail: {
     label: "提交详情",

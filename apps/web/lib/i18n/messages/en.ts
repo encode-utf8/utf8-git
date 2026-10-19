@@ -281,6 +281,11 @@ export const en: Messages = {
     trashZone: "Trash",
     trashDrop: "Release to delete",
     dragToPull: "Release to open a PR into {branch}",
+    brushLabel: "Time window",
+    brushLeft: "Window start",
+    brushRight: "Window end",
+    brushReset: "Reset",
+    rangeCustom: "Custom range",
   },
   commitDetail: {
     label: "Commit details",

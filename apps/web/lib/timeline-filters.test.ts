@@ -169,6 +169,39 @@ describe("时间范围过滤", () => {
   it("缩放计入「已激活」判定", () => {
     expect(hasActiveTimelineFilter(state({ range: "week" }))).toBe(true);
   });
+
+  it("自定义时间窗按绝对区间闭区间过滤，且不依赖 now", () => {
+    const window = {
+      from: Date.parse("2026-10-05T00:00:00Z"),
+      to: Date.parse("2026-10-06T00:00:00Z"),
+    };
+    // nowMs 传 null：窗口是绝对时间，SSR 首帧也要给出同样结果
+    const ids = filterTimelineCommits(ranged, state({ range: "custom", window }), null).map(
+      (commit) => commit.oid,
+    );
+    expect(ids).toEqual(["b".repeat(40)]);
+
+    // 含端点的窗口：两侧闭合
+    const wide = {
+      from: Date.parse("2026-10-05T00:00:00Z"),
+      to: Date.parse("2026-10-02T00:00:00Z"),
+    };
+    expect(
+      filterTimelineCommits(ranged, state({ range: "custom", window: wide }), now).map(
+        (commit) => commit.oid,
+      ),
+    ).toEqual(["b".repeat(40), "c".repeat(40)]);
+  });
+
+  it("custom 但未给窗口时不裁剪；给了窗口就算已激活", () => {
+    expect(
+      filterTimelineCommits(ranged, state({ range: "custom", window: null }), now),
+    ).toHaveLength(6);
+    expect(hasActiveTimelineFilter(state({ range: "custom", window: { from: 0, to: 1 } }))).toBe(
+      true,
+    );
+    expect(hasActiveTimelineFilter(state({ range: "custom", window: null }))).toBe(false);
+  });
 });
 
 describe("indexOfCommit", () => {
