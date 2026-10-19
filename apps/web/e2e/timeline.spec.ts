@@ -440,7 +440,8 @@ test("拖分支芯片到另一分支 → 预填 PR（head → base）", async ({
 // 「自定义区间」与下拉互斥，重置回到全量。
 test("时间刷子：收窄时间窗 → 过滤 + 自定义区间 → 重置回全量", async ({ page }) => {
   await page.goto("/repos/encode-utf8/utf8-git");
-  await expect(page.getByText("已加载 60 条提交")).toBeVisible();
+  // 首屏默认加载 50 条（点「加载更多」才到 60）
+  await expect(page.getByText("已加载 50 条提交")).toBeVisible();
 
   const end = page.getByRole("slider", { name: "时间窗右端" });
   await end.focus();
@@ -450,9 +451,9 @@ test("时间刷子：收窄时间窗 → 过滤 + 自定义区间 → 重置回�
   }
 
   await expect(page.getByLabel("时间范围")).toHaveValue("custom");
-  await expect(page.getByText(/筛选后 \d+ \/ 60 条/)).toBeVisible();
+  await expect(page.getByText(/筛选后 \d+ \/ 50 条/)).toBeVisible();
 
   await page.getByRole("button", { name: "重置", exact: true }).click();
   await expect(page.getByLabel("时间范围")).toHaveValue("all");
-  await expect(page.getByText(/筛选后 \d+ \/ 60 条/)).toHaveCount(0);
+  await expect(page.getByText(/筛选后 \d+ \/ 50 条/)).toHaveCount(0);
 });
