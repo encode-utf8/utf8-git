@@ -500,3 +500,54 @@ test("分支芯片菜单：删除与开 PR 的点击路径都能带出正确预�
   await expect(page.getByLabel("目标分支（base）")).toHaveValue("main");
   await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
 });
+
+// 手势速查条：首次进入主动出现一次（流内、不挡操作），关掉后记住；「?」可随时重开。
+test("手势速查：首次出现 → 关闭后不再出现 → 「?」重开", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  const guide = page.getByRole("region", { name: "拖拽手势速查" });
+  await expect(guide).toBeVisible();
+  // 三条手势说明都在
+  await expect(guide.getByText(/拖提交到画布空白处/)).toBeVisible();
+  await expect(guide.getByText(/拖分支芯片到另一个分支/)).toBeVisible();
+  await expect(guide.getByText(/拖分支芯片到右侧竖轨/)).toBeVisible();
+
+  await page.getByRole("button", { name: "知道了" }).click();
+  await expect(guide).toHaveCount(0);
+
+  // 刷新后仍然不再出现（localStorage 记忆）。先等列表渲染完，
+  // 确认挂载后的读取逻辑确实跑过，否则 toHaveCount(0) 可能只是「还没渲染」
+  await page.reload();
+  await expect(page.getByText("已加载 50 条提交")).toBeVisible();
+  await expect(page.getByRole("region", { name: "拖拽手势速查" })).toHaveCount(0);
+
+  // 工具栏「?」重新打开
+  await page.getByRole("button", { name: "重新查看手势提示" }).click();
+  await expect(page.getByRole("region", { name: "拖拽手势速查" })).toBeVisible();
+});
+
+// 芯片菜单的键盘路径：打开即聚焦第一项，方向键循环，Esc 关闭并把焦点还给触发器。
+test("芯片菜单键盘导航：方向键移动、Esc 关闭并归还焦点", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  const trigger = page.getByRole("button", { name: "feature/e2e 的操作菜单" });
+  await trigger.click();
+
+  const items = page.getByRole("menuitem");
+  await expect(items).toHaveCount(3);
+  await expect(items.first()).toBeFocused();
+
+  await page.keyboard.press("ArrowDown");
+  await expect(items.nth(1)).toBeFocused();
+
+  await page.keyboard.press("End");
+  await expect(items.nth(2)).toBeFocused();
+
+  // 末项再按 ↓ 环绕回第一项
+  await page.keyboard.press("ArrowDown");
+  await expect(items.first()).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});

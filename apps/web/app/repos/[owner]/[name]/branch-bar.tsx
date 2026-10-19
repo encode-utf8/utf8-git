@@ -5,9 +5,11 @@ import {
   useEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { edgeScrollStep } from "@/lib/edge-scroll";
 import type { ExplainMode } from "@/lib/glossary";
 import type { TimelineBranch } from "@/lib/github-timeline";
 import { useTranslator } from "@/lib/i18n/client";
@@ -74,6 +76,8 @@ export function BranchBar({
   const [hovered, setHovered] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ name: string; top: number; left: number } | null>(null);
   const chipRefs = useRef(new Map<string, HTMLDivElement | null>());
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   // 当前分支被切到视口外时自动滚回来（分支多时芯片条横向溢出）
   useEffect(() => {
@@ -122,7 +126,13 @@ export function BranchBar({
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        const name = menu.name;
         setMenu(null);
+        // 焦点还给触发器：菜单关了焦点却丢到 body，键盘用户会「迷路」
+        chipRefs.current
+          .get(name)
+          ?.querySelector<HTMLButtonElement>("[data-branch-menu-trigger]")
+          ?.focus();
       }
     };
     const onRelayout = () => setMenu(null);
@@ -137,6 +147,47 @@ export function BranchBar({
       window.removeEventListener("resize", onRelayout);
     };
   }, [menu]);
+
+  // 菜单语义要求：打开后焦点进入第一个菜单项，方向键才有意义
+  useEffect(() => {
+    if (!menu) {
+      return;
+    }
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [menu]);
+
+  const handleMenuKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+    );
+    if (items.length === 0) {
+      return;
+    }
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    let next: number;
+    switch (event.key) {
+      case "ArrowDown":
+        next = (current + 1) % items.length;
+        break;
+      case "ArrowUp":
+        next = (current - 1 + items.length) % items.length;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = items.length - 1;
+        break;
+      case "Tab":
+        // Tab 是「离开菜单」，交给浏览器移动焦点，同时收起菜单
+        setMenu(null);
+        return;
+      default:
+        return;
+    }
+    event.preventDefault();
+    items[next]?.focus();
+  }, []);
 
   const targetAt = useCallback((x: number, y: number, source: string): string | null => {
     for (const [name, element] of chipRefs.current) {
@@ -161,8 +212,40 @@ export function BranchBar({
       const startX = event.clientX;
       const startY = event.clientY;
       let moved = false;
+      const lastPoint = { x: startX, y: startY };
+
+      // 分支多时芯片条会横向溢出：指针停在边缘就自己滚，
+      // 否则被裁在视口外的芯片永远拖不到（落点判定用的是屏幕坐标）
+      let raf = 0;
+      const tick = () => {
+        const scroller = scrollerRef.current;
+        if (scroller) {
+          const rect = scroller.getBoundingClientRect();
+          const step = edgeScrollStep(lastPoint.x, rect.left, rect.right);
+          if (step !== 0) {
+            const before = scroller.scrollLeft;
+            scroller.scrollLeft = before + step;
+            if (scroller.scrollLeft !== before) {
+              // 内容移动后重新命中检测：高亮要跟着指针下的芯片走
+              const target = targetAt(lastPoint.x, lastPoint.y, name);
+              setHovered(target);
+              onDragMove(name, lastPoint, target);
+            }
+          }
+        }
+        raf = window.requestAnimationFrame(tick);
+      };
+      const stopAutoScroll = () => {
+        if (raf !== 0) {
+          window.cancelAnimationFrame(raf);
+          raf = 0;
+        }
+      };
+      raf = window.requestAnimationFrame(tick);
 
       const handleMove = (moveEvent: PointerEvent) => {
+        lastPoint.x = moveEvent.clientX;
+        lastPoint.y = moveEvent.clientY;
         if (!moved) {
           const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
           if (distance < DRAG_THRESHOLD) {
@@ -178,6 +261,7 @@ export function BranchBar({
       };
 
       const cleanup = () => {
+        stopAutoScroll();
         window.removeEventListener("pointermove", handleMove);
         window.removeEventListener("pointerup", handleUp);
         window.removeEventListener("pointercancel", handleCancel);
@@ -228,6 +312,7 @@ export function BranchBar({
         <GlossaryHint id="branch" mode={mode} />
       </span>
       <div
+        ref={scrollerRef}
         role="group"
         aria-labelledby="branch-bar-label"
         className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1"
@@ -316,9 +401,13 @@ export function BranchBar({
       {/* 菜单渲染在芯片条之外（fixed）：见 openMenu 的注释——滚动容器会裁掉 absolute 菜单 */}
       {menu ? (
         <div
+          ref={menuRef}
           role="menu"
           data-branch-menu="true"
           aria-label={t("timeline.chipMenu", { branch: menu.name })}
+          // 容器本身不进 Tab 序列（焦点在菜单项之间走），但要能接收程序化焦点
+          tabIndex={-1}
+          onKeyDown={handleMenuKeyDown}
           style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
           className="fixed z-50 rounded-xl border border-black/[.12] bg-white p-1 text-xs shadow-xl dark:border-white/[.2] dark:bg-zinc-900"
         >

@@ -52,10 +52,12 @@ import {
   timelineRowHeight,
   type TimelineDensity,
 } from "@/lib/timeline-density";
+import { edgeScrollStep } from "@/lib/edge-scroll";
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { BranchBar, type DragPoint } from "./branch-bar";
 import { TimeBrush } from "./time-brush";
+import { GestureGuide } from "./gesture-guide";
 import { BranchPopover } from "./branch-popover";
 import { CommitDetailPanel } from "./commit-detail";
 import { ConceptNote } from "./concept-note";
@@ -69,6 +71,8 @@ import { RestoreBranchPanel } from "./restore-branch-panel";
 
 const AUTO_LOAD_THRESHOLD = 8;
 const EXPLAIN_MODE_STORAGE_KEY = "utf8-git:explain-mode";
+// 手势速查条：只主动出现一次，关掉后写这个键
+const GESTURE_GUIDE_STORAGE_KEY = "utf8-git:gesture-guide";
 // 拖拽判定阈值：超过它才算「拖动」，否则仍按一次点击处理（与分支芯片一致）
 const COMMIT_DRAG_THRESHOLD = 8;
 
@@ -389,6 +393,33 @@ export function TimelineView({
     setExplainMode(next);
     try {
       window.localStorage.setItem(EXPLAIN_MODE_STORAGE_KEY, next);
+    } catch {
+      // 忽略写入失败
+    }
+  }, []);
+
+  // 手势速查条：首次进入主动出现一次，关掉后记住；工具栏「?」随时可重开
+  const [guideOpen, setGuideOpen] = useState(false);
+  useEffect(() => {
+    let dismissed: boolean;
+    try {
+      dismissed = window.localStorage.getItem(GESTURE_GUIDE_STORAGE_KEY) === "dismissed";
+    } catch {
+      // 隐私模式读不到：当作已关（宁可不弹，也别每次进入都打扰）
+      dismissed = true;
+    }
+    if (dismissed) {
+      return;
+    }
+    // 与解释模式同样的做法：延迟到宏任务，避免在 effect 内同步 setState
+    const timer = window.setTimeout(() => setGuideOpen(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const dismissGuide = useCallback(() => {
+    setGuideOpen(false);
+    try {
+      window.localStorage.setItem(GESTURE_GUIDE_STORAGE_KEY, "dismissed");
     } catch {
       // 忽略写入失败
     }
@@ -856,7 +887,33 @@ export function TimelineView({
       const startX = event.clientX;
       const startY = event.clientY;
       let moved = false;
+      const lastPoint = { x: startX, y: startY };
+
+      // 拖到画布上下边缘时自动滚动：落点常在可视区外，
+      // 而拖动过程中用户没法同时滚轮——这是画布式交互的必备补偿
+      let raf = 0;
+      const tick = () => {
+        const element = containerRef.current;
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          const step = edgeScrollStep(lastPoint.y, rect.top, rect.bottom);
+          if (step !== 0) {
+            element.scrollTop += step;
+          }
+        }
+        raf = window.requestAnimationFrame(tick);
+      };
+      const stopAutoScroll = () => {
+        if (raf !== 0) {
+          window.cancelAnimationFrame(raf);
+          raf = 0;
+        }
+      };
+      raf = window.requestAnimationFrame(tick);
+
       const handleMove = (moveEvent: PointerEvent) => {
+        lastPoint.x = moveEvent.clientX;
+        lastPoint.y = moveEvent.clientY;
         if (!moved) {
           const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
           if (distance < COMMIT_DRAG_THRESHOLD) {
@@ -867,9 +924,21 @@ export function TimelineView({
         }
         setCommitDrag({ commit, point: { x: moveEvent.clientX, y: moveEvent.clientY } });
       };
-      const handleUp = (upEvent: PointerEvent) => {
+      const handleCancel = () => {
+        stopAutoScroll();
         window.removeEventListener("pointermove", handleMove);
         window.removeEventListener("pointerup", handleUp);
+        window.removeEventListener("pointercancel", handleCancel);
+        setCommitDrag(null);
+        window.setTimeout(() => {
+          suppressRowClickRef.current = false;
+        }, 0);
+      };
+      const handleUp = (upEvent: PointerEvent) => {
+        stopAutoScroll();
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
+        window.removeEventListener("pointercancel", handleCancel);
         setCommitDrag(null);
         if (moved) {
           // 只认画布内的落点：拖到画布外（工具栏、页脚）不产生任何操作，
@@ -892,6 +961,7 @@ export function TimelineView({
       };
       window.addEventListener("pointermove", handleMove);
       window.addEventListener("pointerup", handleUp);
+      window.addEventListener("pointercancel", handleCancel);
     },
     [openNamingAt],
   );
@@ -1094,11 +1164,22 @@ export function TimelineView({
             </button>
             <GlossaryHint id="branch" mode={explainMode} />
           </span>
-          <span className="ml-auto text-[11px] text-zinc-400 dark:text-zinc-500">
-            {t("timeline.canvasHint")}
+          <span className="ml-auto flex items-center gap-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+            <span>{t("timeline.canvasHint")}</span>
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              aria-label={t("timeline.guideReopen")}
+              title={t("timeline.guideReopen")}
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-black/[.12] text-[10px] leading-none text-zinc-500 transition-colors hover:bg-black/[.04] dark:border-white/[.16] dark:text-zinc-400 dark:hover:bg-white/[.08]"
+            >
+              ?
+            </button>
           </span>
         </div>
       ) : null}
+
+      {guideOpen ? <GestureGuide onDismiss={dismissGuide} /> : null}
 
       {createSuccess || issueSuccess || pullSuccess || deleteSuccess || restoreSuccess ? (
         <p
