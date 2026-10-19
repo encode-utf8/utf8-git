@@ -781,7 +781,7 @@ export function TimelineView({
   }, []);
 
   const handleBranchDragStart = useCallback((branchName: string) => {
-    // 一开始拖动就把删除区浮出来（平时隐藏，避免常驻占位）
+    // 删除区常驻右侧竖轨；一开始拖动就把它切到「可放入」高亮态
     setBranchDrag({ name: branchName, point: { x: 0, y: 0 }, target: null });
     setBranchDragOverTrash(false);
   }, []);
@@ -1286,28 +1286,53 @@ export function TimelineView({
             // 画布容器：滚动仍在内部容器里完成（虚拟窗口按 scrollTop 计算），
             // 拖拽落点、删除区命中都以这层为坐标基准。
             <div ref={canvasRef} className="relative mt-3">
-              {branchDrag ? (
-                <div
-                  ref={trashRef}
-                  // 纯鼠标手势的落点提示：键盘等价路径是「删除分支」按钮，故对读屏隐藏
+              {/* 删除区：常驻右侧竖轨。用户反馈「原来右下角的小方块太淡、太远」——
+                  竖轨贴着画布右边、整幅高度都是命中区，红色配色 + 图标 + 竖排文字常驻可见。
+                  始终 pointer-events-none：命中判定走 trashRef 的几何矩形，不抢行内链接点击；
+                  读屏隐藏：键盘 / 点击等价路径是分支芯片「⋯」菜单里的删除项。 */}
+              <div
+                ref={trashRef}
+                aria-hidden="true"
+                data-testid="branch-trash"
+                className={[
+                  "pointer-events-none absolute right-0 top-0 bottom-0 z-20 flex w-14 flex-col items-center justify-center gap-1.5 rounded-r-xl border-l transition-colors",
+                  branchDragOverTrash
+                    ? "border-red-500 bg-red-600 text-white"
+                    : branchDrag
+                      ? "border-red-400 bg-red-100 text-red-700 dark:border-red-500 dark:bg-red-900 dark:text-red-100"
+                      : "border-red-200 bg-red-50/80 text-red-600 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-400",
+                ].join(" ")}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  className="h-5 w-5"
                   aria-hidden="true"
-                  data-testid="branch-trash"
-                  className={[
-                    "absolute bottom-3 right-3 z-20 flex h-16 w-32 items-center justify-center rounded-xl border text-xs transition-colors",
-                    branchDragOverTrash
-                      ? "border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950 dark:text-red-200"
-                      : "border-dashed border-black/[.2] bg-white/95 text-zinc-500 dark:border-white/[.24] dark:bg-zinc-900/95 dark:text-zinc-400",
-                  ].join(" ")}
                 >
-                  {branchDragOverTrash ? t("timeline.trashDrop") : t("timeline.trashZone")}
-                </div>
-              ) : null}
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                  />
+                </svg>
+                <span
+                  className={
+                    branchDrag
+                      ? "text-[11px] font-medium"
+                      : "text-[10px] [writing-mode:vertical-rl]"
+                  }
+                >
+                  {branchDrag ? t("timeline.trashDrop") : t("timeline.trashIdle")}
+                </span>
+              </div>
               <div
                 ref={containerRef}
                 onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
                 role="list"
                 aria-label={t("timeline.listLabel")}
-                className="h-[65vh] overflow-y-auto overscroll-contain rounded-xl border border-black/[.08] bg-white dark:border-white/[.145] dark:bg-zinc-950"
+                className="h-[65vh] overflow-y-auto overscroll-contain rounded-xl border border-black/[.08] bg-white pr-14 dark:border-white/[.145] dark:bg-zinc-950"
               >
                 <div style={{ height: windowRange.totalHeight, position: "relative" }}>
                   <div

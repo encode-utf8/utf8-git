@@ -40,11 +40,17 @@ type BranchBarProps = {
 /** 指针移动超过该阈值才判定为「拖动」，否则仍算一次点击。 */
 const DRAG_THRESHOLD = 6;
 
+/** 菜单宽度（px）：与 w-44 对应，用来做右边界钳制。 */
+const MENU_WIDTH = 176;
+/** 菜单预估高度（三条菜单项 + 内边距）：判断向上还是向下展开。 */
+const MENU_ESTIMATED_HEIGHT = 152;
+const VIEWPORT_MARGIN = 8;
+
 /**
  * 分支芯片条（P0 起替代 `<select>`）：
  * - 点击 / Enter / Space：切换分支（键盘等价路径）；
  * - 芯片上的「⋯」菜单：切换 / 开 PR / 删除——手势的点击等价物，摸不到手势的人也能用；
- * - 鼠标拖动芯片：拖到删除区 = 删除，拖到另一个芯片 = 开 PR。
+ * - 鼠标拖动芯片：拖到右侧删除区 = 删除，拖到另一个芯片 = 开 PR。
  * 触摸端不启用拖动：拖拽与纵向滚动抢手势，触摸用户可以点芯片或用菜单。
  */
 export function BranchBar({
@@ -66,7 +72,7 @@ export function BranchBar({
   const [dragging, setDragging] = useState<string | null>(null);
   // 指针悬停的另一个分支芯片：既是落点高亮，也是「松手开 PR」的目标
   const [hovered, setHovered] = useState<string | null>(null);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ name: string; top: number; left: number } | null>(null);
   const chipRefs = useRef(new Map<string, HTMLDivElement | null>());
 
   // 当前分支被切到视口外时自动滚回来（分支多时芯片条横向溢出）
@@ -77,30 +83,60 @@ export function BranchBar({
     chipRefs.current.get(current)?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [current]);
 
-  // 菜单打开时：点外部或按 Esc 关闭
-  useEffect(() => {
-    if (!menuFor) {
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  // 菜单用 position: fixed 渲染在芯片条之外：芯片条是 overflow-x-auto 滚动容器，
+  // absolute 定位的菜单会被它裁掉（这是「点了 ⋯ 什么都没发生」的真正原因）。
+  // fixed  + 实测算坐标，并在滚动 / 缩放时关闭，避免位置过期。
+  const openMenu = useCallback((name: string) => {
+    const chip = chipRefs.current.get(name);
+    const rect = chip?.querySelector("[data-branch-menu-trigger]")?.getBoundingClientRect();
+    if (!rect) {
       return;
     }
-    const onDocumentPointerDown = (event: PointerEvent) => {
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top =
+      spaceBelow >= MENU_ESTIMATED_HEIGHT + VIEWPORT_MARGIN
+        ? rect.bottom + 6
+        : Math.max(VIEWPORT_MARGIN, rect.top - MENU_ESTIMATED_HEIGHT - 6);
+    const left = Math.min(
+      Math.max(VIEWPORT_MARGIN, rect.right - MENU_WIDTH),
+      Math.max(VIEWPORT_MARGIN, window.innerWidth - MENU_WIDTH - VIEWPORT_MARGIN),
+    );
+    setMenu({ name, top, left });
+  }, []);
+
+  // 菜单打开时：点外部或按 Esc 关闭。注意用冒泡阶段（不加 capture）：
+  // React 的合成事件挂在根容器上，先于 window 冒泡监听执行，
+  // 这样「点触发器自身」由 click 里的开合逻辑处理，不会被这里提前清掉。
+  useEffect(() => {
+    if (!menu) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest("[data-branch-menu]")) {
+      if (target?.closest("[data-branch-menu]") || target?.closest("[data-branch-menu-trigger]")) {
         return;
       }
-      setMenuFor(null);
+      setMenu(null);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setMenuFor(null);
+        setMenu(null);
       }
     };
-    window.addEventListener("pointerdown", onDocumentPointerDown, true);
+    const onRelayout = () => setMenu(null);
+    window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onRelayout, true);
+    window.addEventListener("resize", onRelayout);
     return () => {
-      window.removeEventListener("pointerdown", onDocumentPointerDown, true);
+      window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onRelayout, true);
+      window.removeEventListener("resize", onRelayout);
     };
-  }, [menuFor]);
+  }, [menu]);
 
   const targetAt = useCallback((x: number, y: number, source: string): string | null => {
     for (const [name, element] of chipRefs.current) {
@@ -121,7 +157,7 @@ export function BranchBar({
       if (disabled || event.pointerType !== "mouse" || event.button !== 0) {
         return;
       }
-      setMenuFor(null);
+      setMenu(null);
       const startX = event.clientX;
       const startY = event.clientY;
       let moved = false;
@@ -199,7 +235,7 @@ export function BranchBar({
         {branches.map((item) => {
           const isCurrent = item.name === current;
           const isDefault = item.name === defaultBranch;
-          const menuOpen = menuFor === item.name;
+          const menuOpen = menu?.name === item.name;
           return (
             <div
               key={item.name}
@@ -254,67 +290,73 @@ export function BranchBar({
               </button>
               <button
                 type="button"
+                data-branch-menu-trigger="true"
                 aria-label={t("timeline.chipMenu", { branch: item.name })}
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
                 disabled={disabled}
-                onClick={() => setMenuFor(menuOpen ? null : item.name)}
-                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => (menuOpen ? closeMenu() : openMenu(item.name))}
                 className={[
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] leading-none",
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs leading-none",
                   isCurrent
                     ? "hover:bg-white/20 dark:hover:bg-zinc-900/20"
                     : "hover:bg-black/[.06] dark:hover:bg-white/[.1]",
-                ].join(" ")}
+                  menuOpen ? "bg-black/[.06] dark:bg-white/[.12]" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
               >
                 <span aria-hidden="true">⋯</span>
               </button>
-              {menuOpen ? (
-                <div
-                  role="menu"
-                  data-branch-menu="true"
-                  aria-label={t("timeline.chipMenu", { branch: item.name })}
-                  className="absolute left-0 top-8 z-30 w-44 rounded-xl border border-black/[.12] bg-white p-1 text-xs shadow-xl dark:border-white/[.2] dark:bg-zinc-900"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuFor(null);
-                      onSelect(item.name);
-                    }}
-                    className="block w-full rounded-lg px-3 py-2 text-left text-zinc-700 hover:bg-black/[.04] dark:text-zinc-200 dark:hover:bg-white/[.08]"
-                  >
-                    {t("timeline.chipSwitch", { branch: item.name })}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuFor(null);
-                      onOpenPull(item.name);
-                    }}
-                    className="block w-full rounded-lg px-3 py-2 text-left text-zinc-700 hover:bg-black/[.04] dark:text-zinc-200 dark:hover:bg-white/[.08]"
-                  >
-                    {t("timeline.chipOpenPull")}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuFor(null);
-                      onRequestDelete(item.name);
-                    }}
-                    className="block w-full rounded-lg px-3 py-2 text-left text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                  >
-                    {t("timeline.chipDelete")}
-                  </button>
-                </div>
-              ) : null}
             </div>
           );
         })}
       </div>
+
+      {/* 菜单渲染在芯片条之外（fixed）：见 openMenu 的注释——滚动容器会裁掉 absolute 菜单 */}
+      {menu ? (
+        <div
+          role="menu"
+          data-branch-menu="true"
+          aria-label={t("timeline.chipMenu", { branch: menu.name })}
+          style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
+          className="fixed z-50 rounded-xl border border-black/[.12] bg-white p-1 text-xs shadow-xl dark:border-white/[.2] dark:bg-zinc-900"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
+              onSelect(menu.name);
+            }}
+            className="block w-full rounded-lg px-3 py-2 text-left text-zinc-700 hover:bg-black/[.04] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+          >
+            {t("timeline.chipSwitch", { branch: menu.name })}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
+              onOpenPull(menu.name);
+            }}
+            className="block w-full rounded-lg px-3 py-2 text-left text-zinc-700 hover:bg-black/[.04] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+          >
+            {t("timeline.chipOpenPull")}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
+              onRequestDelete(menu.name);
+            }}
+            className="block w-full rounded-lg px-3 py-2 text-left text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+          >
+            {t("timeline.chipDelete")}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

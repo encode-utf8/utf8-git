@@ -116,6 +116,53 @@ export const en: Messages = {
       "To revoke access, remove utf8-git from GitHub's Settings → Applications → Authorized OAuth Apps; the token stops working immediately.",
     fullNote: "Read the full authorization notes",
   },
+  landing: {
+    badge: "Canvas-style repository timelines, powered by GitHub",
+    heroTitle: "See a repository on a canvas",
+    heroSubtitle:
+      "Take commits, branches, issues and PRs out of the list: drag to create a branch, open a PR or delete a branch. Every write goes through the same confirm + idempotency + audit pipeline — you can have both speed and safety.",
+    ctaLogin: "Sign in with GitHub",
+    ctaEnter: "Go to repositories",
+    ctaPermissions: "We request only two scopes: read:user and repo",
+    signedInAs: "Signed in as {user}",
+    previewAria:
+      "Preview: commit nodes on lanes, branch chips on top and the delete rail on the right",
+    featuresTitle: "Why not just another GitHub client",
+    feature1Title: "A canvas, not a list",
+    feature1Body:
+      "Commits are nodes and branches are chips — dragging is the action. Every gesture has a keyboard and click equivalent.",
+    feature2Title: "Writes have guardrails",
+    feature2Body:
+      "Create branch / open PR / delete branch all go through a confirm card, an idempotency key and an audit log — a retry never runs twice.",
+    feature3Title: "Dark mode, two languages, accessible",
+    feature3Body:
+      "zh-CN / en UI, light and dark themes, keyboard reachability and contrast reviews are part of the flow.",
+    feature4Title: "Self-hostable",
+    feature4Body:
+      "Deploy on Vercel or a single Node server; the repo ships an OAuth App guide and an operations manual.",
+    stepsTitle: "Three steps to start",
+    step1Title: "Authorize with GitHub",
+    step1Body:
+      "Sign in with OAuth and read only the repositories you can already access. Tokens are encrypted and revocable at any time.",
+    step2Title: "Pick a repository",
+    step2Body: "Choose one from the repositories you can access and open its commit timeline.",
+    step3Title: "Drag on the canvas",
+    step3Body:
+      "Drag a commit to branch, drag a chip to open a PR, drag to the rail to delete, brush the timeline to filter.",
+    docsTitle: "Documentation",
+    docsNote: "These documents live in the GitHub repository:",
+    docReadme: "README · overview and quick start",
+    docSelfHosting: "Self-hosting guide (including your own OAuth App)",
+    docDeployment: "Deployment, multi-instance consistency and ops manual",
+    docDevlog: "Development log and architecture decision records (ADR)",
+    scopeNote:
+      "Signing in means you understand the GitHub scopes we request — see the permissions page for details.",
+    linksTitle: "Quick links",
+    linkLogin: "Sign in",
+    linkPermissions: "Permissions",
+    linkRepo: "GitHub repository",
+    linkRepoHref: "https://github.com/encode-utf8/utf8-git",
+  },
   repos: {
     title: "My repositories",
     subtitle:
@@ -279,6 +326,7 @@ export const en: Messages = {
     canvasLabel: "Commit canvas",
     dragCommitHint: "Release to branch here",
     trashZone: "Trash",
+    trashIdle: "Drop to delete",
     trashDrop: "Release to delete",
     dragToPull: "Release to open a PR into {branch}",
     chipMenu: "Actions for {branch}",

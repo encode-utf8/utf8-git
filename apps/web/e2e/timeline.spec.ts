@@ -336,10 +336,14 @@ test("拖提交节点到空白处 → 就地命名建分支", async ({ page }) =
   await expect(page.getByRole("status")).toContainText(`已创建分支 ${branch}`);
 });
 
-// 拖分支芯片到删除区：删除区平时隐藏，拖动时才浮出；拖入只是「发起删除」，
+// 拖分支芯片到删除区：删除区是常驻右侧竖轨（不再平时隐藏），拖入只是「发起删除」，
 // 仍弹出确认浮层（带预选分支 + 服务端可删除性预检），确认后才真正执行。
 test("拖分支芯片到删除区 → 确认浮层 → 删除成功", async ({ page }) => {
   await page.goto("/repos/encode-utf8/utf8-git");
+
+  // 删除区常驻：进页面就该看见右侧竖轨
+  const trash = page.getByTestId("branch-trash");
+  await expect(trash).toBeVisible();
 
   // 先建一个专属分支（按钮路径），避免动到其它用例依赖的分支
   const branch = `feature/drag-del-${Date.now().toString(36)}`;
@@ -366,9 +370,6 @@ test("拖分支芯片到删除区 → 确认浮层 → 删除成功", async ({ p
   await page.mouse.down();
   await page.mouse.move(chipBox.x + 40, chipBox.y + 40, { steps: 6 });
 
-  // 拖动中删除区才出现
-  const trash = page.getByTestId("branch-trash");
-  await expect(trash).toBeVisible();
   const trashBox = await trash.boundingBox();
   if (!trashBox) {
     throw new Error("删除区没有可见区域，无法完成拖拽");
@@ -466,12 +467,32 @@ test("分支芯片菜单：删除与开 PR 的点击路径都能带出正确预�
   const menu = page.getByRole("button", { name: "feature/e2e 的操作菜单" });
   await menu.click();
 
+  // 回归守卫：菜单必须用 position: fixed 渲染在芯片条的横向滚动容器之外。
+  // 曾经的 bug 是 absolute 菜单被 overflow-x-auto 裁掉——用户点了「⋯」什么都看不到。
+  const menuPanel = page.getByRole("menu");
+  await expect(menuPanel).toBeVisible();
+  expect(await menuPanel.evaluate((el) => getComputedStyle(el).position)).toBe("fixed");
+  const menuBox = await menuPanel.boundingBox();
+  const viewport = page.viewportSize();
+  if (!menuBox || !viewport) {
+    throw new Error("菜单或视口尺寸缺失，无法校验可见性");
+  }
+  if (menuBox.y + menuBox.height > viewport.height || menuBox.x + menuBox.width > viewport.width) {
+    throw new Error("菜单超出视口，说明定位钳制失效");
+  }
+
   await page.getByRole("menuitem", { name: "删除这个分支" }).click();
   await expect(page.getByLabel("要删除的分支")).toHaveValue("feature/e2e");
   await page
     .getByRole("dialog", { name: /删除分支/ })
     .getByRole("button", { name: "取消" })
     .click();
+
+  await menu.click();
+  await expect(menuPanel).toBeVisible();
+  // 再点一次触发器应当关闭（开合是两个方向，不能只开不合）
+  await menu.click();
+  await expect(menuPanel).toHaveCount(0);
 
   await menu.click();
   await page.getByRole("menuitem", { name: "用这个分支开 PR" }).click();
