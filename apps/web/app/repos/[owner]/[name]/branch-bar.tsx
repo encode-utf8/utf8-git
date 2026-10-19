@@ -23,7 +23,12 @@ type BranchBarProps = {
   defaultBranch: string | null;
   disabled?: boolean;
   mode: ExplainMode;
+  /** 点击芯片 / 菜单项：切换到这个分支。 */
   onSelect: (name: string) => void;
+  /** 菜单项：用这个分支作为 head 开 PR（base 取当前查看的分支）。 */
+  onOpenPull: (name: string) => void;
+  /** 菜单项：删除这个分支（仍走确认浮层）。 */
+  onRequestDelete: (name: string) => void;
   onDragStart: (name: string) => void;
   /** 拖动中持续回调：`target` 是当前指针悬停的另一个分支芯片（用于「开 PR」落点）。 */
   onDragMove: (name: string, point: DragPoint, target: string | null) => void;
@@ -36,10 +41,11 @@ type BranchBarProps = {
 const DRAG_THRESHOLD = 6;
 
 /**
- * 分支芯片条（P0）：替代原来的 `<select>`。
- * - 点击 / Enter / Space：切换分支（键盘与无障碍路径，与旧选择器等价）；
- * - 鼠标拖动：交给父组件决定落点（拖到删除区 = 删除该分支）。
- * 触摸端不启用拖动：拖拽与纵向滚动会互相抢手势，触摸用户仍可点芯片切换。
+ * 分支芯片条（P0 起替代 `<select>`）：
+ * - 点击 / Enter / Space：切换分支（键盘等价路径）；
+ * - 芯片上的「⋯」菜单：切换 / 开 PR / 删除——手势的点击等价物，摸不到手势的人也能用；
+ * - 鼠标拖动芯片：拖到删除区 = 删除，拖到另一个芯片 = 开 PR。
+ * 触摸端不启用拖动：拖拽与纵向滚动抢手势，触摸用户可以点芯片或用菜单。
  */
 export function BranchBar({
   branches,
@@ -48,18 +54,20 @@ export function BranchBar({
   disabled = false,
   mode,
   onSelect,
+  onOpenPull,
+  onRequestDelete,
   onDragStart,
   onDragMove,
   onDragEnd,
   onDragCancel,
 }: BranchBarProps) {
   const { t } = useTranslator();
-  // 拖动结束后浏览器仍会补发一次 click：用它把这次 click 吞掉，避免「拖完顺带切了分支」
   const suppressClickRef = useRef<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   // 指针悬停的另一个分支芯片：既是落点高亮，也是「松手开 PR」的目标
   const [hovered, setHovered] = useState<string | null>(null);
-  const chipRefs = useRef(new Map<string, HTMLButtonElement | null>());
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const chipRefs = useRef(new Map<string, HTMLDivElement | null>());
 
   // 当前分支被切到视口外时自动滚回来（分支多时芯片条横向溢出）
   useEffect(() => {
@@ -68,6 +76,31 @@ export function BranchBar({
     }
     chipRefs.current.get(current)?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [current]);
+
+  // 菜单打开时：点外部或按 Esc 关闭
+  useEffect(() => {
+    if (!menuFor) {
+      return;
+    }
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-branch-menu]")) {
+        return;
+      }
+      setMenuFor(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuFor(null);
+      }
+    };
+    window.addEventListener("pointerdown", onDocumentPointerDown, true);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onDocumentPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuFor]);
 
   const targetAt = useCallback((x: number, y: number, source: string): string | null => {
     for (const [name, element] of chipRefs.current) {
@@ -82,13 +115,13 @@ export function BranchBar({
     return null;
   }, []);
 
-  // 用 window 监听而不是 setPointerCapture + React 合成事件：
-  // 与提交行拖拽同一套写法（那套已在 CI 验证可用），少一层指针捕获的行为差异。
-  const handlePointerDown = useCallback(
+  // window 监听而不是 setPointerCapture + React 合成事件：与提交行拖拽同一套写法
+  const startDrag = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, name: string) => {
       if (disabled || event.pointerType !== "mouse" || event.button !== 0) {
         return;
       }
+      setMenuFor(null);
       const startX = event.clientX;
       const startY = event.clientY;
       let moved = false;
@@ -141,7 +174,7 @@ export function BranchBar({
     [disabled, onDragCancel, onDragEnd, onDragMove, onDragStart, targetAt],
   );
 
-  const handleClick = useCallback(
+  const handleChipClick = useCallback(
     (name: string) => {
       if (suppressClickRef.current === name) {
         suppressClickRef.current = null;
@@ -166,56 +199,119 @@ export function BranchBar({
         {branches.map((item) => {
           const isCurrent = item.name === current;
           const isDefault = item.name === defaultBranch;
+          const menuOpen = menuFor === item.name;
           return (
-            <button
+            <div
               key={item.name}
               ref={(element) => {
                 chipRefs.current.set(item.name, element);
               }}
-              type="button"
-              disabled={disabled}
-              aria-pressed={isCurrent}
-              title={item.name}
-              onClick={() => handleClick(item.name)}
-              onPointerDown={(event) => handlePointerDown(event, item.name)}
               className={[
-                "flex h-7 shrink-0 select-none items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors",
-                "cursor-grab active:cursor-grabbing disabled:opacity-60",
+                "relative flex h-7 shrink-0 select-none items-center rounded-full border pl-2.5 pr-1 text-xs transition-colors",
                 isCurrent
                   ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-50 dark:bg-zinc-50 dark:text-zinc-900"
-                  : "border-black/[.12] bg-white text-zinc-700 hover:bg-black/[.04] dark:border-white/[.16] dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-white/[.08]",
-                dragging === item.name ? "opacity-40" : "",
+                  : "border-black/[.12] bg-white text-zinc-700 dark:border-white/[.16] dark:bg-zinc-950 dark:text-zinc-200",
                 hovered === item.name
                   ? "ring-2 ring-sky-500 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950"
                   : "",
+                dragging === item.name ? "opacity-40" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
             >
-              <span
-                aria-hidden="true"
-                className={[
-                  "h-1.5 w-1.5 rounded-full",
-                  isCurrent
-                    ? "bg-white dark:bg-zinc-900"
-                    : isDefault
-                      ? "bg-sky-600 dark:bg-sky-400"
-                      : "bg-zinc-400 dark:bg-zinc-500",
-                ].join(" ")}
-              />
-              <span className="max-w-[12rem] truncate">{item.name}</span>
-              {isDefault ? (
+              <button
+                type="button"
+                disabled={disabled}
+                aria-pressed={isCurrent}
+                title={item.name}
+                onClick={() => handleChipClick(item.name)}
+                onPointerDown={(event) => startDrag(event, item.name)}
+                className="flex min-w-0 cursor-grab items-center gap-1.5 rounded-full active:cursor-grabbing disabled:opacity-60"
+              >
                 <span
-                  className={
+                  aria-hidden="true"
+                  className={[
+                    "h-1.5 w-1.5 rounded-full",
                     isCurrent
-                      ? "text-[10px] text-white/70 dark:text-zinc-900/60"
-                      : "text-[10px] text-zinc-500 dark:text-zinc-400"
-                  }
+                      ? "bg-white dark:bg-zinc-900"
+                      : isDefault
+                        ? "bg-sky-600 dark:bg-sky-400"
+                        : "bg-zinc-400 dark:bg-zinc-500",
+                  ].join(" ")}
+                />
+                <span className="max-w-[12rem] truncate">{item.name}</span>
+                {isDefault ? (
+                  <span
+                    className={
+                      isCurrent
+                        ? "text-white/70 dark:text-zinc-900/60"
+                        : "text-zinc-500 dark:text-zinc-400"
+                    }
+                  >
+                    {t("timeline.defaultBranchTag")}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                aria-label={t("timeline.chipMenu", { branch: item.name })}
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+                disabled={disabled}
+                onClick={() => setMenuFor(menuOpen ? null : item.name)}
+                onPointerDown={(event) => event.stopPropagation()}
+                className={[
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] leading-none",
+                  isCurrent
+                    ? "hover:bg-white/20 dark:hover:bg-zinc-900/20"
+                    : "hover:bg-black/[.06] dark:hover:bg-white/[.1]",
+                ].join(" ")}
+              >
+                <span aria-hidden="true">⋯</span>
+              </button>
+              {menuOpen ? (
+                <div
+                  role="menu"
+                  data-branch-menu="true"
+                  aria-label={t("timeline.chipMenu", { branch: item.name })}
+                  className="absolute left-0 top-8 z-30 w-44 rounded-xl border border-black/[.12] bg-white p-1 text-xs shadow-xl dark:border-white/[.2] dark:bg-zinc-900"
                 >
-                  {t("timeline.defaultBranchTag")}
-                </span>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuFor(null);
+                      onSelect(item.name);
+                    }}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-zinc-700 hover:bg-black/[.04] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+                  >
+                    {t("timeline.chipSwitch", { branch: item.name })}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuFor(null);
+                      onOpenPull(item.name);
+                    }}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-zinc-700 hover:bg-black/[.04] dark:text-zinc-200 dark:hover:bg-white/[.08]"
+                  >
+                    {t("timeline.chipOpenPull")}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuFor(null);
+                      onRequestDelete(item.name);
+                    }}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                  >
+                    {t("timeline.chipDelete")}
+                  </button>
+                </div>
               ) : null}
-            </button>
+            </div>
           );
         })}
       </div>

@@ -457,3 +457,25 @@ test("时间刷子：收窄时间窗 → 过滤 + 自定义区间 → 重置回�
   await expect(page.getByLabel("时间范围")).toHaveValue("all");
   await expect(page.getByText(/筛选后 \d+ \/ 50 条/)).toHaveCount(0);
 });
+
+// 芯片「⋯」菜单：删除 / 开 PR 的点击等价路径（手势之外的入口，摸不到拖拽也能用）。
+// 只验证到「预填正确」为止，不真正执行，避免动到其它用例共享的分支。
+test("分支芯片菜单：删除与开 PR 的点击路径都能带出正确预填", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  const menu = page.getByRole("button", { name: "feature/e2e 的操作菜单" });
+  await menu.click();
+
+  await page.getByRole("menuitem", { name: "删除这个分支" }).click();
+  await expect(page.getByLabel("要删除的分支")).toHaveValue("feature/e2e");
+  await page
+    .getByRole("dialog", { name: /删除分支/ })
+    .getByRole("button", { name: "取消" })
+    .click();
+
+  await menu.click();
+  await page.getByRole("menuitem", { name: "用这个分支开 PR" }).click();
+  await expect(page.getByLabel("来源分支（head）")).toHaveValue("feature/e2e");
+  await expect(page.getByLabel("目标分支（base）")).toHaveValue("main");
+  await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
+});

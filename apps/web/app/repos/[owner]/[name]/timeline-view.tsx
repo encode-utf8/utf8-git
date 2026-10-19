@@ -956,6 +956,15 @@ export function TimelineView({
         disabled={loading}
         mode={explainMode}
         onSelect={(nextBranch) => void switchBranch(nextBranch)}
+        onOpenPull={(branchName) => {
+          resetOperationAlerts();
+          setPullPreset({ head: branchName, base: branch ?? defaultBranch ?? "" });
+        }}
+        onRequestDelete={(branchName) => {
+          resetOperationAlerts();
+          setDeleteInitialBranch(branchName);
+          setDeleteOpen(true);
+        }}
         onDragStart={handleBranchDragStart}
         onDragMove={handleBranchDragMove}
         onDragEnd={handleBranchDragEnd}
@@ -1085,7 +1094,7 @@ export function TimelineView({
             </button>
             <GlossaryHint id="branch" mode={explainMode} />
           </span>
-          <span className="ml-auto hidden text-[11px] text-zinc-400 sm:inline dark:text-zinc-500">
+          <span className="ml-auto text-[11px] text-zinc-400 dark:text-zinc-500">
             {t("timeline.canvasHint")}
           </span>
         </div>

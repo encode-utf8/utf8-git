@@ -30,6 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const locale = await getLocale();
   const { t } = await getTranslator();
+  const buildLabel = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local";
   return (
     <html
       lang={locale}
@@ -49,6 +50,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <div id="main-content" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">
             {children}
           </div>
+          {/* 构建标识：线上跑的是哪个 commit，一眼可查（Vercel 构建时注入） */}
+          <footer className="px-4 py-2 text-center text-[10px] text-zinc-400 dark:text-zinc-600">
+            build {buildLabel}
+          </footer>
         </LocaleProvider>
       </body>
     </html>
