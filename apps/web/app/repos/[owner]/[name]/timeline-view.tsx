@@ -53,6 +53,7 @@ import {
   type TimelineDensity,
 } from "@/lib/timeline-density";
 import { edgeScrollStep } from "@/lib/edge-scroll";
+import { createFrameCoalescer } from "@/lib/frame-coalescer";
 import { decodeTimelineShare, encodeTimelineShare, mergeShareFilters } from "@/lib/timeline-share";
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
@@ -985,27 +986,45 @@ export function TimelineView({
       let moved = false;
       const lastPoint = { x: startX, y: startY };
 
-      // 拖到画布上下边缘时自动滚动：落点常在可视区外，
-      // 而拖动过程中用户没法同时滚轮——这是画布式交互的必备补偿
-      let raf = 0;
-      const tick = () => {
+      // 每帧最多一次 setState：pointermove 在高刷屏可达 120Hz，
+      // 逐个事件更新会让一帧内渲染多次，中间帧用户根本看不到
+      const coalescer = createFrameCoalescer<DragPoint>((point) => {
+        setCommitDrag({ commit, point });
+      });
+
+      // 拖到画布上下边缘时自动滚动：落点常在可视区外，拖动时用户没法同时滚轮。
+      // 循环只在指针处于边缘带内时运行——不在边缘就停，避免拖动全程空转 rAF + 读矩形。
+      let scrollRaf = 0;
+      const edgeStepNow = () => {
         const element = containerRef.current;
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          const step = edgeScrollStep(lastPoint.y, rect.top, rect.bottom);
-          if (step !== 0) {
-            element.scrollTop += step;
-          }
+        if (!element) {
+          return 0;
         }
-        raf = window.requestAnimationFrame(tick);
+        const rect = element.getBoundingClientRect();
+        return edgeScrollStep(lastPoint.y, rect.top, rect.bottom);
+      };
+      const tick = () => {
+        scrollRaf = 0;
+        const element = containerRef.current;
+        const step = edgeStepNow();
+        if (!element || step === 0) {
+          return;
+        }
+        element.scrollTop += step;
+        scrollRaf = window.requestAnimationFrame(tick);
+      };
+      const ensureAutoScroll = () => {
+        if (scrollRaf === 0 && edgeStepNow() !== 0) {
+          scrollRaf = window.requestAnimationFrame(tick);
+        }
       };
       const stopAutoScroll = () => {
-        if (raf !== 0) {
-          window.cancelAnimationFrame(raf);
-          raf = 0;
+        if (scrollRaf !== 0) {
+          window.cancelAnimationFrame(scrollRaf);
+          scrollRaf = 0;
         }
+        coalescer.cancel();
       };
-      raf = window.requestAnimationFrame(tick);
 
       const handleMove = (moveEvent: PointerEvent) => {
         lastPoint.x = moveEvent.clientX;
@@ -1018,7 +1037,8 @@ export function TimelineView({
           moved = true;
           suppressRowClickRef.current = true;
         }
-        setCommitDrag({ commit, point: { x: moveEvent.clientX, y: moveEvent.clientY } });
+        coalescer.push({ x: lastPoint.x, y: lastPoint.y });
+        ensureAutoScroll();
       };
       const handleCancel = () => {
         stopAutoScroll();

@@ -67,13 +67,24 @@ export function TimeBrush({ min, max, value, onChange, onReset }: TimeBrushProps
       const startX = event.clientX;
       const startFrom = fromRatio;
       const startTo = toRatio;
+
+      // 拖动期间冻结「域」：加载更多会让 min / span 变大，域一变，
+      // 手柄位置与回调里的时间换算就对不上了（同一个 ratio 会算成两个时间点）。
+      // 选择本身是绝对时间，所以冻结域不会让结果漂移，只是让映射稳定。
+      const domain = { min, span };
+      const emitInDomain = (nextFrom: number, nextTo: number) => {
+        const low = Math.min(nextFrom, nextTo);
+        const high = Math.max(nextFrom, nextTo);
+        onChange({ from: domain.min + low * domain.span, to: domain.min + high * domain.span });
+      };
+
       const handleMove = (moveEvent: PointerEvent) => {
         if (mode === "from") {
-          emit(ratioAt(moveEvent.clientX), toRatio);
+          emitInDomain(ratioAt(moveEvent.clientX), toRatio);
           return;
         }
         if (mode === "to") {
-          emit(fromRatio, ratioAt(moveEvent.clientX));
+          emitInDomain(fromRatio, ratioAt(moveEvent.clientX));
           return;
         }
         const delta = ratioAt(moveEvent.clientX) - ratioAt(startX);
@@ -87,7 +98,7 @@ export function TimeBrush({ min, max, value, onChange, onReset }: TimeBrushProps
           nextFrom -= nextTo - 1;
           nextTo = 1;
         }
-        emit(nextFrom, nextTo);
+        emitInDomain(nextFrom, nextTo);
       };
       const handleUp = () => {
         window.removeEventListener("pointermove", handleMove);
@@ -96,7 +107,7 @@ export function TimeBrush({ min, max, value, onChange, onReset }: TimeBrushProps
       window.addEventListener("pointermove", handleMove);
       window.addEventListener("pointerup", handleUp);
     },
-    [emit, fromRatio, ratioAt, toRatio],
+    [fromRatio, min, onChange, ratioAt, span, toRatio],
   );
 
   const nudge = useCallback(

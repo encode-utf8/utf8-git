@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { edgeScrollStep } from "@/lib/edge-scroll";
+import { createFrameCoalescer } from "@/lib/frame-coalescer";
 import type { ExplainMode } from "@/lib/glossary";
 import type { TimelineBranch } from "@/lib/github-timeline";
 import { useTranslator } from "@/lib/i18n/client";
@@ -214,34 +215,56 @@ export function BranchBar({
       let moved = false;
       const lastPoint = { x: startX, y: startY };
 
+      // 每帧最多一次更新：pointermove 可达 120Hz，逐个事件 setState 会在一帧内渲染多次
+      const coalescer = createFrameCoalescer<{ point: DragPoint; target: string | null }>(
+        (next) => {
+          setHovered(next.target);
+          onDragMove(name, next.point, next.target);
+        },
+      );
+
       // 分支多时芯片条会横向溢出：指针停在边缘就自己滚，
-      // 否则被裁在视口外的芯片永远拖不到（落点判定用的是屏幕坐标）
-      let raf = 0;
-      const tick = () => {
+      // 否则被裁在视口外的芯片永远拖不到（落点判定用的是屏幕坐标）。
+      // 循环只在边缘带内运行，离开就停。
+      let scrollRaf = 0;
+      const edgeStepNow = () => {
         const scroller = scrollerRef.current;
-        if (scroller) {
-          const rect = scroller.getBoundingClientRect();
-          const step = edgeScrollStep(lastPoint.x, rect.left, rect.right);
-          if (step !== 0) {
-            const before = scroller.scrollLeft;
-            scroller.scrollLeft = before + step;
-            if (scroller.scrollLeft !== before) {
-              // 内容移动后重新命中检测：高亮要跟着指针下的芯片走
-              const target = targetAt(lastPoint.x, lastPoint.y, name);
-              setHovered(target);
-              onDragMove(name, lastPoint, target);
-            }
-          }
+        if (!scroller) {
+          return 0;
         }
-        raf = window.requestAnimationFrame(tick);
+        const rect = scroller.getBoundingClientRect();
+        return edgeScrollStep(lastPoint.x, rect.left, rect.right);
+      };
+      const tick = () => {
+        scrollRaf = 0;
+        const scroller = scrollerRef.current;
+        const step = edgeStepNow();
+        if (!scroller || step === 0) {
+          return;
+        }
+        const before = scroller.scrollLeft;
+        scroller.scrollLeft = before + step;
+        if (scroller.scrollLeft !== before) {
+          // 内容移动后重新命中检测：高亮要跟着指针下的芯片走
+          coalescer.push({
+            point: { x: lastPoint.x, y: lastPoint.y },
+            target: targetAt(lastPoint.x, lastPoint.y, name),
+          });
+        }
+        scrollRaf = window.requestAnimationFrame(tick);
+      };
+      const ensureAutoScroll = () => {
+        if (scrollRaf === 0 && edgeStepNow() !== 0) {
+          scrollRaf = window.requestAnimationFrame(tick);
+        }
       };
       const stopAutoScroll = () => {
-        if (raf !== 0) {
-          window.cancelAnimationFrame(raf);
-          raf = 0;
+        if (scrollRaf !== 0) {
+          window.cancelAnimationFrame(scrollRaf);
+          scrollRaf = 0;
         }
+        coalescer.cancel();
       };
-      raf = window.requestAnimationFrame(tick);
 
       const handleMove = (moveEvent: PointerEvent) => {
         lastPoint.x = moveEvent.clientX;
@@ -255,9 +278,11 @@ export function BranchBar({
           setDragging(name);
           onDragStart(name);
         }
-        const target = targetAt(moveEvent.clientX, moveEvent.clientY, name);
-        setHovered(target);
-        onDragMove(name, { x: moveEvent.clientX, y: moveEvent.clientY }, target);
+        coalescer.push({
+          point: { x: lastPoint.x, y: lastPoint.y },
+          target: targetAt(lastPoint.x, lastPoint.y, name),
+        });
+        ensureAutoScroll();
       };
 
       const cleanup = () => {
