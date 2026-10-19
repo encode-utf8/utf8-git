@@ -551,3 +551,36 @@ test("芯片菜单键盘导航：方向键移动、Esc 关闭并归还焦点", a
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(trigger).toBeFocused();
 });
+
+// 分享链接（TODO-214 链接分享）：筛选写进 URL，复制后在新页面打开能还原视图。
+test("分享链接：筛选写进 URL，打开链接可恢复", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/repos/encode-utf8/utf8-git");
+
+  const search = page.getByLabel("搜索提交");
+  await search.fill("feat");
+  // 防抖 300ms 后地址栏跟上（replaceState，不产生历史记录）
+  await expect(page).toHaveURL(/[?&]q=feat/);
+
+  await page.getByRole("button", { name: "分享链接" }).click();
+  await expect(page.getByTestId("share-status")).toHaveText("链接已复制");
+
+  const shared = page.url();
+  expect(shared).toContain("q=feat");
+
+  const reopened = await context.newPage();
+  await reopened.goto(shared);
+  await expect(reopened.getByLabel("搜索提交")).toHaveValue("feat");
+  await expect(reopened.getByText(/筛选后 \d+ \/ 50 条/)).toBeVisible();
+  await reopened.close();
+});
+
+// 分享链接里的 branch 参数：进页面后自动切到该分支（芯片处于选中态）。
+test("分享链接：branch 参数进入即切换分支", async ({ page }) => {
+  await page.goto("/repos/encode-utf8/utf8-git?branch=feature%2Fe2e");
+
+  await expect(page.getByRole("button", { name: "feature/e2e", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});

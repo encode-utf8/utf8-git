@@ -53,6 +53,7 @@ import {
   type TimelineDensity,
 } from "@/lib/timeline-density";
 import { edgeScrollStep } from "@/lib/edge-scroll";
+import { decodeTimelineShare, encodeTimelineShare, mergeShareFilters } from "@/lib/timeline-share";
 import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { BranchBar, type DragPoint } from "./branch-bar";
@@ -326,6 +327,9 @@ export function TimelineView({
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [restoreSuccess, setRestoreSuccess] = useState<string | null>(null);
+  // 分享链接：复制成功 / 失败的反馈；失败时把链接露出来供手动复制
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "manual">("idle");
+  const [shareUrl, setShareUrl] = useState("");
 
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -793,6 +797,98 @@ export function TimelineView({
     [loading, name, owner, t],
   );
 
+  // 分享链接（TODO-214 的链接分享一半）：视图状态 ↔ URL。
+  // 恢复放在挂载后：URL 是外部输入，直接拿来做初始 state 会让 SSR 与客户端首帧不一致。
+  const switchBranchRef = useRef(switchBranch);
+  // 写 ref 放在 effect 里：渲染期写 ref 会被 react-hooks/refs 拦下
+  useEffect(() => {
+    switchBranchRef.current = switchBranch;
+  }, [switchBranch]);
+  const urlSyncReadyRef = useRef(false);
+
+  useEffect(() => {
+    const patch = decodeTimelineShare(new URLSearchParams(window.location.search));
+    // 延迟到宏任务：与解释模式 / 密度同一套做法，避免在 effect 内同步 setState
+    const timer = window.setTimeout(() => {
+      if (patch.filters) {
+        setFilters(mergeShareFilters(patch.filters));
+      }
+      if (patch.density) {
+        setDensity(patch.density);
+      }
+      if (patch.explain) {
+        setExplainMode(patch.explain);
+      }
+      if (patch.branch && patch.branch !== initialBranch) {
+        void switchBranchRef.current(patch.branch);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [initialBranch]);
+
+  // 状态变了就把 URL 同步过去（replaceState，不产生历史记录）。
+  // 首次运行跳过：此时恢复逻辑可能还没跑完，写回会把链接里的参数擦掉。
+  useEffect(() => {
+    if (!urlSyncReadyRef.current) {
+      urlSyncReadyRef.current = true;
+      return;
+    }
+    const query = encodeTimelineShare({
+      branch,
+      filters,
+      density,
+      explain: explainMode,
+    }).toString();
+    const timer = window.setTimeout(() => {
+      const url = new URL(window.location.href);
+      const next = query ? `?${query}` : "";
+      if (url.search === next) {
+        return;
+      }
+      url.search = next;
+      window.history.replaceState(null, "", url.toString());
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [branch, filters, density, explainMode]);
+
+  const shareTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (shareTimerRef.current !== null) {
+        window.clearTimeout(shareTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleShare = useCallback(async () => {
+    const query = encodeTimelineShare({
+      branch,
+      filters,
+      density,
+      explain: explainMode,
+    }).toString();
+    const url = new URL(window.location.href);
+    url.search = query;
+    const text = url.toString();
+    setShareUrl(text);
+    // 地址栏立刻对齐当前视图，用户也能直接从地址栏复制
+    window.history.replaceState(null, "", text);
+    let nextStatus: "copied" | "manual";
+    try {
+      await navigator.clipboard.writeText(text);
+      nextStatus = "copied";
+    } catch {
+      // 非安全上下文 / 无权限 / 浏览器不支持：退回「手动复制」
+      nextStatus = "manual";
+    }
+    setShareStatus(nextStatus);
+    if (shareTimerRef.current !== null) {
+      window.clearTimeout(shareTimerRef.current);
+    }
+    shareTimerRef.current = window.setTimeout(() => setShareStatus("idle"), 5000);
+  }, [branch, density, explainMode, filters]);
+
   // 选中提交：拖动结束时浏览器会补发 click，这里吞掉那一次，避免「拖完顺手打开了详情」
   const selectCommit = useCallback((commit: TimelineCommit) => {
     if (suppressRowClickRef.current) {
@@ -1090,8 +1186,57 @@ export function TimelineView({
             </select>
           </span>
           <p>{t("timeline.loadedCommits", { count: commits.length })}</p>
+          <span className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleShare()}
+              title={t("timeline.shareHint")}
+              className="flex h-7 items-center gap-1 rounded-full border border-black/[.12] px-2.5 text-xs text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/[.16] dark:text-zinc-300 dark:hover:bg-white/[.08]"
+            >
+              <svg
+                viewBox="0 0 16 16"
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                aria-hidden="true"
+              >
+                <path
+                  d="M6.5 9.5 9.5 6.5M7 4.5l1.2-1.2a2.4 2.4 0 0 1 3.4 3.4L10.4 7.9M9 11.5l-1.2 1.2a2.4 2.4 0 0 1-3.4-3.4L5.6 8.1"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {t("timeline.share")}
+            </button>
+            {shareStatus !== "idle" ? (
+              <span
+                role="status"
+                data-testid="share-status"
+                className={[
+                  "text-[11px]",
+                  shareStatus === "copied"
+                    ? "text-green-700 dark:text-green-300"
+                    : "text-amber-700 dark:text-amber-300",
+                ].join(" ")}
+              >
+                {shareStatus === "copied" ? t("timeline.shareCopied") : t("timeline.shareManual")}
+              </span>
+            ) : null}
+          </span>
         </div>
       </div>
+
+      {shareStatus === "manual" && shareUrl ? (
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+          <input
+            readOnly
+            value={shareUrl}
+            aria-label={t("timeline.share")}
+            onFocus={(event) => event.currentTarget.select()}
+            className="h-8 min-w-0 flex-1 rounded-lg border border-black/[.08] bg-white px-2 font-mono text-[11px] text-zinc-700 dark:border-white/[.145] dark:bg-zinc-950 dark:text-zinc-200"
+          />
+        </div>
+      ) : null}
 
       {/* 点击 / 键盘路径：与拖拽手势等价，可访问性与 E2E 都依赖这排按钮 */}
       {commits.length > 0 ? (
