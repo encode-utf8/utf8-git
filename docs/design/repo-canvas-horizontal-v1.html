@@ -1,0 +1,1251 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-density="comfy" data-space="even">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>仓库画布 · 横向时间轴 · 视觉方案 v2</title>
+    <style>
+      :root {
+        --lane-1: #378add;
+        --lane-2: #1d9e75;
+        --lane-3: #ba7517;
+        --lane-4: #7f77dd;
+        --lane-5: #d4537e;
+        --ok: #1d9e75;
+        --danger: #e24b4a;
+        --radius: 12px;
+        --font:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+          sans-serif;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      html[data-theme="light"] {
+        --bg: #f7f7f5;
+        --surface: #ffffff;
+        --surface-2: #f2f2ef;
+        --line: rgba(0, 0, 0, 0.09);
+        --line-strong: rgba(0, 0, 0, 0.18);
+        --text: #17171a;
+        --muted: #63636b;
+        --faint: #93939b;
+        --ghost: rgba(55, 138, 221, 0.1);
+        --edge: rgba(0, 0, 0, 0.24);
+        --rail: rgba(226, 75, 74, 0.08);
+      }
+      html[data-theme="dark"] {
+        --bg: #0b0b0c;
+        --surface: #151517;
+        --surface-2: #1d1d20;
+        --line: rgba(255, 255, 255, 0.12);
+        --line-strong: rgba(255, 255, 255, 0.24);
+        --text: #f2f2f3;
+        --muted: #a1a1a8;
+        --faint: #74747c;
+        --ghost: rgba(55, 138, 221, 0.18);
+        --edge: rgba(255, 255, 255, 0.34);
+        --rail: rgba(226, 75, 74, 0.16);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 13px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 20px 48px;
+      }
+      .head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .sub {
+        margin: 6px 0 0;
+        max-width: 620px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .seg {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 2px;
+        border: 0.5px solid var(--line);
+        border-radius: 999px;
+        background: var(--surface);
+      }
+      .seg > span {
+        padding: 0 8px;
+        color: var(--faint);
+        font-size: 11px;
+      }
+      .seg button {
+        height: 24px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        font-family: inherit;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--text);
+        color: var(--surface);
+      }
+
+      /* ---------- 画布 ---------- */
+      .canvas {
+        position: relative;
+        margin-top: 18px;
+        border: 0.5px solid var(--line);
+        border-radius: 16px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+      /* 分支方块：固定顶栏，不随横向滚动 */
+      .branch-band {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 0.5px solid var(--line);
+        background: linear-gradient(180deg, var(--surface), var(--surface-2));
+      }
+      .band-label {
+        margin-right: 2px;
+        color: var(--faint);
+        font-size: 11px;
+      }
+      .block {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 30px;
+        padding: 0 12px 0 10px;
+        border: 0.5px solid var(--line-strong);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text);
+        font-size: 12px;
+        cursor: grab;
+        user-select: none;
+      }
+      .block .bdot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--lane-1);
+      }
+      .block[data-current="true"] {
+        border-color: var(--text);
+        background: var(--text);
+        color: var(--surface);
+      }
+      .block[data-current="true"] .bdot {
+        background: var(--surface);
+      }
+      .block .tag {
+        color: var(--faint);
+        font-size: 10px;
+      }
+      .block[data-current="true"] .tag {
+        color: color-mix(in srgb, var(--surface) 70%, transparent);
+      }
+      .block.target {
+        box-shadow: 0 0 0 2px var(--lane-1);
+      }
+      .block.dragging {
+        opacity: 0.45;
+      }
+      .band-hint {
+        margin-left: auto;
+        color: var(--faint);
+        font-size: 10px;
+      }
+
+      /* 横向滚动区 */
+      .scroller {
+        position: relative;
+        height: 420px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        cursor: grab;
+      }
+      .scroller.panning {
+        cursor: grabbing;
+      }
+      .stage {
+        position: relative;
+        height: 100%;
+        min-width: 100%;
+      }
+      .ruler {
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 34px;
+        border-bottom: 0.5px dashed var(--line);
+      }
+      .tick {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        border-left: 0.5px solid var(--line);
+      }
+      .axis-hint {
+        position: absolute;
+        top: 8px;
+        color: var(--faint);
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .tick span {
+        position: absolute;
+        top: 8px;
+        left: 6px;
+        color: var(--faint);
+        font-family: var(--mono);
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      #lanes {
+        position: absolute;
+        inset: 34px 0 0 0;
+        overflow: visible;
+      }
+      .card {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 1px;
+        padding: 4px 8px 4px 10px;
+        border: 0.5px solid var(--line-strong);
+        border-radius: 8px;
+        background: var(--surface);
+        cursor: grab;
+        user-select: none;
+        transition:
+          box-shadow 0.12s ease,
+          transform 0.12s ease;
+      }
+      .card:hover {
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      }
+      .card .dot {
+        position: absolute;
+        left: -4px;
+        top: 50%;
+        width: 8px;
+        height: 8px;
+        margin-top: -4px;
+        border-radius: 50%;
+        background: var(--lane-1);
+        box-shadow: 0 0 0 2px var(--surface);
+      }
+      .card .msg {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .card .meta {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--faint);
+        font-family: var(--mono);
+        font-size: 10px;
+      }
+      .card .badges {
+        position: absolute;
+        right: 6px;
+        top: -8px;
+        display: flex;
+        gap: 3px;
+      }
+      .badge {
+        padding: 0 5px;
+        border: 0.5px solid var(--line-strong);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 14px;
+      }
+      .badge.merge {
+        border-color: #e8b98a;
+        color: #8a4b12;
+      }
+      .badge.pr {
+        border-color: #9fd6c0;
+        color: #146b52;
+      }
+      .card.selected {
+        border-color: var(--lane-1);
+        box-shadow: 0 0 0 2px var(--ghost);
+      }
+
+      /* 删除竖轨 */
+      .trash {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        display: flex;
+        width: 54px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-left: 0.5px solid #f0b4b3;
+        background: var(--rail);
+        color: #c2403f;
+        font-size: 10px;
+        writing-mode: vertical-rl;
+        pointer-events: none;
+      }
+      .trash svg {
+        width: 16px;
+        height: 16px;
+      }
+      .trash.over {
+        background: var(--danger);
+        color: #fff;
+        border-left-color: var(--danger);
+      }
+      .trash.armed {
+        border-left-color: #e88b8a;
+        color: #c2403f;
+      }
+
+      /* 详情卡 */
+      .detail {
+        position: absolute;
+        right: 70px;
+        bottom: 16px;
+        width: 300px;
+        padding: 12px 14px;
+        border: 0.5px solid var(--line-strong);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.14);
+        opacity: 0;
+        transform: translateY(6px);
+        transition:
+          opacity 0.15s ease,
+          transform 0.15s ease;
+        pointer-events: none;
+      }
+      .detail.on {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+      .detail .dlabel {
+        display: inline-block;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: var(--ghost);
+        color: #2f6fb5;
+        font-size: 10px;
+      }
+      .detail h3 {
+        margin: 6px 0 2px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .detail .dmeta {
+        color: var(--faint);
+        font-family: var(--mono);
+        font-size: 10px;
+      }
+      .detail .dfiles {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 0.5px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      /* 命名气泡 */
+      .pop {
+        position: absolute;
+        z-index: 40;
+        display: none;
+        width: 210px;
+        padding: 10px;
+        border: 0.5px solid var(--line-strong);
+        border-radius: 10px;
+        background: var(--surface);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+      }
+      .pop.on {
+        display: block;
+      }
+      .pop p {
+        margin: 0 0 6px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .pop input {
+        width: 100%;
+        height: 28px;
+        padding: 0 8px;
+        border: 0.5px solid var(--line-strong);
+        border-radius: 7px;
+        background: var(--surface);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      .pop .row {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .pop button {
+        height: 24px;
+        padding: 0 10px;
+        border: 0.5px solid var(--line-strong);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--muted);
+        font-family: inherit;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .pop button.primary {
+        border-color: var(--text);
+        background: var(--text);
+        color: var(--surface);
+      }
+
+      /* 跟手 ghost */
+      .ghost {
+        position: fixed;
+        z-index: 60;
+        display: none;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 9px;
+        border: 0.5px solid var(--lane-1);
+        border-radius: 999px;
+        background: var(--surface);
+        color: #2f6fb5;
+        font-size: 11px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+        pointer-events: none;
+      }
+      .ghost.on {
+        display: flex;
+      }
+
+      .toast {
+        position: absolute;
+        left: 50%;
+        bottom: 14px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        background: var(--text);
+        color: var(--surface);
+        font-size: 11px;
+        opacity: 0;
+        transform: translate(-50%, 6px);
+        transition:
+          opacity 0.15s ease,
+          transform 0.15s ease;
+        pointer-events: none;
+      }
+      .toast.on {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      /* ---------- 说明 ---------- */
+      .notes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 14px;
+        margin-top: 22px;
+      }
+      .note {
+        padding: 14px 16px;
+        border: 0.5px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface);
+      }
+      .note h2 {
+        margin: 0 0 6px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .note p,
+      .note li {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.7;
+      }
+      .note ul {
+        margin: 0;
+        padding-left: 16px;
+      }
+      .kbd {
+        padding: 1px 5px;
+        border: 0.5px solid var(--line-strong);
+        border-radius: 4px;
+        font-family: var(--mono);
+        font-size: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="head">
+        <div>
+          <h1>仓库画布 · 横向时间轴 v2</h1>
+          <p class="sub">
+            分支方块在上、提交记录在下，时间沿左右轴推进；所有可拖元素都在同一张画布内。拖动空白处可横向平移，拖动提交可建分支，拖动分支方块可开
+            PR / 删除。
+          </p>
+        </div>
+        <div class="controls">
+          <div class="seg" data-key="space">
+            <span>间距</span>
+            <button data-val="even" aria-pressed="true">等距</button>
+            <button data-val="time" aria-pressed="false">时间比例</button>
+          </div>
+          <div class="seg" data-key="dir">
+            <span>方向</span>
+            <button data-val="ltr" aria-pressed="true">左旧右新</button>
+            <button data-val="rtl" aria-pressed="false">左新右旧</button>
+          </div>
+          <div class="seg" data-key="density">
+            <span>密度</span>
+            <button data-val="comfy" aria-pressed="true">舒适</button>
+            <button data-val="compact" aria-pressed="false">紧凑</button>
+          </div>
+          <div class="seg" data-key="theme">
+            <span>主题</span>
+            <button data-val="light" aria-pressed="true">浅色</button>
+            <button data-val="dark" aria-pressed="false">深色</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="canvas" id="canvas">
+        <div class="branch-band" id="branchBand">
+          <span class="band-label">分支</span>
+          <span class="band-hint">拖到另一个分支 = 开 PR · 拖到右侧竖轨 = 删除</span>
+        </div>
+
+        <div class="scroller" id="scroller">
+          <div class="stage" id="stage">
+            <div class="ruler" id="ruler"></div>
+            <svg id="lanes"></svg>
+            <div id="cards"></div>
+          </div>
+        </div>
+
+        <div class="trash" id="trash" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M6 7h12m-9 0v12m6-12v12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 .8 13a1 1 0 0 0 1 1h7.4a1 1 0 0 0 1-1L18 7"
+            />
+          </svg>
+          拖到此删除
+        </div>
+
+        <div class="detail" id="detail">
+          <span class="dlabel">提交详情</span>
+          <h3 id="dTitle">—</h3>
+          <p class="dmeta" id="dMeta">—</p>
+          <p class="dfiles" id="dFiles">—</p>
+        </div>
+
+        <div class="pop" id="pop">
+          <p id="popTitle">从 c3d09f5 新建分支</p>
+          <input id="popInput" value="feature/c3d09" />
+          <div class="row">
+            <button type="button" id="popCancel">取消</button>
+            <button type="button" class="primary" id="popOk">建分支 ⏎</button>
+          </div>
+        </div>
+
+        <div class="toast" id="toast"></div>
+      </section>
+
+      <div class="ghost" id="ghost"></div>
+
+      <section class="notes">
+        <div class="note">
+          <h2>① 轴向怎么定</h2>
+          <p>
+            横轴 = 时间，纵轴 = 泳道（原泳道图旋转
+            90°）。左旧右新是默认，切「左新右旧」后最新提交贴在左端。
+          </p>
+        </div>
+        <div class="note">
+          <h2>② 间距两种口径</h2>
+          <ul>
+            <li><b>等距</b>：每条提交固定宽度，密、好扫读，但时间不成比例。</li>
+            <li>
+              <b>时间比例</b>：x
+              与真实时间成正比，会出现空档（仓库沉寂期），但时间刷子能和画布对齐。
+            </li>
+          </ul>
+        </div>
+        <div class="note">
+          <h2>③ 分支方块的位置</h2>
+          <p>
+            当前是固定顶栏（永远可见、拖拽目标稳定）。另一种是「跟随 tip
+            提交」贴在对应泳道上方，随横向滚动移动，视觉上更能说明分支属于哪条线，但分支多时会重叠。
+          </p>
+        </div>
+        <div class="note">
+          <h2>④ 保留与变化</h2>
+          <p>
+            保留：拖提交建分支、拖方块开
+            PR、拖到竖轨删除、点节点看详情、时间刷子、筛选与分享链接。<br />
+            变化：虚拟窗口从「按 scrollTop 切片」改为「按 scrollLeft 切片」；行高语义改为泳道高度。
+          </p>
+        </div>
+        <div class="note">
+          <h2>⑤ 落地代价</h2>
+          <ul>
+            <li>
+              虚拟窗口从 scrollTop 改 scrollLeft：列宽固定，算法同构，改动集中在切片与行渲染。
+            </li>
+            <li>行高语义变成泳道高度；密度 36/52 改为泳道间距 48/64。</li>
+            <li>等距模式下时间刷子与画布不同构（刷子按时间比例），需二选一或让刷子也按序号。</li>
+            <li>横向滚动手势与拖拽在触摸端冲突更明显，需长按阈值。</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      (function () {
+        var LANES = 4;
+        var laneColor = ["#378add", "#1d9e75", "#ba7517", "#7f77dd"];
+        var commits = [
+          {
+            lane: 0,
+            t: "2026-07-02",
+            sha: "d51c8e2",
+            msg: "docs: M4 退出标准核对清单",
+            who: "ada",
+          },
+          {
+            lane: 3,
+            t: "2026-07-06",
+            sha: "7c1e5a9",
+            msg: "chore: prettier 门禁进 CI",
+            who: "bot",
+          },
+          { lane: 0, t: "2026-07-11", sha: "0ab3f61", msg: "feat: 可访问性审查修复", who: "ada" },
+          { lane: 1, t: "2026-07-15", sha: "e47a0c6", msg: "test: 写接口契约层 E2E", who: "lin" },
+          { lane: 0, t: "2026-07-19", sha: "2f9d3b7", msg: "feat: 服务端泳道布局缓存", who: "ada" },
+          {
+            lane: 2,
+            t: "2026-07-24",
+            sha: "a05f9c1",
+            msg: "feat: 概念解释层与术语卡片",
+            who: "ada",
+            merge: true,
+          },
+          {
+            lane: 0,
+            t: "2026-07-28",
+            sha: "6d2b8e4",
+            msg: "docs: 自建与自部署指南",
+            who: "ada",
+            issue: "#301",
+          },
+          {
+            lane: 1,
+            t: "2026-08-02",
+            sha: "1e6c7d3",
+            msg: "fix: 幂等重放窗口收敛到 10 分钟",
+            who: "lin",
+          },
+          {
+            lane: 0,
+            t: "2026-08-07",
+            sha: "88a1b47",
+            msg: "chore: 依赖更新与安全扫描",
+            who: "bot",
+          },
+          {
+            lane: 1,
+            t: "2026-08-12",
+            sha: "c3d09f5",
+            msg: "feat: 写操作统一管线（确认 + 幂等 + 审计）",
+            who: "lin",
+            pr: "#208",
+          },
+          {
+            lane: 0,
+            t: "2026-08-18",
+            sha: "4b71e02",
+            msg: "fix: 游标过期时回退到第一页",
+            who: "ada",
+          },
+          {
+            lane: 2,
+            t: "2026-08-23",
+            sha: "9f2c1a8",
+            msg: "feat: 时间线泳道渲染与虚拟窗口",
+            who: "ada",
+            pr: "#212",
+          },
+          {
+            lane: 0,
+            t: "2026-08-29",
+            sha: "3ab7c14",
+            msg: "refactor: 拆分 commit 归一化",
+            who: "lin",
+          },
+          {
+            lane: 1,
+            t: "2026-09-03",
+            sha: "b62d0e9",
+            msg: "feat: 分支芯片条替代下拉框",
+            who: "ada",
+          },
+          {
+            lane: 0,
+            t: "2026-09-09",
+            sha: "c19f4a7",
+            msg: "feat: 删除区改为右侧竖轨",
+            who: "ada",
+            merge: true,
+          },
+          {
+            lane: 3,
+            t: "2026-09-14",
+            sha: "5e8b2c1",
+            msg: "test: 手势类用例改用预置数据",
+            who: "lin",
+          },
+          {
+            lane: 1,
+            t: "2026-09-19",
+            sha: "f03a9d2",
+            msg: "feat: 时间刷子（可拖时间窗）",
+            who: "ada",
+          },
+          {
+            lane: 0,
+            t: "2026-09-24",
+            sha: "7d41e8b",
+            msg: "feat: 手势速查与边缘自动滚动",
+            who: "ada",
+            pr: "#241",
+          },
+          {
+            lane: 2,
+            t: "2026-09-29",
+            sha: "8c25f60",
+            msg: "feat: 分享链接（视图状态进 URL）",
+            who: "lin",
+          },
+          { lane: 0, t: "2026-10-05", sha: "a71b3c9", msg: "perf: 拖拽按帧合并", who: "ada" },
+          { lane: 1, t: "2026-10-10", sha: "2e9d6b4", msg: "fix: 紧凑行补回概念提示", who: "ada" },
+          {
+            lane: 0,
+            t: "2026-10-14",
+            sha: "6f0c8d1",
+            msg: "feat: 横向时间轴画布（本原型）",
+            who: "ada",
+            pr: "#268",
+          },
+        ];
+        var branches = [
+          { name: "main", lane: 0, tip: 21, current: true },
+          { name: "feature/e2e", lane: 1, tip: 20 },
+          { name: "junk/delete-me", lane: 3, tip: 15 },
+        ];
+
+        var root = document.documentElement;
+        var scroller = document.getElementById("scroller");
+        var stage = document.getElementById("stage");
+        var ruler = document.getElementById("ruler");
+        var lanes = document.getElementById("lanes");
+        var cardsBox = document.getElementById("cards");
+        var band = document.getElementById("branchBand");
+        var trash = document.getElementById("trash");
+        var ghost = document.getElementById("ghost");
+        var pop = document.getElementById("pop");
+        var popInput = document.getElementById("popInput");
+        var popTitle = document.getElementById("popTitle");
+        var toast = document.getElementById("toast");
+        var detail = document.getElementById("detail");
+
+        var state = { space: "even", dir: "ltr", density: "comfy", selected: null };
+        var layout = { x: [], laneY: [], width: 0, laneGap: 0, cardW: 0, cardH: 0 };
+
+        function metrics() {
+          return state.density === "compact"
+            ? { laneGap: 48, cardW: 112, cardH: 34, padX: 28 }
+            : { laneGap: 64, cardW: 132, cardH: 44, padX: 36 };
+        }
+
+        function computeLayout() {
+          var m = metrics();
+          var n = commits.length;
+          var xs = new Array(n);
+          var i;
+          if (state.space === "even") {
+            for (i = 0; i < n; i += 1) xs[i] = m.padX + i * (m.cardW + 22);
+          } else {
+            var t0 = Date.parse(commits[0].t);
+            var t1 = Date.parse(commits[n - 1].t);
+            var span = Math.max(1, t1 - t0);
+            var width = Math.max(1400, n * 92);
+            for (i = 0; i < n; i += 1) {
+              xs[i] = m.padX + ((Date.parse(commits[i].t) - t0) / span) * width;
+            }
+          }
+          if (state.space === "time") {
+            // 时间比例会让相邻提交挤在一起（甚至重叠）：按泳道做一次单调修正，
+            // 保证同泳道内后一条至少比前一条右移一个卡片宽 + 间隙
+            var lastX = {};
+            for (i = 0; i < n; i += 1) {
+              var lane = commits[i].lane;
+              if (lastX[lane] !== undefined) {
+                xs[i] = Math.max(xs[i], lastX[lane] + m.cardW + 10);
+              }
+              lastX[lane] = xs[i];
+            }
+          }
+          if (state.dir === "rtl") {
+            var maxX = Math.max.apply(null, xs);
+            xs = xs.map(function (x) {
+              return maxX - x + m.padX;
+            });
+          }
+          layout.x = xs;
+          // 右侧竖轨压住 54px：宽度补出来，滚到最右时最后一张卡片才不被盖住
+          layout.width = Math.max.apply(null, xs) + m.cardW + m.padX + 54;
+          layout.laneGap = m.laneGap;
+          layout.cardW = m.cardW;
+          layout.cardH = m.cardH;
+          layout.laneY = [];
+          for (i = 0; i < LANES; i += 1) {
+            layout.laneY.push(34 + 30 + i * m.laneGap);
+          }
+          // 竖轨从分支栏下方开始：顶栏是固定表头，不该被删除区压住
+          trash.style.top = band.offsetHeight + "px";
+          stage.style.width = layout.width + "px";
+          var stageHeight = 34 + 30 + (LANES - 1) * m.laneGap + 52;
+          stage.style.height = stageHeight + "px";
+          scroller.style.height = stageHeight + "px";
+        }
+
+        function renderRuler() {
+          ruler.innerHTML = "";
+          var leftLabel = document.createElement("span");
+          leftLabel.className = "axis-hint";
+          leftLabel.style.left = "10px";
+          leftLabel.textContent = "← 更早";
+          ruler.appendChild(leftLabel);
+          var rightLabel = document.createElement("span");
+          rightLabel.className = "axis-hint";
+          rightLabel.style.left = layout.width - 128 + "px";
+          rightLabel.textContent = "更新 →";
+          ruler.appendChild(rightLabel);
+          var seenMonth = {};
+          commits.forEach(function (c, i) {
+            var show = false;
+            if (state.space === "even") {
+              show = i % 3 === 0;
+            } else {
+              var month = c.t.slice(0, 7);
+              if (!seenMonth[month]) {
+                seenMonth[month] = true;
+                show = true;
+              }
+            }
+            if (!show) return;
+            var tick = document.createElement("div");
+            tick.className = "tick";
+            tick.style.left = layout.x[i] + "px";
+            var label = document.createElement("span");
+            label.textContent = c.t;
+            tick.appendChild(label);
+            ruler.appendChild(tick);
+          });
+        }
+
+        function renderLanes() {
+          lanes.innerHTML = "";
+          lanes.setAttribute("width", layout.width);
+          lanes.setAttribute("height", stage.style.height);
+          var top = 30;
+          layout.laneY.forEach(function (y, lane) {
+            var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", 8);
+            line.setAttribute("x2", layout.width - 8);
+            line.setAttribute("y1", y - 34);
+            line.setAttribute("y2", y - 34);
+            line.setAttribute("stroke", laneColor[lane % laneColor.length]);
+            line.setAttribute("stroke-opacity", "0.35");
+            line.setAttribute("stroke-width", "2");
+            line.setAttribute("stroke-linecap", "round");
+            lanes.appendChild(line);
+          });
+        }
+
+        function renderCards() {
+          cardsBox.innerHTML = "";
+          commits.forEach(function (c, i) {
+            var card = document.createElement("div");
+            card.className = "card";
+            card.dataset.index = String(i);
+            card.style.left = layout.x[i] + "px";
+            card.style.top = layout.laneY[c.lane] - layout.cardH / 2 + "px";
+            card.style.width = layout.cardW + "px";
+            card.style.height = layout.cardH + "px";
+            if (state.selected === i) card.classList.add("selected");
+
+            var dot = document.createElement("span");
+            dot.className = "dot";
+            dot.style.background = laneColor[c.lane % laneColor.length];
+            card.appendChild(dot);
+
+            var msg = document.createElement("span");
+            msg.className = "msg";
+            msg.textContent = c.msg;
+            card.appendChild(msg);
+
+            var meta = document.createElement("span");
+            meta.className = "meta";
+            meta.textContent = c.sha + " · " + c.who;
+            card.appendChild(meta);
+
+            var badges = document.createElement("span");
+            badges.className = "badges";
+            if (c.merge) {
+              var mb = document.createElement("span");
+              mb.className = "badge merge";
+              mb.textContent = "merge";
+              badges.appendChild(mb);
+            }
+            if (c.pr) {
+              var pb = document.createElement("span");
+              pb.className = "badge pr";
+              pb.textContent = c.pr;
+              badges.appendChild(pb);
+            }
+            if (c.issue) {
+              var ib = document.createElement("span");
+              ib.className = "badge";
+              ib.textContent = c.issue;
+              badges.appendChild(ib);
+            }
+            if (badges.children.length) card.appendChild(badges);
+
+            cardsBox.appendChild(card);
+          });
+        }
+
+        function renderBranches() {
+          band.querySelectorAll(".block").forEach(function (el) {
+            el.remove();
+          });
+          branches.forEach(function (b) {
+            var el = document.createElement("div");
+            el.className = "block";
+            el.dataset.branch = b.name;
+            el.dataset.current = String(!!b.current);
+            var dot = document.createElement("span");
+            dot.className = "bdot";
+            dot.style.background = laneColor[b.lane % laneColor.length];
+            el.appendChild(dot);
+            el.appendChild(document.createTextNode(b.name));
+            if (b.current) {
+              var tag = document.createElement("span");
+              tag.className = "tag";
+              tag.textContent = "当前";
+              el.appendChild(tag);
+            }
+            band.insertBefore(el, band.querySelector(".band-hint"));
+          });
+        }
+
+        function render() {
+          computeLayout();
+          renderRuler();
+          renderLanes();
+          renderCards();
+          renderBranches();
+        }
+
+        function toastShow(text) {
+          toast.textContent = text;
+          toast.classList.add("on");
+          window.clearTimeout(toastShow.timer);
+          toastShow.timer = window.setTimeout(function () {
+            toast.classList.remove("on");
+          }, 2200);
+        }
+
+        /* ---------- 平移 ---------- */
+        var pan = null;
+        scroller.addEventListener("pointerdown", function (event) {
+          if (event.target.closest(".card")) return;
+          if (event.pointerType !== "mouse" || event.button !== 0) return;
+          pan = { x: event.clientX, left: scroller.scrollLeft };
+          scroller.classList.add("panning");
+          window.addEventListener("pointermove", onPanMove);
+          window.addEventListener("pointerup", onPanUp);
+        });
+        function onPanMove(event) {
+          if (!pan) return;
+          scroller.scrollLeft = pan.left - (event.clientX - pan.x);
+        }
+        function onPanUp() {
+          pan = null;
+          scroller.classList.remove("panning");
+          window.removeEventListener("pointermove", onPanMove);
+          window.removeEventListener("pointerup", onPanUp);
+        }
+
+        /* ---------- 拖提交 ---------- */
+        var drag = null;
+        cardsBox.addEventListener("pointerdown", function (event) {
+          var card = event.target.closest(".card");
+          if (!card) return;
+          if (event.pointerType !== "mouse" || event.button !== 0) return;
+          var index = Number(card.dataset.index);
+          drag = {
+            kind: "commit",
+            index: index,
+            startX: event.clientX,
+            startY: event.clientY,
+            moved: false,
+            card: card,
+          };
+          window.addEventListener("pointermove", onDragMove);
+          window.addEventListener("pointerup", onDragUp);
+        });
+
+        function onDragMove(event) {
+          if (!drag) return;
+          var dx = event.clientX - drag.startX;
+          var dy = event.clientY - drag.startY;
+          if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+          if (!drag.moved) {
+            drag.moved = true;
+            drag.card.classList.add("dragging");
+            drag.card.style.opacity = "0.45";
+            ghost.classList.add("on");
+            ghost.textContent =
+              drag.kind === "commit" ? "拖到空白处建分支" : "拖到另一个分支开 PR / 拖到右侧删除";
+          }
+          ghost.style.left = event.clientX + 14 + "px";
+          ghost.style.top = event.clientY + 14 + "px";
+          if (drag.kind === "branch") {
+            updateBranchHover(event);
+          }
+        }
+
+        function onDragUp(event) {
+          window.removeEventListener("pointermove", onDragMove);
+          window.removeEventListener("pointerup", onDragUp);
+          if (!drag) return;
+          var current = drag;
+          drag = null;
+          ghost.classList.remove("on");
+          if (current.card) {
+            current.card.style.opacity = "";
+            current.card.classList.remove("dragging");
+          }
+          band.querySelectorAll(".block").forEach(function (el) {
+            el.classList.remove("target");
+          });
+          trash.classList.remove("over", "armed");
+
+          if (!current.moved) {
+            if (current.kind === "commit") openDetail(current.index);
+            return;
+          }
+          if (current.kind === "commit") {
+            var rect = document.getElementById("canvas").getBoundingClientRect();
+            var inside =
+              event.clientX >= rect.left &&
+              event.clientX <= rect.right &&
+              event.clientY >= rect.top &&
+              event.clientY <= rect.bottom;
+            if (inside) openPop(current.index, event);
+            return;
+          }
+          // 分支方块
+          var overTrash =
+            trash.classList.contains("over") || pointInRect(event, trash.getBoundingClientRect());
+          if (overTrash) {
+            toastShow("已发起删除：" + current.name + "（仍需确认）");
+            return;
+          }
+          var target = current.hoverTarget;
+          if (target && target !== current.name) {
+            toastShow("将创建 PR：" + current.name + " → " + target);
+          }
+        }
+
+        function pointInRect(event, rect) {
+          return (
+            event.clientX >= rect.left &&
+            event.clientX <= rect.right &&
+            event.clientY >= rect.top &&
+            event.clientY <= rect.bottom
+          );
+        }
+
+        function updateBranchHover(event) {
+          var hovered = null;
+          band.querySelectorAll(".block").forEach(function (el) {
+            if (el.dataset.branch === drag.name) return;
+            var rect = el.getBoundingClientRect();
+            var hit = pointInRect(event, rect);
+            el.classList.toggle("target", hit);
+            if (hit) hovered = el.dataset.branch;
+          });
+          drag.hoverTarget = hovered;
+          var overTrash = pointInRect(event, trash.getBoundingClientRect());
+          trash.classList.toggle("over", overTrash);
+          if (hovered) {
+            ghost.textContent = "松手向 " + hovered + " 开 PR";
+          } else if (overTrash) {
+            ghost.textContent = "松手删除";
+          } else {
+            ghost.textContent = "拖到另一个分支开 PR / 拖到右侧删除";
+          }
+        }
+
+        /* ---------- 拖分支方块 ---------- */
+        band.addEventListener("pointerdown", function (event) {
+          var block = event.target.closest(".block");
+          if (!block) return;
+          if (event.pointerType !== "mouse" || event.button !== 0) return;
+          drag = {
+            kind: "branch",
+            name: block.dataset.branch,
+            startX: event.clientX,
+            startY: event.clientY,
+            moved: false,
+            card: block,
+            hoverTarget: null,
+          };
+          window.addEventListener("pointermove", onDragMove);
+          window.addEventListener("pointerup", onDragUp);
+        });
+
+        /* ---------- 详情 / 命名 ---------- */
+        function openDetail(index) {
+          var c = commits[index];
+          state.selected = index;
+          renderCards();
+          document.getElementById("dTitle").textContent = c.msg;
+          document.getElementById("dMeta").textContent = c.sha + " · " + c.who + " · " + c.t;
+          document.getElementById("dFiles").textContent =
+            "4 个文件 · +126 −18 · 泳道 " + (c.lane + 1);
+          detail.classList.add("on");
+        }
+
+        function openPop(index, event) {
+          var c = commits[index];
+          var rect = document.getElementById("canvas").getBoundingClientRect();
+          popTitle.textContent = "从 " + c.sha + " 新建分支";
+          popInput.value = "feature/" + c.sha.slice(0, 5);
+          pop.classList.add("on");
+          var left = event.clientX - rect.left + 12;
+          var top = event.clientY - rect.top + 12;
+          var maxLeft = rect.width - 230 - 60; // 60 = 右侧竖轨 + 留白
+          var maxTop = rect.height - 120;
+          pop.style.left = Math.max(8, Math.min(left, maxLeft)) + "px";
+          pop.style.top = Math.max(8, Math.min(top, maxTop)) + "px";
+          popInput.focus();
+          popInput.select();
+        }
+        document.getElementById("popCancel").addEventListener("click", function () {
+          pop.classList.remove("on");
+        });
+        document.getElementById("popOk").addEventListener("click", function () {
+          pop.classList.remove("on");
+          toastShow("已创建分支 " + popInput.value);
+        });
+        detail.addEventListener("pointerdown", function (event) {
+          if (event.target === detail) detail.classList.remove("on");
+        });
+        document.addEventListener("pointerdown", function (event) {
+          if (!event.target.closest(".card") && !event.target.closest(".pop")) {
+            if (!pop.contains(event.target)) pop.classList.remove("on");
+          }
+        });
+
+        /* ---------- 开关 ---------- */
+        document.querySelectorAll(".seg").forEach(function (seg) {
+          seg.addEventListener("click", function (event) {
+            var button = event.target.closest("button");
+            if (!button) return;
+            var key = seg.dataset.key;
+            var value = button.dataset.val;
+            seg.querySelectorAll("button").forEach(function (item) {
+              item.setAttribute("aria-pressed", String(item === button));
+            });
+            if (key === "theme") {
+              root.dataset.theme = value;
+              return;
+            }
+            if (key === "density") {
+              root.dataset.density = value;
+              state.density = value;
+            }
+            if (key === "space") state.space = value;
+            if (key === "dir") state.dir = value;
+            render();
+            scroller.scrollLeft = state.dir === "ltr" ? scroller.scrollWidth : 0;
+          });
+        });
+
+        render();
+        // 默认贴到「最新」一端
+        scroller.scrollLeft = state.dir === "ltr" ? scroller.scrollWidth : 0;
+      })();
+    </script>
+  </body>
+</html>
