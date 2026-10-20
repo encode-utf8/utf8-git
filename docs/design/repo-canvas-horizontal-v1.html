@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light" data-density="comfy" data-space="even">
+<html lang="zh-CN" data-theme="light" data-density="comfy" data-space="time">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -145,6 +145,7 @@
       }
       .block {
         position: relative;
+        white-space: nowrap;
         display: flex;
         align-items: center;
         gap: 6px;
@@ -189,6 +190,38 @@
         margin-left: auto;
         color: var(--faint);
         font-size: 10px;
+      }
+
+      /* 跟随模式：分支方块在画布内，横向随 tip 提交滚动 */
+      .branch-layer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 76px;
+        z-index: 3;
+      }
+      .block.follow {
+        position: absolute;
+        height: 28px;
+        padding: 0 10px 0 8px;
+      }
+      #lanes {
+        z-index: 0;
+      }
+      #overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        overflow: visible;
+        pointer-events: none;
+      }
+      .card {
+        z-index: 2;
+      }
+      .card.tip {
+        box-shadow:
+          0 0 0 2px var(--surface),
+          0 0 0 4px var(--tip-color, var(--lane-1));
       }
 
       /* 横向滚动区 */
@@ -553,8 +586,13 @@
         <div class="controls">
           <div class="seg" data-key="space">
             <span>间距</span>
-            <button data-val="even" aria-pressed="true">等距</button>
-            <button data-val="time" aria-pressed="false">时间比例</button>
+            <button data-val="even" aria-pressed="false">等距</button>
+            <button data-val="time" aria-pressed="true">时间比例</button>
+          </div>
+          <div class="seg" data-key="branch">
+            <span>分支方块</span>
+            <button data-val="follow" aria-pressed="true">跟随 tip</button>
+            <button data-val="fixed" aria-pressed="false">固定顶栏</button>
           </div>
           <div class="seg" data-key="dir">
             <span>方向</span>
@@ -584,7 +622,9 @@
           <div class="stage" id="stage">
             <div class="ruler" id="ruler"></div>
             <svg id="lanes"></svg>
+            <svg id="overlay"></svg>
             <div id="cards"></div>
+            <div class="branch-layer" id="branchLayer"></div>
           </div>
         </div>
 
@@ -622,9 +662,8 @@
               stroke="currentColor"
               stroke-width="2"
               stroke-linecap="round"
-            />
-          </svg>
-          曲线 = 分叉 / 合并（父子关系）
+            /></svg
+          ><span id="legendText">曲线 = 分叉 / 合并（父子关系）</span>
         </div>
 
         <div class="toast" id="toast"></div>
@@ -653,8 +692,10 @@
         <div class="note">
           <h2>③ 分支方块的位置</h2>
           <p>
-            当前是固定顶栏（永远可见、拖拽目标稳定）。另一种是「跟随 tip
-            提交」贴在对应泳道上方，随横向滚动移动，视觉上更能说明分支属于哪条线，但分支多时会重叠。
+            默认「跟随
+            tip」：方块贴在它指向的那次提交上方，随横向滚动移动；悬停方块会高亮该提交并画虚线连过去，两个
+            tip 时间接近时自动错到第二行。代价是 tip 相距很远时两个方块不会同时在屏幕里，拖拽开 PR
+            要先滚动。切「固定顶栏」则永远可见、拖拽目标稳定，但看不出分支指向哪次提交。
           </p>
         </div>
         <div class="note">
@@ -860,6 +901,8 @@
         var lanes = document.getElementById("lanes");
         var cardsBox = document.getElementById("cards");
         var band = document.getElementById("branchBand");
+        var branchLayer = document.getElementById("branchLayer");
+        var canvasEl = document.getElementById("canvas");
         var trash = document.getElementById("trash");
         var ghost = document.getElementById("ghost");
         var pop = document.getElementById("pop");
@@ -868,7 +911,13 @@
         var toast = document.getElementById("toast");
         var detail = document.getElementById("detail");
 
-        var state = { space: "even", dir: "ltr", density: "comfy", selected: null };
+        var state = {
+          space: "time",
+          dir: "ltr",
+          density: "comfy",
+          selected: null,
+          branchMode: "follow",
+        };
         var layout = { x: [], laneY: [], width: 0, laneGap: 0, cardW: 0, cardH: 0 };
 
         function metrics() {
@@ -917,14 +966,21 @@
           layout.laneGap = m.laneGap;
           layout.cardW = m.cardW;
           layout.cardH = m.cardH;
+          // 跟随模式在画布顶部留出两行分支方块的空间（76px）
+          var topOffset = state.branchMode === "follow" ? 76 : 0;
+          layout.topOffset = topOffset;
+          layout.laneBase = topOffset + 34; // 泳道坐标系原点（标尺下方）
           layout.laneY = [];
           for (i = 0; i < LANES; i += 1) {
-            layout.laneY.push(34 + 30 + i * m.laneGap);
+            layout.laneY.push(layout.laneBase + 30 + i * m.laneGap);
           }
-          // 竖轨从分支栏下方开始：顶栏是固定表头，不该被删除区压住
-          trash.style.top = band.offsetHeight + "px";
+          ruler.style.top = topOffset + "px";
+          lanes.style.top = layout.laneBase + "px";
+          // 竖轨避开顶栏（固定模式）或分支方块区（跟随模式）
+          trash.style.top =
+            (state.branchMode === "follow" ? layout.laneBase : band.offsetHeight) + "px";
           stage.style.width = layout.width + "px";
-          var stageHeight = 34 + 30 + (LANES - 1) * m.laneGap + 52;
+          var stageHeight = layout.laneBase + 30 + (LANES - 1) * m.laneGap + 52;
           stage.style.height = stageHeight + "px";
           scroller.style.height = stageHeight + "px";
         }
@@ -973,8 +1029,8 @@
             var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
             line.setAttribute("x1", 8);
             line.setAttribute("x2", layout.width - 8);
-            line.setAttribute("y1", y - 34);
-            line.setAttribute("y2", y - 34);
+            line.setAttribute("y1", y - layout.laneBase);
+            line.setAttribute("y2", y - layout.laneBase);
             line.setAttribute("stroke", laneColor[lane % laneColor.length]);
             line.setAttribute("stroke-opacity", "0.16");
             line.setAttribute("stroke-width", "2");
@@ -994,9 +1050,9 @@
               var parent = commits[parentIndex];
               if (!parent || parent.lane === commit.lane) return;
               var x1 = layout.x[index];
-              var y1 = layout.laneY[commit.lane] - 34;
+              var y1 = layout.laneY[commit.lane] - layout.laneBase;
               var x2 = layout.x[parentIndex];
-              var y2 = layout.laneY[parent.lane] - 34;
+              var y2 = layout.laneY[parent.lane] - layout.laneBase;
               var dx = Math.max(26, Math.abs(x1 - x2) * 0.42);
               var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
               path.setAttribute(
@@ -1081,28 +1137,115 @@
           });
         }
 
+        function makeBlock(b) {
+          var el = document.createElement("div");
+          el.className = "block";
+          el.dataset.branch = b.name;
+          el.dataset.current = String(!!b.current);
+          var dot = document.createElement("span");
+          dot.className = "bdot";
+          dot.style.background = laneColor[b.lane % laneColor.length];
+          el.appendChild(dot);
+          el.appendChild(document.createTextNode(b.name));
+          if (b.current) {
+            var tag = document.createElement("span");
+            tag.className = "tag";
+            tag.textContent = "当前";
+            el.appendChild(tag);
+          }
+          return el;
+        }
+
         function renderBranches() {
-          band.querySelectorAll(".block").forEach(function (el) {
+          canvasEl.querySelectorAll(".block").forEach(function (el) {
             el.remove();
           });
-          branches.forEach(function (b) {
-            var el = document.createElement("div");
-            el.className = "block";
-            el.dataset.branch = b.name;
-            el.dataset.current = String(!!b.current);
-            var dot = document.createElement("span");
-            dot.className = "bdot";
-            dot.style.background = laneColor[b.lane % laneColor.length];
-            el.appendChild(dot);
-            el.appendChild(document.createTextNode(b.name));
-            if (b.current) {
-              var tag = document.createElement("span");
-              tag.className = "tag";
-              tag.textContent = "当前";
-              el.appendChild(tag);
-            }
-            band.insertBefore(el, band.querySelector(".band-hint"));
+          clearTip();
+          var follow = state.branchMode === "follow";
+          band.style.display = follow ? "none" : "";
+          branchLayer.style.display = follow ? "" : "none";
+          // 图例固定在画布左下角，不随内容滚动；跟随模式在这里补一句说明
+          document.getElementById("legendText").textContent = follow
+            ? "曲线 = 分叉 / 合并 · 分支方块跟随 tip（悬停看对应关系）"
+            : "曲线 = 分叉 / 合并（父子关系）";
+
+          if (!follow) {
+            branches.forEach(function (b) {
+              band.insertBefore(makeBlock(b), band.querySelector(".band-hint"));
+            });
+            return;
+          }
+
+          // 跟随：方块按 tip 提交的 x 定位；两个 tip 时间接近时错到第二行
+          var sorted = branches.slice().sort(function (a, b) {
+            return layout.x[a.tip] - layout.x[b.tip];
           });
+          var rowRight = [-Infinity, -Infinity];
+          sorted.forEach(function (b) {
+            var width = 30 + b.name.length * 6.8 + (b.current ? 26 : 0);
+            var x = layout.x[b.tip] - 12;
+            var row = 0;
+            if (x < rowRight[0] + 8) {
+              row = 1;
+            }
+            if (row === 1 && x < rowRight[1] + 8) {
+              row = 0;
+              x = rowRight[0] + 8;
+            }
+            x = Math.max(8, Math.min(x, layout.width - width - 62));
+            rowRight[row] = x + width;
+            var el = makeBlock(b);
+            el.classList.add("follow");
+            el.style.left = x + "px";
+            el.style.top = (row === 0 ? 6 : 38) + "px";
+            el.addEventListener("pointerenter", function () {
+              highlightTip(b, el);
+            });
+            el.addEventListener("pointerleave", clearTip);
+            branchLayer.appendChild(el);
+          });
+        }
+
+        // 悬停分支方块：高亮它指向的 tip 提交，并画一条虚线连过去
+        function highlightTip(branch, blockEl) {
+          clearTip();
+          var card = cardsBox.querySelector('.card[data-index="' + branch.tip + '"]');
+          var overlay = document.getElementById("overlay");
+          overlay.innerHTML = "";
+          if (!card) return;
+          var color = laneColor[branch.lane % laneColor.length];
+          card.classList.add("tip");
+          card.style.setProperty("--tip-color", color);
+          var stageRect = stage.getBoundingClientRect();
+          var blockRect = blockEl.getBoundingClientRect();
+          var cardRect = card.getBoundingClientRect();
+          var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute(
+            "d",
+            "M " +
+              (blockRect.left + blockRect.width / 2 - stageRect.left) +
+              " " +
+              (blockRect.bottom - stageRect.top) +
+              " L " +
+              (cardRect.left - stageRect.left) +
+              " " +
+              (cardRect.top + cardRect.height / 2 - stageRect.top),
+          );
+          path.setAttribute("fill", "none");
+          path.setAttribute("stroke", color);
+          path.setAttribute("stroke-width", "1.5");
+          path.setAttribute("stroke-dasharray", "3 4");
+          path.setAttribute("stroke-opacity", "0.85");
+          overlay.appendChild(path);
+        }
+
+        function clearTip() {
+          cardsBox.querySelectorAll(".card.tip").forEach(function (el) {
+            el.classList.remove("tip");
+            el.style.removeProperty("--tip-color");
+          });
+          var overlay = document.getElementById("overlay");
+          if (overlay) overlay.innerHTML = "";
         }
 
         function render() {
@@ -1126,7 +1269,7 @@
         /* ---------- 平移 ---------- */
         var pan = null;
         scroller.addEventListener("pointerdown", function (event) {
-          if (event.target.closest(".card")) return;
+          if (event.target.closest(".card, .block")) return;
           if (event.pointerType !== "mouse" || event.button !== 0) return;
           pan = { x: event.clientX, left: scroller.scrollLeft };
           scroller.classList.add("panning");
@@ -1194,7 +1337,7 @@
             current.card.style.opacity = "";
             current.card.classList.remove("dragging");
           }
-          band.querySelectorAll(".block").forEach(function (el) {
+          canvasEl.querySelectorAll(".block").forEach(function (el) {
             el.classList.remove("target");
           });
           trash.classList.remove("over", "armed");
@@ -1237,7 +1380,7 @@
 
         function updateBranchHover(event) {
           var hovered = null;
-          band.querySelectorAll(".block").forEach(function (el) {
+          canvasEl.querySelectorAll(".block").forEach(function (el) {
             if (el.dataset.branch === drag.name) return;
             var rect = el.getBoundingClientRect();
             var hit = pointInRect(event, rect);
@@ -1257,7 +1400,7 @@
         }
 
         /* ---------- 拖分支方块 ---------- */
-        band.addEventListener("pointerdown", function (event) {
+        canvasEl.addEventListener("pointerdown", function (event) {
           var block = event.target.closest(".block");
           if (!block) return;
           if (event.pointerType !== "mouse" || event.button !== 0) return;
@@ -1337,8 +1480,12 @@
             }
             if (key === "space") state.space = value;
             if (key === "dir") state.dir = value;
+            if (key === "branch") state.branchMode = value;
+            var keepLeft = scroller.scrollLeft;
             render();
-            scroller.scrollLeft = state.dir === "ltr" ? scroller.scrollWidth : 0;
+            // 只有切方向才跳回「最新」一端，其余切换保持当前视野
+            scroller.scrollLeft =
+              key === "dir" ? (state.dir === "ltr" ? scroller.scrollWidth : 0) : keepLeft;
           });
         });
 
