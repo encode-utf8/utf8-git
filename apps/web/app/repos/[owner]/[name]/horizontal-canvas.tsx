@@ -492,10 +492,12 @@ function CommitCard({
         <span className="ml-auto shrink-0">{timeLabel}</span>
       </span>
 
-      {/* 徽标：合并 / PR / Issue，压在卡片右上角 */}
-      <span className="absolute -top-2 right-1.5 z-10 flex items-center gap-1">
+      {/* 徽标：合并 / PR / Issue，浮在卡片右上角。
+          shrink-0 + nowrap 是必需的：flex 行会被卡片宽度约束，一旦收缩，
+          文字就竖着换行、把整张卡片盖住（CI run #143 五条用例因此被拦截）。 */}
+      <span className="absolute -top-2 right-1.5 z-10 flex flex-nowrap items-center gap-1">
         {commit.parents.length > 1 ? (
-          <span className="rounded-full border border-orange-300 bg-orange-50 px-1.5 text-[9px] leading-4 text-orange-800 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200">
+          <span className="shrink-0 whitespace-nowrap rounded-full border border-orange-300 bg-orange-50 px-1.5 text-[9px] leading-4 text-orange-800 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200">
             merge
           </span>
         ) : null}
@@ -506,7 +508,8 @@ function CommitCard({
             target="_blank"
             rel="noopener noreferrer"
             title={pullRequest.title}
-            className={`pointer-events-auto rounded-full border bg-white px-1.5 text-[9px] leading-4 underline-offset-2 hover:underline dark:bg-zinc-900 ${prBadgeClass(pullRequest.state)}`}
+            draggable={false}
+            className={`pointer-events-auto shrink-0 whitespace-nowrap rounded-full border bg-white px-1.5 text-[9px] leading-4 underline-offset-2 hover:underline dark:bg-zinc-900 ${prBadgeClass(pullRequest.state)}`}
           >
             #{pullRequest.number} {prStateLabel(pullRequest.state, t)}
           </a>
@@ -518,7 +521,8 @@ function CommitCard({
             target="_blank"
             rel="noopener noreferrer"
             title={t("timeline.issueLinkTitle", { title: issue.title })}
-            className={`pointer-events-auto rounded-full border bg-white px-1.5 text-[9px] leading-4 underline-offset-2 hover:underline dark:bg-zinc-900 ${issueBadgeClass(issue.state)}`}
+            draggable={false}
+            className={`pointer-events-auto shrink-0 whitespace-nowrap rounded-full border bg-white px-1.5 text-[9px] leading-4 underline-offset-2 hover:underline dark:bg-zinc-900 ${issueBadgeClass(issue.state)}`}
           >
             #{issue.number} {issueStateLabel(issue.state, t)}
           </a>

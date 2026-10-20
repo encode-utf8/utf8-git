@@ -1,14 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// 打开首条提交的详情：整行是一个遮罩按钮，行内还浮着 PR / Issue 徽标链接。
-// 默认点「元素几何中心」在短行高下可能正好落在徽标上（链接会拦掉点击），
-// 因此固定点在行的左上内边距处——那里只有遮罩按钮，两种密度下都稳定。
+// 打开首条提交的详情：整张卡片是一个遮罩按钮，卡片上方还浮着 PR / Issue 徽标链接。
+// 徽标带约 18px 高、跨过卡片顶边（-top-2），所以点击点取「左下内边距」——
+// 那里只有遮罩按钮与 pointer-events-none 的文本，两种密度下都稳定
+// （CI run #143：点左上 (10,10) 会被 #61 的徽标链接拦掉）。
 async function openFirstCommit(page: Page) {
-  await page
-    .getByRole("list", { name: "提交时间线" })
-    .getByRole("button")
-    .first()
-    .click({ position: { x: 10, y: 10 } });
+  const button = page.getByRole("list", { name: "提交时间线" }).getByRole("button").first();
+  const box = await button.boundingBox();
+  if (!box) {
+    throw new Error("首张提交卡片没有可见区域，无法点击");
+  }
+  await button.click({ position: { x: 10, y: Math.max(12, box.height - 10) } });
 }
 
 // 登录态由 playwright.config.ts 的 storageState 提供（globalSetup 落库的数据库会话）。
