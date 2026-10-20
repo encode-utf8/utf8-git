@@ -1,0 +1,960 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>仓库画布 · 布局优化方案 v1</title>
+    <style>
+      :root {
+        --lane-1: #378add;
+        --lane-2: #1d9e75;
+        --lane-3: #ba7517;
+        --lane-4: #7f77dd;
+        --lane-5: #d4537e;
+        --ok: #1d9e75;
+        --danger: #e24b4a;
+        --font:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+          sans-serif;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      html[data-theme="light"] {
+        --bg: #f7f7f5;
+        --surface: #ffffff;
+        --surface-2: #f2f2ef;
+        --line: rgba(0, 0, 0, 0.09);
+        --line-strong: rgba(0, 0, 0, 0.18);
+        --text: #17171a;
+        --muted: #63636b;
+        --faint: #93939b;
+      }
+      html[data-theme="dark"] {
+        --bg: #0b0b0c;
+        --surface: #151517;
+        --surface-2: #1d1d20;
+        --line: rgba(255, 255, 255, 0.12);
+        --line-strong: rgba(255, 255, 255, 0.24);
+        --text: #f2f2f3;
+        --muted: #a1a1a8;
+        --faint: #74747c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 26px 24px 56px;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0;
+        letter-spacing: 0.2px;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.7;
+        margin: 8px 0 0;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin: 16px 0 14px;
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--line-strong);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .seg span {
+        font-size: 11px;
+        color: var(--faint);
+        padding: 0 10px;
+        display: flex;
+        align-items: center;
+      }
+      .seg button {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        padding: 6px 14px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--text);
+        color: var(--surface);
+      }
+      .mode-note {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        border-radius: 12px;
+        padding: 12px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.75;
+        margin-bottom: 14px;
+      }
+      .mode-note b {
+        color: var(--text);
+      }
+
+      /* 画布外壳 */
+      .shell {
+        position: relative;
+        border-radius: 14px;
+        overflow: visible;
+      }
+      .band {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 12px 12px 0 0;
+        border-bottom: none;
+        font-size: 12px;
+      }
+      .band .label {
+        color: var(--faint);
+        font-size: 11px;
+        margin-right: 2px;
+      }
+      .block {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 26px;
+        padding: 0 10px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: var(--surface-2);
+        color: var(--text);
+        white-space: nowrap;
+        font-size: 12px;
+      }
+      .block .bdot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+      .block .tag {
+        font-size: 10px;
+        color: var(--faint);
+      }
+      .scroller {
+        position: relative;
+        overflow-x: auto;
+        overflow-y: hidden;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 0 0 12px 12px;
+      }
+      .stage {
+        position: relative;
+      }
+      .ruler {
+        position: relative;
+        height: 28px;
+        border-bottom: 1px dashed var(--line-strong);
+      }
+      .tick {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        border-left: 1px solid var(--line);
+      }
+      .tick i {
+        position: absolute;
+        left: 5px;
+        top: 6px;
+        font-style: normal;
+        font-size: 10px;
+        color: var(--faint);
+        font-family: var(--mono);
+      }
+      .axis {
+        position: absolute;
+        top: 6px;
+        font-size: 10px;
+        color: var(--faint);
+      }
+      .rail-del {
+        position: absolute;
+        right: 0;
+        top: 28px;
+        bottom: 0;
+        width: 52px;
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: rgba(226, 75, 74, 0.08);
+        border-left: 1px solid rgba(226, 75, 74, 0.25);
+        color: var(--danger);
+        font-size: 10px;
+        pointer-events: none;
+      }
+      .rail-del svg {
+        width: 18px;
+        height: 18px;
+      }
+      .rail-del em {
+        font-style: normal;
+        writing-mode: vertical-rl;
+        letter-spacing: 2px;
+      }
+
+      /* 卡片：三种布局共用外壳 */
+      .card {
+        position: absolute;
+        z-index: 10;
+      }
+      .card .dot {
+        position: absolute;
+        left: -5px;
+        top: 50%;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        transform: translateY(-50%);
+      }
+
+      /* 对照：两行内容 + 徽标浮在卡片上方 */
+      .c-current {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        border: 1px solid var(--line-strong);
+        border-radius: 9px;
+        background: var(--surface);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        padding: 0 9px;
+      }
+      .c-current .l1 {
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .c-current .l2 {
+        font-size: 10px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .c-current .float {
+        position: absolute;
+        right: 5px;
+        top: -9px;
+        display: flex;
+        gap: 3px;
+        z-index: 12;
+      }
+
+      /* L2：单行标签卡 */
+      .c-single {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 7px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: var(--surface);
+      }
+      .c-single .l1 {
+        font-size: 11.5px;
+        font-weight: 500;
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .c-single .chips {
+        display: flex;
+        gap: 3px;
+        flex-shrink: 0;
+      }
+
+      /* L3：双行入卡（徽标在第一行右侧） */
+      .c-double {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 3px;
+        padding: 0 9px;
+        border: 1px solid var(--line-strong);
+        border-radius: 9px;
+        background: var(--surface);
+      }
+      .c-double .row1 {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .c-double .l1 {
+        font-size: 12px;
+        font-weight: 500;
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .c-double .row2 {
+        font-size: 10px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .c-double .chips {
+        display: flex;
+        gap: 3px;
+        flex-shrink: 0;
+      }
+
+      /* 徽标 chip */
+      .chip {
+        font-size: 9px;
+        line-height: 14px;
+        padding: 0 5px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        white-space: nowrap;
+        font-style: normal;
+      }
+      .chip.merged {
+        color: #8b5cf6;
+        border-color: rgba(139, 92, 246, 0.35);
+        background: rgba(139, 92, 246, 0.08);
+      }
+      .chip.open {
+        color: #1d9e75;
+        border-color: rgba(29, 158, 117, 0.35);
+        background: rgba(29, 158, 117, 0.08);
+      }
+      .chip.closed {
+        color: var(--faint);
+        border-color: var(--line-strong);
+      }
+      .chip.merge {
+        color: #ba7517;
+        border-color: rgba(186, 117, 23, 0.35);
+        background: rgba(186, 117, 23, 0.08);
+      }
+      .chip.bare {
+        border: 0;
+        background: transparent;
+        padding: 0 2px;
+        font-weight: 600;
+      }
+
+      /* L2 悬停浮层演示 */
+      .hover-pop {
+        position: absolute;
+        z-index: 40;
+        width: 220px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: var(--surface);
+        border: 1px solid var(--line-strong);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.8;
+      }
+      .hover-pop .t {
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+      .hover-pop .hint {
+        font-size: 10px;
+        color: var(--faint);
+        margin-top: 4px;
+      }
+
+      /* 说明卡 */
+      .notes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 12px;
+        margin-top: 22px;
+      }
+      .note {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        border-radius: 12px;
+        padding: 14px 16px;
+      }
+      .note h2 {
+        font-size: 13px;
+        margin: 0 0 8px;
+      }
+      .note p,
+      .note li {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.8;
+        margin: 0;
+      }
+      .note ul {
+        margin: 6px 0 0;
+        padding-left: 18px;
+      }
+      .note .math {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text);
+        background: var(--surface-2);
+        border-radius: 6px;
+        padding: 6px 8px;
+        margin-top: 8px;
+      }
+      .legend {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        font-size: 11px;
+        color: var(--faint);
+        margin-top: 10px;
+      }
+      .legend i {
+        font-style: normal;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .legend .sw {
+        width: 14px;
+        height: 3px;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>仓库画布 · 布局优化方案</h1>
+      <p class="sub">
+        同一份数据（50 条提交 / 3 条泳道 / 一次合并 / 一条分叉 / 中段空窗期），三种卡片布局可切换。
+        曲线与泳道轨在三种模式下完全相同——这一页只比较<b>布局</b>。
+      </p>
+
+      <div class="toolbar">
+        <div class="seg" data-key="mode">
+          <span>卡片布局</span>
+          <button data-val="current" aria-pressed="true">对照（当前）</button>
+          <button data-val="single" aria-pressed="false">L2 单行标签卡</button>
+          <button data-val="double" aria-pressed="false">L3 双行入卡</button>
+        </div>
+        <div class="seg" data-key="theme">
+          <span>主题</span>
+          <button data-val="light" aria-pressed="true">浅色</button>
+          <button data-val="dark" aria-pressed="false">深色</button>
+        </div>
+      </div>
+
+      <div class="mode-note" id="modeNote"></div>
+
+      <div class="shell">
+        <div class="band" id="band"></div>
+        <div class="scroller" id="scroller">
+          <div class="stage" id="stage">
+            <div class="ruler" id="ruler"></div>
+            <svg id="lanes" aria-hidden="true"></svg>
+            <div id="cards"></div>
+          </div>
+          <div class="rail-del">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+              />
+            </svg>
+            <em>拖到此删除</em>
+          </div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <i><span class="sw" style="background: var(--lane-1)"></span>泳道 1</i>
+        <i><span class="sw" style="background: var(--lane-2)"></span>泳道 2</i>
+        <i><span class="sw" style="background: var(--lane-3)"></span>泳道 3</i>
+        <i
+          ><span class="sw" style="background: var(--lane-4)"></span>曲线 =
+          父子关系（三种模式完全相同）</i
+        >
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <h2>① 拥挤的根因：徽标吃光了泳道间隙</h2>
+          <p>
+            对照模式里徽标浮在卡片上方 8px、高 18px，而泳道净间隙只有
+            16px——相邻两条泳道的徽标互相侵入。
+          </p>
+          <div class="math">卡片 48 + 徽标侵入 8 + 8 = 64 = 泳道距（已被吃满）</div>
+          <p style="margin-top: 8px">L2 / L3 把徽标收进卡片内部，间隙全部还给曲线与呼吸空间。</p>
+        </div>
+        <div class="note">
+          <h2>② L2 单行标签卡（推荐）</h2>
+          <ul>
+            <li>一行：标题（截断）+ 徽标数字 chip，卡高 28px</li>
+            <li>作者 / SHA / 时间移到<b>悬停浮层</b>，点击仍是右下角详情面板</li>
+            <li>泳道距 64 → <b>52</b>、画布更矮；卡片加宽到 176px，标题少截断</li>
+            <li>代价：每行可见卡片略少（约 6 张 vs 8 张），换来的是行内不挤</li>
+          </ul>
+          <div class="math">卡片 28 + 间隙 24 = 52</div>
+        </div>
+        <div class="note">
+          <h2>③ L3 双行入卡（信息全可见）</h2>
+          <ul>
+            <li>第一行标题 + 完整徽标；第二行作者·SHA·时间</li>
+            <li>卡高 50px、泳道距 72，画布约 300px 高</li>
+            <li>适合「不想悬停就要看全」的偏好</li>
+          </ul>
+          <div class="math">卡片 50 + 间隙 22 = 72</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      var LANE_COLOR = ["#378add", "#1d9e75", "#ba7517", "#7f77dd", "#d4537e"];
+      var DAY = 86400000;
+      var NOW = Date.UTC(2026, 9, 20, 9);
+      var COUNT = 50;
+      var PAD_LEFT = 26;
+      var PAD_RIGHT = 68;
+      var PAD_TOP = 12;
+      var PAD_BOTTOM = 22;
+      var RULER_H = 28;
+
+      var MODES = {
+        current: {
+          cardW: 140,
+          cardH: 48,
+          laneGap: 64,
+          gap: 12,
+          chip: "float",
+          full: true,
+          meta: true,
+          dot: true,
+        },
+        single: {
+          cardW: 176,
+          cardH: 28,
+          laneGap: 52,
+          gap: 16,
+          chip: "inline",
+          full: false,
+          meta: false,
+          dot: false,
+        },
+        double: {
+          cardW: 190,
+          cardH: 50,
+          laneGap: 72,
+          gap: 14,
+          chip: "inline",
+          full: true,
+          meta: true,
+          dot: false,
+        },
+      };
+      var NOTE = {
+        current:
+          "<b>对照（当前实现）</b>：两行内容 + 徽标浮在卡片上方。徽标高 18px、向上探出 8px，而泳道净间隙只有 16px——相邻泳道的徽标互相侵入；第二行「作者·SHA·时间」在 140px 卡宽里被截断。",
+        single:
+          "<b>L2 单行标签卡</b>：一行 = 标题（截断）+ 徽标数字 chip；作者 / SHA / 时间移到悬停浮层（下面最新一张卡已展开演示），点击仍是右下角详情面板。徽标不再浮空，层间间隙全部还给曲线。",
+        double:
+          "<b>L3 双行入卡</b>：第一行标题 + 完整徽标（右侧），第二行作者·SHA·时间。信息默认全可见，代价是泳道距 72、画布更高。",
+      };
+
+      var state = { mode: "current", theme: "light" };
+
+      function oid(i) {
+        return (100000 + i).toString(16).padEnd(40, "0");
+      }
+
+      // 结构：主线 0..28（28 为合并点）→ 40..45；功能线 29..39（lane1）；小分支 46..49（lane2）
+      function parentsOf(i) {
+        if (i === 28) return [29, 40];
+        if (i >= 29 && i <= 39) return i === 39 ? [40] : [i + 1];
+        if (i >= 46) return i === 49 ? [45] : [i + 1];
+        return i === 45 ? [] : [i + 1];
+      }
+      function laneOf(i) {
+        if (i >= 29 && i <= 39) return 1;
+        if (i >= 46) return 2;
+        return 0;
+      }
+      // 时间：基础 2.4 天一条；10..18 号进入空窗期（7 天一条），中段出现大段空白
+      function dayAgo(i) {
+        var d = 0;
+        for (var k = 0; k < i; k += 1) d += k >= 10 && k < 18 ? 7 : 2.4;
+        return d;
+      }
+      function headline(i) {
+        var pool = [
+          "feat: 横向画布卡片虚拟裁剪",
+          "fix: 反代回调地址算出 http",
+          "chore: 依赖更新与安全扫描",
+          "test: 手势用例坐标竞态",
+          "docs: 运维手册补回滚口径",
+          "refactor: 提取时间刷子纯函数",
+          "perf: 拖拽按帧合并",
+          "feat: 删除竖轨常驻可见",
+          "fix: 紧凑行概念提示丢失",
+          "feat: 芯片菜单键盘导航",
+          "docs: 自建与自部署指南",
+          "test: 写接口契约层 E2E",
+        ];
+        return pool[i % pool.length];
+      }
+      function authorOf(i) {
+        return ["ada", "lin", "bot", "kai"][i % 4];
+      }
+
+      // 徽标：多数没有；最新一条挂 4 个（极端用例）；少量 1 个
+      function badgesOf(i) {
+        var list = [];
+        if (i === 0) {
+          list.push({ kind: "merged", text: "#60 已合并" });
+          list.push({ kind: "open", text: "#61 开放" });
+          list.push({ kind: "open", text: "#62 开放" });
+          list.push({ kind: "closed", text: "#1060 已关闭" });
+        } else if (i % 13 === 4) {
+          list.push({ kind: "merged", text: "#" + (200 + i) + " 已合并" });
+        } else if (i % 17 === 9) {
+          list.push({ kind: "open", text: "#" + (300 + i) + " 开放" });
+        }
+        return list;
+      }
+
+      var commits = [];
+      for (var i = 0; i < COUNT; i += 1) {
+        commits.push({
+          index: i,
+          oid: oid(i),
+          lane: laneOf(i),
+          day: dayAgo(i),
+          msg: headline(i),
+          who: authorOf(i),
+          merge: parentsOf(i).length > 1,
+          badges: badgesOf(i),
+        });
+      }
+
+      var times = commits.map(function (c) {
+        return NOW - c.day * DAY;
+      });
+      var minT = Math.min.apply(null, times);
+      var maxT = Math.max.apply(null, times);
+      var LANES = 3;
+
+      function layout(mode) {
+        var m = MODES[mode];
+        // scale：由最密泳道反推，保证同泳道平均间距不小于 卡片宽 + 间隙
+        var perLane = [0, 0, 0];
+        commits.forEach(function (c) {
+          perLane[c.lane] += 1;
+        });
+        var densest = Math.max.apply(null, perLane);
+        var need = densest * (m.cardW + m.gap);
+        var timeW = ((maxT - minT) / DAY) * 2.2;
+        var contentW = Math.max(1180, need, timeW);
+        var scale = contentW / Math.max(1, maxT - minT);
+        var x = times.map(function (t) {
+          return PAD_LEFT + (t - minT) * scale;
+        });
+        // 同泳道最小间距兜底
+        var byLane = [[], [], []];
+        commits.forEach(function (c) {
+          byLane[c.lane].push(c.index);
+        });
+        byLane.forEach(function (list) {
+          list.sort(function (a, b) {
+            return x[a] - x[b];
+          });
+          for (var k = 1; k < list.length; k += 1) {
+            var min = x[list[k - 1]] + m.cardW + m.gap;
+            if (x[list[k]] < min) x[list[k]] = min;
+          }
+        });
+        var laneY = [];
+        for (var l = 0; l < LANES; l += 1) {
+          laneY.push(RULER_H + PAD_TOP + m.cardH / 2 + l * m.laneGap);
+        }
+        var width = Math.max.apply(null, x) + m.cardW + PAD_RIGHT;
+        var height = RULER_H + PAD_TOP + (LANES - 1) * m.laneGap + m.cardH + PAD_BOTTOM;
+        return { x: x, laneY: laneY, width: width, height: height, m: m };
+      }
+
+      function fmt(t) {
+        var d = new Date(t);
+        return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0");
+      }
+
+      function renderRuler(L) {
+        var ruler = document.getElementById("ruler");
+        ruler.innerHTML = "";
+        var cursor = Date.UTC(new Date(minT).getUTCFullYear(), new Date(minT).getUTCMonth(), 1);
+        while (cursor <= maxT) {
+          var x = PAD_LEFT + ((cursor - minT) / (maxT - minT)) * (L.width - PAD_LEFT - PAD_RIGHT);
+          var tick = document.createElement("div");
+          tick.className = "tick";
+          tick.style.left = x + "px";
+          tick.innerHTML = "<i>" + fmt(cursor) + "</i>";
+          ruler.appendChild(tick);
+          cursor = Date.UTC(
+            new Date(cursor).getUTCFullYear(),
+            new Date(cursor).getUTCMonth() + 1,
+            1,
+          );
+        }
+        var left = document.createElement("span");
+        left.className = "axis";
+        left.style.left = "8px";
+        left.textContent = "← 更早";
+        ruler.appendChild(left);
+        var right = document.createElement("span");
+        right.className = "axis";
+        right.style.right = "58px";
+        right.textContent = "更新 →";
+        ruler.appendChild(right);
+      }
+
+      function renderGraph(L) {
+        var svg = document.getElementById("lanes");
+        svg.setAttribute("width", L.width);
+        svg.setAttribute("height", L.height);
+        svg.style.top = "0";
+        var html = "";
+        for (var l = 0; l < LANES; l += 1) {
+          html +=
+            '<line x1="0" x2="' +
+            L.width +
+            '" y1="' +
+            L.laneY[l] +
+            '" y2="' +
+            L.laneY[l] +
+            '" stroke="' +
+            LANE_COLOR[l] +
+            '" stroke-opacity="0.16" stroke-width="2" stroke-linecap="round"/>';
+        }
+        commits.forEach(function (c) {
+          parentsOf(c.index).forEach(function (p) {
+            var parent = commits[p];
+            var x1 = L.x[c.index],
+              y1 = L.laneY[c.lane];
+            var x2 = L.x[p],
+              y2 = L.laneY[parent.lane];
+            var dx = Math.max(24, Math.abs(x1 - x2) * 0.42);
+            html +=
+              '<path d="M ' +
+              (x1 - 3) +
+              " " +
+              y1 +
+              " C " +
+              (x1 - dx) +
+              " " +
+              y1 +
+              ", " +
+              (x2 + dx) +
+              " " +
+              y2 +
+              ", " +
+              (x2 + 3) +
+              " " +
+              y2 +
+              '" fill="none" stroke="' +
+              LANE_COLOR[parent.lane] +
+              '" stroke-width="2" stroke-opacity="0.55" stroke-linecap="round"/>';
+          });
+        });
+        svg.innerHTML = html;
+      }
+
+      function chip(badge, full) {
+        var label = full ? badge.text : badge.text.split(" ")[0];
+        return '<i class="chip ' + badge.kind + (full ? "" : " bare") + '">' + label + "</i>";
+      }
+
+      function renderCards(L) {
+        var box = document.getElementById("cards");
+        box.innerHTML = "";
+        var m = L.m;
+        commits.forEach(function (c) {
+          var el = document.createElement("div");
+          el.className =
+            "card " +
+            (state.mode === "current"
+              ? "c-current"
+              : state.mode === "single"
+                ? "c-single"
+                : "c-double");
+          el.style.left = L.x[c.index] + "px";
+          el.style.top = L.laneY[c.lane] - m.cardH / 2 + "px";
+          el.style.width = m.cardW + "px";
+          el.style.height = m.cardH + "px";
+          el.dataset.index = String(c.index);
+          // 合并提交的徽标排在最前（与 PR / Issue 同一套 chip）
+          var chips = (c.merge ? [{ kind: "merge", text: "merge" }] : []).concat(c.badges);
+          var badges = chips
+            .map(function (b) {
+              return chip(b, m.full);
+            })
+            .join("");
+          var meta = c.who + " · " + c.oid.slice(0, 7) + " · " + c.day.toFixed(1) + " 天前";
+
+          if (state.mode === "current") {
+            el.innerHTML =
+              (badges.length ? '<span class="float">' + badges + "</span>" : "") +
+              '<span class="l1">' +
+              c.msg +
+              "</span>" +
+              '<span class="l2">' +
+              meta +
+              "</span>" +
+              (m.dot
+                ? '<span class="dot" style="background:' + LANE_COLOR[c.lane] + '"></span>'
+                : "");
+          } else if (state.mode === "single") {
+            el.innerHTML =
+              '<span class="l1">' +
+              c.msg +
+              "</span>" +
+              (badges.length ? '<span class="chips">' + badges + "</span>" : "");
+          } else {
+            el.innerHTML =
+              '<span class="row1"><span class="l1">' +
+              c.msg +
+              "</span>" +
+              (badges.length ? '<span class="chips">' + badges + "</span>" : "") +
+              "</span>" +
+              '<span class="row2">' +
+              meta +
+              "</span>";
+          }
+          box.appendChild(el);
+        });
+
+        // L2：最新一张卡上静态展示悬停浮层
+        if (state.mode === "single") {
+          var c0 = commits[0];
+          var pop = document.createElement("div");
+          pop.className = "hover-pop";
+          // fixed 定位：与真实实现一致（悬停浮层必须逃出滚动容器的裁剪）
+          pop.style.position = "fixed";
+          box.appendChild(pop);
+          var cardEl = box.querySelector('[data-index="0"]');
+          var cr = cardEl ? cardEl.getBoundingClientRect() : null;
+          var ph = pop.getBoundingClientRect().height;
+          var top = cr ? cr.top - ph - 10 : 0;
+          if (!cr || top < 64) {
+            top = cr ? cr.bottom + 10 : 0;
+          }
+          pop.style.left =
+            (cr ? Math.max(12, Math.min(cr.left - 232, window.innerWidth - 244)) : 12) + "px";
+          pop.style.top = top + "px";
+          pop.innerHTML =
+            '<div class="t">' +
+            c0.msg +
+            "</div>" +
+            "<div>" +
+            c0.who +
+            " · " +
+            c0.oid.slice(0, 7) +
+            " · " +
+            c0.day.toFixed(1) +
+            " 天前</div>" +
+            '<div style="margin-top:4px">' +
+            c0.badges
+              .map(function (b) {
+                return chip(b, true);
+              })
+              .join(" ") +
+            "</div>" +
+            '<div class="hint">↑ 悬停时出现（演示），点击卡片仍打开右下角详情</div>';
+        }
+      }
+
+      function renderBand() {
+        var band = document.getElementById("band");
+        band.innerHTML = '<span class="label">分支</span>';
+        [
+          { name: "main", lane: 0, current: true },
+          { name: "feature/e2e", lane: 1, current: false },
+          { name: "junk/delete-me", lane: 2, current: false },
+        ].forEach(function (b) {
+          var el = document.createElement("span");
+          el.className = "block";
+          el.innerHTML =
+            '<span class="bdot" style="background:' +
+            LANE_COLOR[b.lane] +
+            '"></span>' +
+            b.name +
+            (b.current ? '<span class="tag">当前</span>' : "");
+          band.appendChild(el);
+        });
+      }
+
+      function render() {
+        var L = layout(state.mode);
+        var stage = document.getElementById("stage");
+        stage.style.width = L.width + "px";
+        stage.style.height = L.height + "px";
+        document.getElementById("scroller").style.height = L.height + "px";
+        document.getElementById("modeNote").innerHTML = NOTE[state.mode];
+        renderRuler(L);
+        renderGraph(L);
+        renderCards(L);
+        // 初始滚到最新一端（右端）
+        var scroller = document.getElementById("scroller");
+        scroller.scrollLeft = scroller.scrollWidth;
+      }
+
+      document.querySelectorAll(".seg").forEach(function (seg) {
+        seg.addEventListener("click", function (event) {
+          var btn = event.target.closest("button");
+          if (!btn) return;
+          var key = seg.dataset.key;
+          seg.querySelectorAll("button").forEach(function (b) {
+            b.setAttribute("aria-pressed", String(b === btn));
+          });
+          if (key === "mode") state.mode = btn.dataset.val;
+          else {
+            state.theme = btn.dataset.val;
+            document.documentElement.dataset.theme = btn.dataset.val;
+          }
+          render();
+        });
+      });
+
+      renderBand();
+      render();
+    </script>
+  </body>
+</html>
