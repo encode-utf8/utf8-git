@@ -470,6 +470,17 @@
         display: flex;
       }
 
+      .legend {
+        position: absolute;
+        left: 12px;
+        bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--faint);
+        font-size: 10px;
+        pointer-events: none;
+      }
       .toast {
         position: absolute;
         left: 50%;
@@ -535,7 +546,7 @@
         <div>
           <h1>仓库画布 · 横向时间轴 v2</h1>
           <p class="sub">
-            分支方块在上、提交记录在下，时间沿左右轴推进；所有可拖元素都在同一张画布内。拖动空白处可横向平移，拖动提交可建分支，拖动分支方块可开
+            分支方块在上、提交记录在下，时间沿左右轴推进；跨泳道的曲线画出分叉与合并。所有可拖元素都在同一张画布内：拖动空白处可横向平移，拖动提交可建分支，拖动分支方块可开
             PR / 删除。
           </p>
         </div>
@@ -604,6 +615,18 @@
           </div>
         </div>
 
+        <div class="legend" aria-hidden="true">
+          <svg width="24" height="12" viewBox="0 0 24 12" fill="none">
+            <path
+              d="M2 10 C 8 10, 16 2, 22 2"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+          曲线 = 分叉 / 合并（父子关系）
+        </div>
+
         <div class="toast" id="toast"></div>
       </section>
 
@@ -613,8 +636,8 @@
         <div class="note">
           <h2>① 轴向怎么定</h2>
           <p>
-            横轴 = 时间，纵轴 = 泳道（原泳道图旋转
-            90°）。左旧右新是默认，切「左新右旧」后最新提交贴在左端。
+            横轴 = 时间，纵轴 = 泳道（原泳道图旋转 90°）。跨泳道的曲线是父子关系（分叉 /
+            合并），同泳道由泳道轨表示。左旧右新是默认，切「左新右旧」后最新提交贴在左端。
           </p>
         </div>
         <div class="note">
@@ -793,6 +816,37 @@
             pr: "#268",
           },
         ];
+
+        // 父子关系（下标指向更早的提交）。跨泳道的边画成曲线；同泳道由泳道轨本身表示。
+        // 与真实实现的 computeLaneLayout 输出一一对应：这里只是把边显式写出来，方便看效果。
+        var PARENTS = {
+          0: [],
+          1: [0],
+          2: [0],
+          3: [2],
+          4: [2],
+          5: [4, 3], // 合并：lane0 的 4 + lane1 的 3
+          6: [4],
+          7: [3],
+          8: [6],
+          9: [7],
+          10: [8],
+          11: [5],
+          12: [10],
+          13: [9],
+          14: [12, 13], // 合并：把 lane1 的 13 合回 lane0
+          15: [1],
+          16: [13],
+          17: [14],
+          18: [11],
+          19: [17],
+          20: [16],
+          21: [19],
+        };
+        commits.forEach(function (commit, index) {
+          commit.parents = PARENTS[index] || [];
+        });
+
         var branches = [
           { name: "main", lane: 0, tip: 21, current: true },
           { name: "feature/e2e", lane: 1, tip: 20 },
@@ -922,11 +976,56 @@
             line.setAttribute("y1", y - 34);
             line.setAttribute("y2", y - 34);
             line.setAttribute("stroke", laneColor[lane % laneColor.length]);
-            line.setAttribute("stroke-opacity", "0.35");
+            line.setAttribute("stroke-opacity", "0.16");
             line.setAttribute("stroke-width", "2");
             line.setAttribute("stroke-linecap", "round");
             lanes.appendChild(line);
           });
+        }
+
+        // 跨泳道的父子关系：从子提交向左画一条 S 形曲线到父提交，
+        // 纵向跨越泳道——这就是横版里「分叉 / 合并」的可视表达。
+        function renderEdges() {
+          var group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+          group.setAttribute("fill", "none");
+          group.setAttribute("stroke-linecap", "round");
+          commits.forEach(function (commit, index) {
+            commit.parents.forEach(function (parentIndex) {
+              var parent = commits[parentIndex];
+              if (!parent || parent.lane === commit.lane) return;
+              var x1 = layout.x[index];
+              var y1 = layout.laneY[commit.lane] - 34;
+              var x2 = layout.x[parentIndex];
+              var y2 = layout.laneY[parent.lane] - 34;
+              var dx = Math.max(26, Math.abs(x1 - x2) * 0.42);
+              var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+              path.setAttribute(
+                "d",
+                "M " +
+                  (x1 - 4) +
+                  " " +
+                  y1 +
+                  " C " +
+                  (x1 - dx) +
+                  " " +
+                  y1 +
+                  ", " +
+                  (x2 + dx) +
+                  " " +
+                  y2 +
+                  ", " +
+                  (x2 + 4) +
+                  " " +
+                  y2,
+              );
+              // 边用「父提交所在泳道」的颜色：合并点两条来线因此能区分
+              path.setAttribute("stroke", laneColor[parent.lane % laneColor.length]);
+              path.setAttribute("stroke-width", "2");
+              path.setAttribute("stroke-opacity", "0.6");
+              group.appendChild(path);
+            });
+          });
+          lanes.appendChild(group);
         }
 
         function renderCards() {
@@ -1010,6 +1109,7 @@
           computeLayout();
           renderRuler();
           renderLanes();
+          renderEdges();
           renderCards();
           renderBranches();
         }
