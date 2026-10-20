@@ -311,6 +311,8 @@ export const zhCN = {
     guideTrash: "拖分支芯片到右侧竖轨 → 删除（仍需确认）",
     guideDismiss: "知道了",
     guideReopen: "重新查看手势提示",
+    axisOldest: "← 更早",
+    axisNewest: "更新 →",
     share: "分享链接",
     shareHint: "复制一个能还原当前分支与筛选条件的链接",
     shareCopied: "链接已复制",

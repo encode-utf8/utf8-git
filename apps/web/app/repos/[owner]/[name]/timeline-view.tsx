@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -12,33 +11,25 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import {
-  LaneComputation,
-  sliceLaneLayout,
-  type CommitLike,
-  type LaneLayout,
-} from "@utf8-git/git-graph";
+import { LaneComputation, type CommitLike, type LaneLayout } from "@utf8-git/git-graph";
 
 import {
   createBranchDescriptor,
   describeCreateBranchFailure,
   validateBranchName,
 } from "@/lib/branch-ops";
-import { formatRelativeTime, formatUtcDateTime, shortSha } from "@/lib/commit-format";
+import { shortSha } from "@/lib/commit-format";
 import { mergeCommits } from "@/lib/commit-list";
 import { fetchJsonWithRetry, fetchWithRetry } from "@/lib/client-fetch";
 import { OnlineRequestError, describeApiFailure, type OnlineErrorInfo } from "@/lib/error-state";
-import { collectIssues, type TimelineBranch, type TimelineCommit } from "@/lib/github-timeline";
+import { type TimelineBranch, type TimelineCommit } from "@/lib/github-timeline";
 import { EXPLAIN_MODES, isExplainMode, type ExplainMode } from "@/lib/glossary";
 import { useTranslator } from "@/lib/i18n/client";
-import type { MessageKey, Translate } from "@/lib/i18n/translate";
-import { computeLaneMetrics } from "@/lib/lane-geometry";
 import { confirmationView } from "@/lib/operations";
 import {
   EMPTY_TIMELINE_FILTER,
   filterTimelineCommits,
   hasActiveTimelineFilter,
-  indexOfCommit,
   timelineAuthors,
   type TimelineEventKind,
   type TimelineRange,
@@ -49,15 +40,14 @@ import {
   TIMELINE_DENSITIES,
   TIMELINE_DENSITY_STORAGE_KEY,
   parseTimelineDensity,
-  timelineRowHeight,
   type TimelineDensity,
 } from "@/lib/timeline-density";
 import { edgeScrollStep } from "@/lib/edge-scroll";
 import { createFrameCoalescer } from "@/lib/frame-coalescer";
 import { decodeTimelineShare, encodeTimelineShare, mergeShareFilters } from "@/lib/timeline-share";
-import { computeVirtualWindow } from "@/lib/virtual-window";
 
 import { BranchBar, type DragPoint } from "./branch-bar";
+import { HorizontalCanvas } from "./horizontal-canvas";
 import { TimeBrush } from "./time-brush";
 import { GestureGuide } from "./gesture-guide";
 import { BranchPopover } from "./branch-popover";
@@ -68,10 +58,8 @@ import { CreateIssuePanel } from "./create-issue-panel";
 import { CreatePullPanel } from "./create-pull-panel";
 import { DeleteBranchPanel } from "./delete-branch-panel";
 import { GlossaryHint } from "./glossary-hint";
-import { LaneGraph } from "./lane-graph";
 import { RestoreBranchPanel } from "./restore-branch-panel";
 
-const AUTO_LOAD_THRESHOLD = 8;
 const EXPLAIN_MODE_STORAGE_KEY = "utf8-git:explain-mode";
 // 手势速查条：只主动出现一次，关掉后写这个键
 const GESTURE_GUIDE_STORAGE_KEY = "utf8-git:gesture-guide";
@@ -109,182 +97,6 @@ type TimelineViewProps = {
   initialLaneLayout?: LaneLayout | null;
 };
 
-const PR_STATE_LABEL: Record<string, MessageKey> = {
-  OPEN: "timeline.prState.open",
-  MERGED: "timeline.prState.merged",
-  CLOSED: "timeline.prState.closed",
-};
-
-function prStateLabel(state: string, t: Translate): string {
-  const key = PR_STATE_LABEL[state];
-  return key ? t(key) : state;
-}
-
-function prBadgeClass(state: string): string {
-  if (state === "MERGED") {
-    return "border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700 dark:bg-purple-950 dark:text-purple-200";
-  }
-  if (state === "OPEN") {
-    return "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200";
-  }
-  return "border-zinc-300 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
-}
-
-const ISSUE_STATE_LABEL: Record<string, MessageKey> = {
-  OPEN: "timeline.issueState.open",
-  CLOSED: "timeline.issueState.closed",
-};
-
-function issueStateLabel(state: string, t: Translate): string {
-  const key = ISSUE_STATE_LABEL[state];
-  return key ? t(key) : state;
-}
-
-function issueBadgeClass(state: string): string {
-  if (state === "OPEN") {
-    return "border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200";
-  }
-  return "border-zinc-300 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
-}
-
-function CommitRow({
-  commit,
-  nowMs,
-  mode,
-  repoUrl,
-  compact,
-  onSelect,
-}: {
-  commit: TimelineCommit;
-  nowMs: number | null;
-  mode: ExplainMode;
-  repoUrl: string;
-  /** 紧凑密度：单行、不显示头像；舒适密度保留两行与头像。 */
-  compact: boolean;
-  onSelect: (commit: TimelineCommit) => void;
-}) {
-  const { t } = useTranslator();
-  const authorLabel = commit.author.login ?? commit.author.name ?? t("timeline.unknownAuthor");
-  const issues = collectIssues(commit.pullRequests);
-  const timeLabel = commit.committedDate
-    ? nowMs === null
-      ? formatUtcDateTime(commit.committedDate)
-      : formatRelativeTime(Date.parse(commit.committedDate), nowMs, t)
-    : "—";
-
-  // 徽标与概念提示在两种密度下共用，避免两套实现走偏
-  const badges = (
-    <>
-      {commit.parents.length > 1 ? (
-        <>
-          <span className="shrink-0 rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[11px] text-orange-800 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200">
-            merge
-          </span>
-          <GlossaryHint id="merge" mode={mode} />
-        </>
-      ) : null}
-      {commit.pullRequests.map((pullRequest) => (
-        <a
-          key={`pr-${pullRequest.number}`}
-          href={pullRequest.url ?? `${repoUrl}/pull/${pullRequest.number}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={pullRequest.title}
-          className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${prBadgeClass(pullRequest.state)}`}
-        >
-          #{pullRequest.number} {prStateLabel(pullRequest.state, t)}
-        </a>
-      ))}
-      {issues.map((issue) => (
-        <a
-          key={`issue-${issue.number}`}
-          href={issue.url ?? `${repoUrl}/issues/${issue.number}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={t("timeline.issueLinkTitle", { title: issue.title })}
-          className={`pointer-events-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] underline-offset-4 hover:underline ${issueBadgeClass(issue.state)}`}
-        >
-          #{issue.number} {issueStateLabel(issue.state, t)}
-        </a>
-      ))}
-      {commit.pullRequests.length > 0 ? <GlossaryHint id="pull-request" mode={mode} /> : null}
-      {issues.length > 0 ? <GlossaryHint id="issue" mode={mode} /> : null}
-    </>
-  );
-
-  return (
-    <div className="relative h-full w-full border-b border-black/[.06] dark:border-white/[.08]">
-      {/* 整行可点：遮罩按钮负责选中；内容层 pointer-events-none，链接再单独放开 */}
-      <button
-        type="button"
-        onClick={() => onSelect(commit)}
-        aria-label={t("timeline.viewCommitDetail", { sha: shortSha(commit.oid) })}
-        className="absolute inset-0 z-0 transition-colors hover:bg-black/[.03] focus-visible:bg-black/[.04] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-600 dark:hover:bg-white/[.05] dark:focus-visible:outline-sky-400"
-      />
-      {compact ? (
-        // 紧凑：单行。行高只有 36px，塞不下头像与第二行，强行复用两行布局会互相压住
-        <div className="pointer-events-none relative z-10 flex h-full w-full items-center gap-2 px-4">
-          <span className="min-w-0 truncate text-xs font-medium text-zinc-900 dark:text-zinc-50">
-            {commit.headline || t("timeline.noHeadline")}
-          </span>
-          <span className="flex shrink-0 items-center gap-1.5">{badges}</span>
-          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-            <span className="max-w-[7rem] truncate">{authorLabel}</span>
-            {/* 概念提示在两种密度下都要在：新手模式的说明不能因为切换密度就消失 */}
-            <GlossaryHint id="author" mode={mode} />
-            <code className="font-mono">{shortSha(commit.oid)}</code>
-            <GlossaryHint id="sha" mode={mode} />
-            <time
-              suppressHydrationWarning
-              title={`${formatUtcDateTime(commit.committedDate)}${t("common.utcSuffix")}`}
-            >
-              {timeLabel}
-            </time>
-          </span>
-        </div>
-      ) : (
-        <div className="pointer-events-none relative z-10 flex h-full w-full items-start gap-3 px-4 py-2">
-          {commit.author.avatarUrl ? (
-            <Image
-              src={commit.author.avatarUrl}
-              alt=""
-              width={28}
-              height={28}
-              className="mt-0.5 h-7 w-7 shrink-0 rounded-full"
-            />
-          ) : (
-            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-              {authorLabel.slice(0, 1).toUpperCase()}
-            </span>
-          )}
-          <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                {commit.headline || t("timeline.noHeadline")}
-              </span>
-              {badges}
-            </span>
-            <span className="mt-1 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-              <span className="truncate">{authorLabel}</span>
-              <GlossaryHint id="author" mode={mode} />
-              <span>·</span>
-              <code className="font-mono">{shortSha(commit.oid)}</code>
-              <GlossaryHint id="sha" mode={mode} />
-              <span>·</span>
-              <time
-                suppressHydrationWarning
-                title={`${formatUtcDateTime(commit.committedDate)}${t("common.utcSuffix")}`}
-              >
-                {timeLabel}
-              </time>
-            </span>
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function TimelineView({
   owner,
   name,
@@ -309,8 +121,6 @@ export function TimelineView({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<OnlineErrorInfo | null>(null);
   const [selectedCommit, setSelectedCommit] = useState<TimelineCommit | null>(null);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(600);
   const [nowMs, setNowMs] = useState<number | null>(null);
   const [filters, setFilters] = useState<TimelineFilterState>(EMPTY_TIMELINE_FILTER);
   const [explainMode, setExplainMode] = useState<ExplainMode>("off");
@@ -333,7 +143,8 @@ export function TimelineView({
   const [shareUrl, setShareUrl] = useState("");
 
   const router = useRouter();
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  // 横向画布的滚动容器：提交拖拽到边缘时的自动滚动需要它
+  const canvasScrollerRef = useRef<HTMLDivElement | null>(null);
   // 画布容器（拖拽落点坐标、删除区命中判定都相对它计算）
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const trashRef = useRef<HTMLDivElement | null>(null);
@@ -342,7 +153,6 @@ export function TimelineView({
 
   // 显示密度（P0 画布改造）：只改行高，虚拟窗口按行高换算，布局算法不变
   const [density, setDensity] = useState<TimelineDensity>(DEFAULT_TIMELINE_DENSITY);
-  const rowHeight = timelineRowHeight(density);
 
   // 分支芯片拖动：拖到删除区即删除该分支（删除仍走确认面板，不静默执行）
   const [branchDrag, setBranchDrag] = useState<{
@@ -454,21 +264,6 @@ export function TimelineView({
     } catch {
       // 忽略写入失败
     }
-  }, []);
-
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) {
-      return;
-    }
-    const update = () => setViewportHeight(element.clientHeight);
-    update();
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
   }, []);
 
   // 相对时间基准：挂载后取一次并每分钟刷新（SSR 阶段先用绝对时间占位）
@@ -608,21 +403,8 @@ export function TimelineView({
         next.range = "custom";
       }
       setFilters(next);
-      const container = containerRef.current;
-      if (!container) {
-        return;
-      }
-      const nextCommits = filterTimelineCommits(commits, next, nowMs);
-      const index = indexOfCommit(nextCommits, selectedCommit?.oid ?? null);
-      if (index < 0) {
-        container.scrollTo({ top: 0 });
-        return;
-      }
-      const maxTop = Math.max(0, nextCommits.length * rowHeight - container.clientHeight);
-      const centered = index * rowHeight - container.clientHeight / 2 + rowHeight / 2;
-      container.scrollTo({ top: Math.max(0, Math.min(centered, maxTop)) });
     },
-    [commits, filters, nowMs, rowHeight, selectedCommit],
+    [filters],
   );
 
   // 时间刷子的域：已加载提交的最早 / 最晚时间戳；不足两个有效时间点就不渲染刷子
@@ -639,18 +421,6 @@ export function TimelineView({
     }
     return Number.isFinite(min) && min < max ? { min, max } : null;
   }, [commits]);
-
-  const windowRange = useMemo(
-    () =>
-      computeVirtualWindow({
-        scrollTop,
-        viewportHeight,
-        rowHeight,
-        total: filteredCommits.length,
-      }),
-    [scrollTop, viewportHeight, rowHeight, filteredCommits.length],
-  );
-  const visibleCommits = filteredCommits.slice(windowRange.start, windowRange.end);
 
   // 泳道布局（TODO-246：增量续算 + 服务端下发缓存布局）：
   // 1. 集合与「服务端下发的首页布局」逐条一致（挂载 / 切换分支后的首帧）→ 直接采用，
@@ -700,16 +470,6 @@ export function TimelineView({
     laneInputRef.current = input;
     setLaneLayout(laneComputationRef.current.snapshot());
   }, [filteredCommits, filters, serverLaneLayout]);
-  // 只切出当前窗口内的节点与连线，保证每帧 SVG 元素量恒定（不随总提交数增长）。
-  const laneSlice = useMemo(
-    () => sliceLaneLayout(laneLayout ?? EMPTY_LANE_LAYOUT, windowRange.start, windowRange.end),
-    [laneLayout, windowRange.start, windowRange.end],
-  );
-  // 泳道几何：列宽只随整体 laneCount 变化，滚动时稳定。
-  const { laneWidth, gutterWidth } = useMemo(
-    () => computeLaneMetrics(laneSlice.laneCount),
-    [laneSlice.laneCount],
-  );
 
   const loadMore = useCallback(async () => {
     if (loading || !hasNextPage) {
@@ -747,19 +507,15 @@ export function TimelineView({
     }
   }, [branchParam, hasNextPage, loading, name, owner, page, t]);
 
-  useEffect(() => {
-    // 存在错误时暂停自动翻页，等待用户手动重试，避免对限流 / 故障反复冲击
-    // 过滤生效时暂停自动翻页：窗口只展示已加载提交的子集，底部判定无意义（仍可手动「加载更多」）
+  // 画布滚到最旧一端（左端）时加载更多。
+  // 存在错误时暂停，等待用户手动重试，避免对限流 / 故障反复冲击；
+  // 过滤生效时也暂停：画布只展示已加载提交的子集，「到头」判定没有意义（仍可手动加载）。
+  const handleReachOldest = useCallback(() => {
     if (activeFilters || !hasNextPage || loading || loadError || commits.length === 0) {
       return;
     }
-    if (windowRange.end < commits.length - AUTO_LOAD_THRESHOLD) {
-      return;
-    }
-    // 延迟到宏任务触发，避免在 effect 内同步 setState
-    const timer = window.setTimeout(() => void loadMore(), 0);
-    return () => window.clearTimeout(timer);
-  }, [activeFilters, commits.length, hasNextPage, loadError, loadMore, loading, windowRange.end]);
+    void loadMore();
+  }, [activeFilters, commits.length, hasNextPage, loadError, loadMore, loading]);
 
   const switchBranch = useCallback(
     async (nextBranch: string) => {
@@ -786,7 +542,6 @@ export function TimelineView({
         setSelectedCommit(null);
         // 切换分支 → 第 1 页携带服务端算好并缓存的布局，客户端首帧直接采用（TODO-246）
         setFetchedLaneLayout(data.laneLayout ?? null);
-        containerRef.current?.scrollTo({ top: 0 });
       } catch (error) {
         setLoadError(
           error instanceof OnlineRequestError ? error.info : describeApiFailure(500, null, t),
@@ -996,21 +751,22 @@ export function TimelineView({
       // 循环只在指针处于边缘带内时运行——不在边缘就停，避免拖动全程空转 rAF + 读矩形。
       let scrollRaf = 0;
       const edgeStepNow = () => {
-        const element = containerRef.current;
+        const element = canvasScrollerRef.current;
         if (!element) {
           return 0;
         }
         const rect = element.getBoundingClientRect();
-        return edgeScrollStep(lastPoint.y, rect.top, rect.bottom);
+        // 横向画布：落点在左右边缘带内时沿 x 轴滚动
+        return edgeScrollStep(lastPoint.x, rect.left, rect.right);
       };
       const tick = () => {
         scrollRaf = 0;
-        const element = containerRef.current;
+        const element = canvasScrollerRef.current;
         const step = edgeStepNow();
         if (!element || step === 0) {
           return;
         }
-        element.scrollTop += step;
+        element.scrollLeft += step;
         scrollRaf = window.requestAnimationFrame(tick);
       };
       const ensureAutoScroll = () => {
@@ -1573,51 +1329,24 @@ export function TimelineView({
                   {branchDrag ? t("timeline.trashDrop") : t("timeline.trashIdle")}
                 </span>
               </div>
-              <div
-                ref={containerRef}
-                onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-                role="list"
-                aria-label={t("timeline.listLabel")}
-                className="h-[65vh] overflow-y-auto overscroll-contain rounded-xl border border-black/[.08] bg-white pr-14 dark:border-white/[.145] dark:bg-zinc-950"
-              >
-                <div style={{ height: windowRange.totalHeight, position: "relative" }}>
-                  <div
-                    style={{
-                      transform: `translateY(${windowRange.offsetY}px)`,
-                      position: "relative",
-                    }}
-                  >
-                    {/* 泳道槽与行共用同一 translateY 坐标系，故绝对定位到窗口内容左上角 */}
-                    {laneSlice.laneCount > 0 ? (
-                      <LaneGraph
-                        slice={laneSlice}
-                        rowHeight={rowHeight}
-                        laneWidth={laneWidth}
-                        height={laneSlice.nodes.length * rowHeight}
-                        className="absolute left-0 top-0"
-                      />
-                    ) : null}
-                    {visibleCommits.map((commit) => (
-                      <div
-                        key={commit.oid}
-                        style={{ height: rowHeight, paddingLeft: gutterWidth }}
-                        role="listitem"
-                        // 按下后移动超过阈值才算拖动：不移动则仍是「点击打开详情」
-                        onPointerDown={(event) => startCommitDrag(event, commit)}
-                      >
-                        <CommitRow
-                          commit={commit}
-                          nowMs={nowMs}
-                          mode={explainMode}
-                          repoUrl={`https://github.com/${owner}/${name}`}
-                          compact={density === "compact"}
-                          onSelect={selectCommit}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <HorizontalCanvas
+                owner={owner}
+                name={name}
+                commits={filteredCommits}
+                laneLayout={laneLayout ?? EMPTY_LANE_LAYOUT}
+                density={density}
+                mode={explainMode}
+                nowMs={nowMs}
+                selectedOid={selectedCommit?.oid ?? null}
+                resetKey={branch ?? "default"}
+                filterKey={filters}
+                onScrollerChange={(element) => {
+                  canvasScrollerRef.current = element;
+                }}
+                onSelectCommit={selectCommit}
+                onCommitPointerDown={startCommitDrag}
+                onReachOldest={handleReachOldest}
+              />
 
               {naming ? (
                 <BranchPopover

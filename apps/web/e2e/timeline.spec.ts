@@ -30,10 +30,11 @@ test("仓库列表 → 时间线 → 翻页（只读最小闭环）", async ({ p
   // 第 1 页 50 条，最新提交可见
   await expect(page.getByText("feat: 时间线提交 #60")).toBeVisible();
   await expect(page.getByText("已加载 50 条提交")).toBeVisible();
-  // M2-2：泳道图层随窗口渲染（mock 为线性历史，泳道数为 1）
+  // 横向画布：泳道图层随窗口渲染（mock 为线性历史，泳道数为 1）。
+  // 横版把「行」换成「卡片」、滚动轴换成 scrollLeft，SVG 里只剩泳道轨（line）与父子曲线（path）。
   const laneGraph = page.getByRole("list", { name: "提交时间线" }).locator("svg");
   await expect(laneGraph).toBeVisible();
-  expect(await laneGraph.locator("circle").count()).toBeGreaterThan(0);
+  expect(await laneGraph.locator("line").count()).toBeGreaterThan(0);
   expect(await laneGraph.locator("path").count()).toBeGreaterThan(0);
   // M2-3：关联 PR / Issue 标注为可跳转 GitHub 的链接（mock 第 60 号提交带 PR/Issue）
   await expect(page.getByRole("link", { name: "#60 已合并" })).toHaveAttribute(
@@ -317,13 +318,15 @@ test("拖提交节点到空白处 → 就地命名建分支", async ({ page }) =
     throw new Error("提交行没有可见区域，无法执行拖拽");
   }
 
-  // 按住行向右下方拖：超过 8px 阈值才判定为拖动（不移动仍是一次点击）
+  // 按住首张卡片（最新提交）向左拖：超过 8px 阈值才判定为拖动。
+  // 方向取左：右侧是删除竖轨与画布右缘，拖过去会落到画布外被取消；
+  // 纵向也只微移——泳道少时画布很矮，向下拖多了同样会出界。
   const startX = box.x + 24;
   const startY = box.y + box.height / 2;
   await page.mouse.move(startX, startY);
   await page.mouse.down();
-  await page.mouse.move(startX + 40, startY + 40, { steps: 6 });
-  await page.mouse.move(startX + 220, startY + 60, { steps: 6 });
+  await page.mouse.move(startX - 40, startY + 20, { steps: 6 });
+  await page.mouse.move(startX - 200, startY + 24, { steps: 6 });
   await page.mouse.up();
 
   // 落点弹出命名气泡（不是工具栏下面的确认卡片）

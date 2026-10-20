@@ -329,6 +329,8 @@ export const en: Messages = {
     guideTrash: "Drag a branch chip to the right rail → delete (still confirmed)",
     guideDismiss: "Got it",
     guideReopen: "Show the gesture hints again",
+    axisOldest: "← Older",
+    axisNewest: "Newer →",
     share: "Share link",
     shareHint: "Copy a link that restores this branch and these filters",
     shareCopied: "Link copied",
